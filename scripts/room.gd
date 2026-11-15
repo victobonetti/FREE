@@ -1,18 +1,19 @@
 extends Node2D
-## Uma sala: grade de tiles, coelho, caixas, compartimentos, porta e espinhos.
+## Uma sala: grade de tiles, coelho, caixas, compartimentos, porta, espinhos, comportas e
+## plataformas por orientação. A sala pode ter qualquer tamanho; a câmera segue o coelho.
 ##
 ## Rotação: a simulação sempre acontece com a gravidade para baixo. Ao girar, todos os
-## dados da sala (tiles, caixas, coelho...) são rotacionados 90° de verdade, e só o desenho
-## faz a animação (de -90° até 0°). Assim a física nunca precisa saber de orientação.
+## dados da sala (tiles, caixas, coelho, câmera...) são rotacionados 90° de verdade, e só o
+## desenho faz a animação (de -90° até 0°). Assim a física nunca precisa saber de orientação.
 
 signal completed
-signal sfx(name: String)  # "jump" | "death" | "win" | "sensor_on" | "sensor_off"; o som é tocado por main.gd
+## "jump" | "death" | "win" | "sensor_on" | "sensor_off" | "gate_open" | "gate_close" | "platform"
+signal sfx(name: String)
 signal impact(strength: float)  # pouso de caixa; 0 a 2,5 (mais altura e mais caixas = mais forte)
 
 const TILE := 8
-const GRID := 20
-const SIZE := TILE * GRID
-const HALF := Vector2(SIZE / 2.0, SIZE / 2.0)
+const VIEW := Vector2(320, 180)  # tamanho da tela (resolução interna)
+const CAM_SMOOTH := 0.12
 const ROT_FRAMES := 16       # duração da animação do giro
 const ROT_COOLDOWN := 36     # espera extra depois do giro, até poder girar de novo
 const ROT_BUFFER := 6        # apertar até 6 quadros antes do fim da recarga ainda vale
@@ -24,8 +25,11 @@ const IMPACT_FULL_DIST := 128  # queda (px) que dá força 1 a uma caixa sozinha
 const IMPACT_MAX := 2.5
 const IMPACT_CHAIN := 0.6      # quanto da força recente soma ao próximo pouso (várias caixas)
 const SENSOR_FRAMES := 16
+const SWITCH_FRAMES := 12      # efeito de comporta/plataforma mudando de estado
 const WIN_FRAMES := 44
 const DEATH_FRAMES := 20
+const GATE_SOCKETS := "abcdefghi"  # compartimento "a" abre a comporta "1", e assim por diante
+const PLATFORM_CHARS := "=}_{"     # seta para cima, direita, baixo, esquerda
 
 const Rabbit := preload("res://scripts/rabbit.gd")
 const Box := preload("res://scripts/box.gd")
@@ -45,6 +49,10 @@ const C_DOOR_OPEN := Color("f3cf3b")
 const C_DOOR_INNER := Color("2a2209")
 const C_SPIKE := Color("e0657c")
 const C_DUST := Color("bdb8ab")
+const C_GATE := Color("6fd3b8")
+const C_GATE_DARK := Color("1d3a35")
+const C_PLAT := Color("b9a3f0")
+const C_PLAT_DARK := Color("3a3158")
 
 # --- Sprite do coelho (12x16, virado para a direita), montado por partes ---
 # w branco | g sombra | p rosa | r olho
@@ -108,15 +116,25 @@ const FEET := {
 var def: Dictionary = {}
 var allow_rotate := true
 
+# tamanho atual da sala (troca de largura e altura a cada giro)
+var gw := 20  # em tiles
+var gh := 20
+var pw := 160  # em pixels
+var ph := 160
+
 var tiles := PackedByteArray()
 var boxes: Array = []
-var sockets: Array = []
+var sockets: Array = []        # Rect2i
+var socket_group: Array = []   # 0 = porta de saída; 1..9 = comporta
 var socket_filled: Array = []
+var socket_fx: Array = []      # quadros restantes do efeito de sensor, por compartimento
 var door := Rect2i()
 var has_door := false
 var door_open := false
 var door_flash := 0
 var spikes: Array = []
+var gates: Array = []      # {"id", "rects": Array[Rect2i], "closed", "anim", "fx"}
+var platforms: Array = []  # {"rect": Rect2i, "facing", "solid", "fx"}
 var rabbit
 
 var state := "play"  # play | dead | won | done
@@ -129,6 +147,9 @@ var rot_from := 0.0
 var view_angle := 0.0
 var pending_rot := 0
 var rot_lock := 0  # quadros até poder girar de novo (animação + recarga)
+var orientation := 0  # giros acumulados (0..3), só informativo
+
+var cam := Vector2.ZERO  # ponto da sala (px) que fica no centro da tela
 
 var particles: Array = []
 var rabbit_frames := {}
@@ -136,7 +157,6 @@ var shake := 0.0  # tremor de tela (px), decai sozinho
 var jolt_amp := 0.0    # solavanco na direção da gravidade (px): oscila e amortece
 var jolt_phase := 0.0
 var impact_recent := 0.0  # força dos pousos dos últimos quadros; decai e soma com o próximo
-var socket_fx: Array = []  # quadros restantes do efeito de sensor, por compartimento
 
 
 func _process(_delta: float) -> void:
@@ -150,16 +170,27 @@ func setup(room_def: Dictionary) -> void:
 
 
 func reset() -> void:
+	var rows: Array = def["rows"]
+	gh = rows.size()
+	gw = 0
+	for line in rows:
+		gw = maxi(gw, String(line).length())
+	pw = gw * TILE
+	ph = gh * TILE
 	tiles = PackedByteArray()
-	tiles.resize(GRID * GRID)
+	tiles.resize(gw * gh)
 	boxes.clear()
 	sockets.clear()
+	socket_group.clear()
 	socket_filled.clear()
 	socket_fx.clear()
+	spikes.clear()
+	gates.clear()
+	platforms.clear()
+	particles.clear()
 	jolt_amp = 0.0
 	impact_recent = 0.0
-	spikes.clear()
-	particles.clear()
+	shake = 0.0
 	door = Rect2i()
 	has_door = false
 	door_open = false
@@ -169,14 +200,17 @@ func reset() -> void:
 	view_angle = 0.0
 	pending_rot = 0
 	rot_lock = 0
+	orientation = 0
 	state = "play"
 	timer = 0
 	rabbit = Rabbit.new()
-	_parse(def["rows"])
+	_parse(rows)
 	var sr: int = def.get("start_rot", 0)
 	for i in absi(sr):
 		_rotate_logic(1 if sr > 0 else -1)
 	_update_sockets()
+	_update_mechanisms(true)
+	cam = _cam_target()
 
 
 ## 0.0 logo após girar, 1.0 quando o giro está disponível de novo.
@@ -189,13 +223,15 @@ func rot_ratio() -> float:
 func _parse(rows: Array) -> void:
 	var visited := {}
 	var door_cells: Array = []
-	for r in GRID:
+	var gate_cells := {}  # id -> Array[Rect2i]
+	for r in gh:
 		var line: String = rows[r]
-		for c in GRID:
-			var ch := line[c]
+		for c in gw:
+			var ch: String = line[c] if c < line.length() else "#"
 			var key := Vector2i(c, r)
+			var cell := Rect2i(c * TILE, r * TILE, TILE, TILE)
 			if ch == "#":
-				tiles[r * GRID + c] = 1
+				tiles[r * gw + c] = 1
 			elif ch == "^":
 				_add_spike(c, r, 0)
 			elif ch == ">":
@@ -206,7 +242,14 @@ func _parse(rows: Array) -> void:
 				_add_spike(c, r, 3)
 			elif ch == "D":
 				door_cells.append(key)
-			elif (ch == "P" or ch == "B" or ch == "S") and not visited.has(key):
+			elif ch >= "1" and ch <= "9":
+				var gid := int(ch)
+				if not gate_cells.has(gid):
+					gate_cells[gid] = []
+				gate_cells[gid].append(cell)
+			elif PLATFORM_CHARS.contains(ch):
+				platforms.append({"rect": cell, "facing": PLATFORM_CHARS.find(ch), "solid": false, "fx": 0})
+			elif (ch == "P" or ch == "B" or ch == "S" or GATE_SOCKETS.contains(ch)) and not visited.has(key):
 				for dy in 2:
 					for dx in 2:
 						visited[Vector2i(c + dx, r + dy)] = true
@@ -217,6 +260,7 @@ func _parse(rows: Array) -> void:
 					boxes.append(Box.new(origin))
 				else:
 					sockets.append(Rect2i(origin, Vector2i(16, 16)))
+					socket_group.append(0 if ch == "S" else GATE_SOCKETS.find(ch) + 1)
 	if not door_cells.is_empty():
 		var lo: Vector2i = door_cells[0]
 		var hi: Vector2i = door_cells[0]
@@ -225,6 +269,10 @@ func _parse(rows: Array) -> void:
 			hi = Vector2i(maxi(hi.x, k.x), maxi(hi.y, k.y))
 		door = Rect2i(lo * TILE, (hi - lo + Vector2i.ONE) * TILE)
 		has_door = true
+	var ids := gate_cells.keys()
+	ids.sort()
+	for gid in ids:
+		gates.append({"id": gid, "rects": gate_cells[gid], "closed": true, "anim": 0.0, "fx": 0})
 
 
 func _add_spike(c: int, r: int, facing: int) -> void:
@@ -233,29 +281,37 @@ func _add_spike(c: int, r: int, facing: int) -> void:
 
 # ---------------------------------------------------------------- rotação
 
+## Gira um retângulo junto com a sala (usa o tamanho atual, antes da troca de largura/altura).
 func _rot_rect(r: Rect2i, dir: int) -> Rect2i:
-	if dir > 0:  # horário: (x, y) -> (SIZE - y, x)
-		return Rect2i(SIZE - (r.position.y + r.size.y), r.position.x, r.size.y, r.size.x)
-	# anti-horário: (x, y) -> (y, SIZE - x)
-	return Rect2i(r.position.y, SIZE - (r.position.x + r.size.x), r.size.y, r.size.x)
+	if dir > 0:  # horário: (x, y) -> (H - y, x)
+		return Rect2i(ph - (r.position.y + r.size.y), r.position.x, r.size.y, r.size.x)
+	# anti-horário: (x, y) -> (y, W - x)
+	return Rect2i(r.position.y, pw - (r.position.x + r.size.x), r.size.y, r.size.x)
+
+
+func _rot_point(p: Vector2, dir: int) -> Vector2:
+	if dir > 0:
+		return Vector2(ph - p.y, p.x)
+	return Vector2(p.y, pw - p.x)
 
 
 func _rotate_logic(dir: int) -> void:
+	var nw := gh
+	var nh := gw
 	var nt := PackedByteArray()
-	nt.resize(GRID * GRID)
-	for r in GRID:
-		for c in GRID:
-			if tiles[r * GRID + c] != 0:
+	nt.resize(nw * nh)
+	for r in gh:
+		for c in gw:
+			if tiles[r * gw + c] != 0:
 				var nc: int
 				var nr: int
 				if dir > 0:
-					nc = GRID - 1 - r
+					nc = gh - 1 - r
 					nr = c
 				else:
 					nc = r
-					nr = GRID - 1 - c
-				nt[nr * GRID + nc] = 1
-	tiles = nt
+					nr = gw - 1 - c
+				nt[nr * nw + nc] = 1
 	for b in boxes:
 		b.pos = _rot_rect(b.rect, dir).position
 		b.vel_y = 0.0
@@ -269,8 +325,26 @@ func _rotate_logic(dir: int) -> void:
 	for s in spikes:
 		s["rect"] = _rot_rect(s["rect"], dir)
 		s["facing"] = posmod(s["facing"] + dir, 4)
+	for g in gates:
+		var rs: Array = g["rects"]
+		for i in rs.size():
+			rs[i] = _rot_rect(rs[i], dir)
+	for p in platforms:
+		p["rect"] = _rot_rect(p["rect"], dir)
+		p["facing"] = posmod(p["facing"] + dir, 4)
 	rabbit.pos = _rot_rect(rabbit.rect, dir).position
 	rabbit.on_rotate()
+	cam = _rot_point(cam, dir)
+	for p in particles:
+		p["pos"] = _rot_point(p["pos"], dir)
+		p["vel"] = Vector2(-p["vel"].y, p["vel"].x) if dir > 0 else Vector2(p["vel"].y, -p["vel"].x)
+	# só agora a sala troca de largura e altura
+	tiles = nt
+	gw = nw
+	gh = nh
+	pw = gw * TILE
+	ph = gh * TILE
+	orientation = posmod(orientation + dir, 4)
 
 
 func _begin_rotate(dir: int) -> void:
@@ -290,6 +364,22 @@ func _ease(t: float) -> float:
 	return 1.0 - pow(-2.0 * t + 2.0, 3.0) / 2.0
 
 
+# ---------------------------------------------------------------- câmera
+
+## Onde a câmera quer estar: centralizada no eixo em que a sala cabe na tela; no outro,
+## seguindo o coelho, sem mostrar além das bordas da sala.
+func _cam_target() -> Vector2:
+	var rc := Vector2(rabbit.pos) + Vector2(6, 2)
+	var t := Vector2.ZERO
+	t.x = pw / 2.0 if pw <= VIEW.x else clampf(rc.x, VIEW.x / 2.0, pw - VIEW.x / 2.0)
+	t.y = ph / 2.0 if ph <= VIEW.y else clampf(rc.y, VIEW.y / 2.0, ph - VIEW.y / 2.0)
+	return t
+
+
+func _update_camera() -> void:
+	cam = cam.lerp(_cam_target(), CAM_SMOOTH)
+
+
 # ---------------------------------------------------------------- colisão
 
 func overlaps(a: Rect2i, b: Rect2i) -> bool:
@@ -304,18 +394,28 @@ func tile_solid_rect(r: Rect2i) -> bool:
 	var y0 := r.position.y
 	var x1 := r.position.x + r.size.x - 1
 	var y1 := r.position.y + r.size.y - 1
-	if x0 < 0 or y0 < 0 or x1 >= SIZE or y1 >= SIZE:
+	if x0 < 0 or y0 < 0 or x1 >= pw or y1 >= ph:
 		return true
 	for ty in range(y0 >> 3, (y1 >> 3) + 1):
 		for tx in range(x0 >> 3, (x1 >> 3) + 1):
-			if tiles[ty * GRID + tx] != 0:
+			if tiles[ty * gw + tx] != 0:
 				return true
 	return false
 
 
-## Só as paredes são sólidas. A porta (aberta ou fechada) nunca bloqueia ninguém.
+## Paredes, comportas fechadas e plataformas sólidas. A porta nunca bloqueia ninguém.
 func solid_static(r: Rect2i) -> bool:
-	return tile_solid_rect(r)
+	if tile_solid_rect(r):
+		return true
+	for g in gates:
+		if g["closed"]:
+			for gr in g["rects"]:
+				if overlaps(r, gr):
+					return true
+	for p in platforms:
+		if p["solid"] and overlaps(r, p["rect"]):
+			return true
+	return false
 
 
 func box_at(r: Rect2i, ignore):
@@ -323,6 +423,13 @@ func box_at(r: Rect2i, ignore):
 		if b != ignore and overlaps(r, b.rect):
 			return b
 	return null
+
+
+## Há coelho ou caixa ocupando este retângulo? (comportas e plataformas nunca esmagam)
+func _occupied(r: Rect2i) -> bool:
+	if rabbit != null and overlaps(r, rabbit.rect):
+		return true
+	return box_at(r, null) != null
 
 
 func push_box(b, d: Vector2i) -> bool:
@@ -379,6 +486,7 @@ func step(inp: Dictionary) -> void:
 			_begin_rotate(dir)
 			return
 
+	_update_mechanisms(false)
 	rabbit.update(self, inp)
 	if rabbit.ev_jump:
 		_dust(3, 30.0)
@@ -392,6 +500,7 @@ func step(inp: Dictionary) -> void:
 	if state != "play":
 		return
 	_update_sockets()
+	_update_camera()
 	if state != "play":
 		return
 	_check_hazards()
@@ -501,7 +610,6 @@ func _update_sockets() -> void:
 	for k in range(old_n, sockets.size()):
 		socket_fx[k] = 0
 		socket_filled[k] = false
-	var all := not sockets.is_empty()
 	for i in sockets.size():
 		var s: Rect2i = sockets[i]
 		var f := false
@@ -513,10 +621,61 @@ func _update_sockets() -> void:
 			socket_fx[i] = SENSOR_FRAMES
 			sfx.emit("sensor_on" if f else "sensor_off")
 		socket_filled[i] = f
-		all = all and f
-	if all != door_open:
-		door_open = all
+	var open := group_filled(0)
+	if open != door_open:
+		door_open = open
 		door_flash = 14
+
+
+## Todos os compartimentos do grupo têm caixa? (grupo 0 = porta; sem compartimentos = não)
+func group_filled(group: int) -> bool:
+	var any := false
+	for i in sockets.size():
+		if socket_group[i] == group:
+			any = true
+			if not socket_filled[i]:
+				return false
+	return any
+
+
+## Comportas e plataformas mudam de estado; nenhuma fica sólida em cima de alguém.
+func _update_mechanisms(instant: bool) -> void:
+	var gate_changed := ""
+	for g in gates:
+		var want_closed := not group_filled(g["id"])
+		if want_closed != g["closed"]:
+			var can := true
+			if want_closed:
+				for gr in g["rects"]:
+					if _occupied(gr):
+						can = false
+						break
+			if can:
+				g["closed"] = want_closed
+				g["fx"] = SWITCH_FRAMES
+				gate_changed = "gate_close" if want_closed else "gate_open"
+		var target := 0.0 if g["closed"] else 1.0
+		g["anim"] = target if instant else move_toward(g["anim"], target, 0.12)
+		g["fx"] = maxi(g["fx"] - 1, 0)
+	var plat_changed := false
+	for p in platforms:
+		var want: bool = p["facing"] == 0
+		if want != p["solid"]:
+			if not want or not _occupied(p["rect"]):
+				p["solid"] = want
+				p["fx"] = SWITCH_FRAMES
+				plat_changed = true
+		p["fx"] = maxi(p["fx"] - 1, 0)
+	if instant:
+		for g in gates:
+			g["fx"] = 0
+		for p in platforms:
+			p["fx"] = 0
+		return
+	if gate_changed != "":
+		sfx.emit(gate_changed)
+	if plat_changed:
+		sfx.emit("platform")
 
 
 func _spike_hurt(r: Rect2i, facing: int) -> Rect2i:
@@ -679,8 +838,12 @@ func _rabbit_frame() -> Array:
 	return [_rabbit_tex(ears, "stand", blink), 0]
 
 
+## Triângulo apontando para `facing` dentro de um tile (0 cima, 1 direita, 2 baixo, 3 esquerda).
 func _spike_points(r: Rect2i, facing: int) -> PackedVector2Array:
-	var pts := [Vector2(1, 8), Vector2(4, 3), Vector2(7, 8)]
+	return _tri_points(r, facing, [Vector2(1, 8), Vector2(4, 3), Vector2(7, 8)])
+
+
+func _tri_points(r: Rect2i, facing: int, pts: Array) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	for p in pts:
 		var q: Vector2 = p
@@ -696,10 +859,11 @@ func _draw() -> void:
 		jitter = Vector2(roundf(randf_range(-shake, shake)), roundf(randf_range(-shake, shake)))
 	# solavanco no sentido da gravidade (para baixo na tela): a sala "afunda" e volta
 	var jolt := Vector2(0.0, roundf(jolt_amp * sin(jolt_phase)))
-	var base := Transform2D(0.0, jolt) * Transform2D(view_angle, Vector2.ZERO) * Transform2D(0.0, -HALF + jitter)
+	var base := Transform2D(0.0, jolt) * Transform2D(view_angle, Vector2.ZERO) * Transform2D(0.0, -cam.round() + jitter)
 	draw_set_transform_matrix(base)
+	var room_rect := Rect2(0, 0, pw, ph)
 
-	draw_rect(Rect2(0, 0, SIZE, SIZE), C_BG)
+	draw_rect(room_rect, C_BG)
 
 	# compartimentos (fundo)
 	for s in sockets:
@@ -711,22 +875,9 @@ func _draw() -> void:
 		_draw_door()
 		_draw_door_beam()
 
-	# paredes
-	for r in GRID:
-		for c in GRID:
-			if tiles[r * GRID + c] == 0:
-				continue
-			var x := c * TILE
-			var y := r * TILE
-			draw_rect(Rect2(x, y, TILE, TILE), C_WALL)
-			if r > 0 and tiles[(r - 1) * GRID + c] == 0:
-				draw_rect(Rect2(x, y, TILE, 1), C_EDGE)
-			if r < GRID - 1 and tiles[(r + 1) * GRID + c] == 0:
-				draw_rect(Rect2(x, y + TILE - 1, TILE, 1), C_EDGE)
-			if c > 0 and tiles[r * GRID + c - 1] == 0:
-				draw_rect(Rect2(x, y, 1, TILE), C_EDGE)
-			if c < GRID - 1 and tiles[r * GRID + c + 1] == 0:
-				draw_rect(Rect2(x + TILE - 1, y, 1, TILE), C_EDGE)
+	_draw_walls()
+	_draw_gates()
+	_draw_platforms()
 
 	# espinhos
 	for s in spikes:
@@ -743,7 +894,7 @@ func _draw() -> void:
 	for i in sockets.size():
 		var s: Rect2i = sockets[i]
 		var filled: bool = i < socket_filled.size() and socket_filled[i]
-		var col := C_SOCKET_ON if filled else C_SOCKET_FRAME
+		var col := _socket_color(i, filled)
 		var o := Vector2(s.position)
 		draw_rect(Rect2(o, Vector2(16, 2)), col)
 		draw_rect(Rect2(o + Vector2(0, 14), Vector2(16, 2)), col)
@@ -767,12 +918,91 @@ func _draw() -> void:
 	# entrada no portal: véu dourado que cresce sobre a sala inteira
 	if (state == "won" or state == "done") and has_door:
 		var t := 1.0 - float(timer) / float(WIN_FRAMES)
-		draw_rect(Rect2(0, 0, SIZE, SIZE), Color(1.0, 0.9, 0.45, 0.35 * smoothstep(0.55, 1.0, t)))
+		draw_rect(room_rect, Color(1.0, 0.9, 0.45, 0.35 * smoothstep(0.55, 1.0, t)))
 
 	# clarão da morte
 	if state == "dead":
 		var f := float(timer) / float(DEATH_FRAMES)
-		draw_rect(Rect2(0, 0, SIZE, SIZE), Color(1, 1, 1, 0.35 * f * f))
+		draw_rect(room_rect, Color(1, 1, 1, 0.35 * f * f))
+
+
+## Compartimentos da porta: cinza/amarelo. Compartimentos de comporta: na cor da comporta.
+func _socket_color(i: int, filled: bool) -> Color:
+	if socket_group[i] == 0:
+		return C_SOCKET_ON if filled else C_SOCKET_FRAME
+	return C_GATE if filled else Color(C_GATE, 0.45)
+
+
+func _draw_walls() -> void:
+	# fora da animação de giro, só desenha o que está na tela (salas grandes)
+	var c0 := 0
+	var c1 := gw - 1
+	var r0 := 0
+	var r1 := gh - 1
+	if not rotating:
+		var half := VIEW / 2.0 + Vector2(24, 24)
+		c0 = maxi(int((cam.x - half.x) / TILE), 0)
+		c1 = mini(int((cam.x + half.x) / TILE), gw - 1)
+		r0 = maxi(int((cam.y - half.y) / TILE), 0)
+		r1 = mini(int((cam.y + half.y) / TILE), gh - 1)
+	for r in range(r0, r1 + 1):
+		for c in range(c0, c1 + 1):
+			if tiles[r * gw + c] == 0:
+				continue
+			var x := c * TILE
+			var y := r * TILE
+			draw_rect(Rect2(x, y, TILE, TILE), C_WALL)
+			if r > 0 and tiles[(r - 1) * gw + c] == 0:
+				draw_rect(Rect2(x, y, TILE, 1), C_EDGE)
+			if r < gh - 1 and tiles[(r + 1) * gw + c] == 0:
+				draw_rect(Rect2(x, y + TILE - 1, TILE, 1), C_EDGE)
+			if c > 0 and tiles[r * gw + c - 1] == 0:
+				draw_rect(Rect2(x, y, 1, TILE), C_EDGE)
+			if c < gw - 1 and tiles[r * gw + c + 1] == 0:
+				draw_rect(Rect2(x + TILE - 1, y, 1, TILE), C_EDGE)
+
+
+## Comporta: bloco escuro com barras. Ao abrir, as barras encolhem para o centro e somem.
+func _draw_gates() -> void:
+	for g in gates:
+		var k: float = g["anim"]  # 0 fechada, 1 aberta
+		var fx := float(g["fx"]) / float(SWITCH_FRAMES)
+		if k >= 1.0 and fx <= 0.0:
+			continue
+		for gr in g["rects"]:
+			var r := Rect2(gr)
+			if k < 1.0:
+				var inner := r.grow(-3.5 * k)
+				draw_rect(inner, Color(C_GATE_DARK, 1.0 - k))
+				draw_rect(Rect2(inner.position.x, inner.position.y + inner.size.y * 0.25, inner.size.x, 1), Color(C_GATE, 1.0 - k))
+				draw_rect(Rect2(inner.position.x, inner.position.y + inner.size.y * 0.7, inner.size.x, 1), Color(C_GATE, 1.0 - k))
+				draw_rect(Rect2(inner.position.x + inner.size.x * 0.25, inner.position.y, 1, inner.size.y), Color(C_GATE, 0.6 * (1.0 - k)))
+				draw_rect(Rect2(inner.position.x + inner.size.x * 0.7, inner.position.y, 1, inner.size.y), Color(C_GATE, 0.6 * (1.0 - k)))
+			if fx > 0.0:
+				draw_rect(r.grow(1.0 + 2.0 * (1.0 - fx)), Color(C_GATE, 0.5 * fx), false, 1.0)
+
+
+## Plataforma por orientação: sólida (preenchida) só com a seta para cima; fora disso, contorno
+## tracejado com a seta mostrando para onde ela precisa apontar.
+func _draw_platforms() -> void:
+	for p in platforms:
+		var r := Rect2(p["rect"])
+		var fx := float(p["fx"]) / float(SWITCH_FRAMES)
+		if p["solid"]:
+			draw_rect(r, C_PLAT_DARK)
+			draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_PLAT)
+			draw_colored_polygon(_tri_points(p["rect"], p["facing"], [Vector2(2.5, 6.5), Vector2(4, 4), Vector2(5.5, 6.5)]), Color(C_PLAT, 0.8))
+		else:
+			var col := Color(C_PLAT, 0.4)
+			for i in 4:
+				var a := Vector2(i * 2, 0)
+				draw_rect(Rect2(r.position + a, Vector2(1, 1)), col)
+				draw_rect(Rect2(r.position + Vector2(i * 2 + 1, 7), Vector2(1, 1)), col)
+				draw_rect(Rect2(r.position + Vector2(0, i * 2 + 1), Vector2(1, 1)), col)
+				draw_rect(Rect2(r.position + Vector2(7, i * 2), Vector2(1, 1)), col)
+			draw_colored_polygon(_tri_points(p["rect"], p["facing"], [Vector2(1.5, 6.5), Vector2(4, 2), Vector2(6.5, 6.5)]), Color(C_PLAT, 0.6))
+		if fx > 0.0:
+			draw_rect(r.grow(1.0 + 2.0 * (1.0 - fx)), Color(C_PLAT, 0.6 * fx), false, 1.0)
 
 
 func _draw_rabbit(base: Transform2D) -> void:
@@ -817,7 +1047,7 @@ func _draw_sensor_fx(s: Rect2i, i: int) -> void:
 		return
 	var t := 1.0 - float(socket_fx[i]) / float(SENSOR_FRAMES)  # 0 -> 1
 	var on: bool = socket_filled[i] == true
-	var col := C_SOCKET_ON if on else C_SOCKET_FRAME
+	var col := _socket_color(i, on)
 	var r := Rect2(s)
 	# contorno que se expande e some
 	draw_rect(r.grow(1.0 + 4.0 * t), Color(col, 0.7 * (1.0 - t)), false, 1.0)
@@ -838,7 +1068,7 @@ func _draw_door() -> void:
 		return
 
 	# Porta aberta: um vão escuro com moldura amarela e luz pulsando por dentro.
-	var ph := sin(frame * 0.1) * 0.5 + 0.5
+	var ph_ := sin(frame * 0.1) * 0.5 + 0.5
 	var pulse := float(door_flash) / 14.0
 	var win_t := 0.0
 	if state == "won" or state == "done":
@@ -855,13 +1085,13 @@ func _draw_door() -> void:
 	if r.size.x < 1.0 or r.size.y < 1.0:
 		return
 
-	draw_rect(r.grow(3.0 + 3.0 * pulse), Color(C_DOOR_OPEN, 0.07 + 0.06 * ph + 0.2 * pulse))
+	draw_rect(r.grow(3.0 + 3.0 * pulse), Color(C_DOOR_OPEN, 0.07 + 0.06 * ph_ + 0.2 * pulse))
 	draw_rect(r.grow(1.0), Color(C_DOOR_OPEN, 0.22))
 	draw_rect(r, C_DOOR_OPEN)
 	if r.size.x > 4.0 and r.size.y > 4.0:
 		var inner := r.grow(-2.0)
 		draw_rect(inner, C_DOOR_INNER)
-		draw_rect(inner.grow(-1.0), Color(C_DOOR_OPEN, 0.18 + 0.16 * ph))
+		draw_rect(inner.grow(-1.0), Color(C_DOOR_OPEN, 0.18 + 0.16 * ph_))
 		# faíscas subindo dentro do vão
 		for i in 4:
 			var px := inner.position.x + 1.0 + fmod(i * 5.3 + 2.0, maxf(inner.size.x - 2.0, 1.0))

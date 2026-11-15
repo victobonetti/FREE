@@ -149,17 +149,70 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 
 ---
 
+## Rodada 11 — Salas longas, comportas e plataformas por orientação (15/11/2026)
+
+**Pedido do Victor:** começar as alterações evolutivas nas salas, conforme o plano combinado.
+
+**Decidido nesta rodada:** as etapas são bloqueadas por comportas (D37), escolhidas entre três opções, porque a porta deixou de ser sólida.
+
+**Feito:**
+- Motor: salas de qualquer tamanho, rotação de salas não quadradas, câmera seguindo o coelho (D39); comportas (D37); plataformas por orientação (D38); sons novos de comporta e plataforma.
+- As 5 salas refeitas, longas e em etapas (D41, GDD seção 6).
+- Testes reorganizados: mecânica com salas de teste próprias (D40); testes novos de rotação não quadrada, câmera, comporta e plataforma; um bot por sala nova. Todos passam.
+- Conferido em captura de tela: corredor largo com câmera, sala alta girada, comporta aberta e fechada, plataformas sólidas e tracejadas.
+
+**Desvio do plano:** a sala 5 ficou com uma comporta e um compartimento na saída, em vez de duas e dois.
+
+**Ainda não validado por quem joga:** dificuldade e clareza das salas novas, a suavização da câmera, os sons de comporta e plataforma, e se a seta das plataformas é legível.
+
+---
+
+## Rodada 12 — 10 níveis com dificuldade crescente (15/11/2026)
+
+**Retorno do Victor:** os níveis 1 e 2 estavam bem mais difíceis que o 3. Pedido: 10 níveis, com complexidade crescente, e o primeiro bem mais simples.
+
+**Feito (D42):**
+- 5 salas novas, pequenas, cada uma com uma ideia: Primeiros passos, Degraus, Comporta, Giro, Setas.
+- As 5 salas anteriores reposicionadas sem mudança: Toca 4, Derrame 6, Vertigem 8 (era a 2ª), Espinhos 9, Fuga 10.
+- `levels.gd` reorganizado: uma constante por sala e a lista `ROOMS` com a ordem.
+- Bots para as salas novas; os bots passaram a procurar a sala pelo nome. Todos os testes passam.
+- Salas novas conferidas em captura de tela.
+
+**A conferir no teste:** se a curva sobe bem, e se esperar até o nível 5 pelo primeiro giro é demais.
+
+---
+
+## Rodada 13 — Dicas de controle (15/11/2026)
+
+**Pedido do Victor:** texto sobre os movimentos (WASD ou setas) no primeiro nível, e texto explicando o giro na sala do giro.
+
+**Feito (D43):** campo `hint` nas salas, mostrado embaixo da tela; dicas no nível 1 e no nível 5. Conferido em captura de tela. Testes passam.
+
+**Conversado, sem decisão ainda:** como distribuir o jogo para amigos testarem. A recomendação é uma versão web no itch.io (página restrita, por link), com um `.exe` para Windows como alternativa. Falta instalar os templates de exportação do Godot 4.7.2 (cerca de 1 GB), o que depende de autorização do Victor.
+
+---
+
+## Rodada 14 — Trilha sonora (15/11/2026)
+
+**Entrada do Victor:** a faixa `music/first-levels-theme.mp3`, feita para tocar em loop.
+
+**Feito (D44):** tocador de música com fade e troca suave entre faixas; campo `music` por sala e `DEFAULT_MUSIC`; loop ligado na importação. Conferido por `tests/music_check.gd`: a faixa carrega, toca em loop e continua ao trocar de sala. Testes passam.
+
+**Ainda não validado ouvindo:** o volume da música contra os efeitos, e se o ponto de repetição do MP3 tem algum silêncio.
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |
 |---|---|
-| Retorno sobre as rodadas 3, 5, 6 e 7 (pulo, recarga do giro, sons, empurrar, efeitos do portal, caixa e sensor) | aguardando teste |
-| Plano das 5 salas longas, sala por sala | direção decidida (D23 a D26); detalhamento pendente |
-| Suporte a salas não quadradas e maiores que a tela, com câmera seguindo o coelho | não iniciado |
-| Plataformas por orientação e portas intermediárias | não iniciado |
+| Retorno sobre as rodadas 3 a 11 (pulo, recarga do giro, sons, efeitos, salas novas, câmera) | aguardando teste |
+| 10 níveis com dificuldade crescente | feitos (rodada 12); aguardando teste |
+| Sala 5 com duas comportas e dois compartimentos na saída | adiado (D41) |
 | Arte final (sprites, tiles) | não iniciado; hoje tudo é desenhado em código |
-| Áudio (pulo, pouso, giro, caixa, porta, morte, música) | só existem o tom da recarga e o "plim" |
-| Dicas de controle na primeira sala | não iniciado |
+| Áudio | efeitos gerados em código; primeira faixa de música do Victor ligada a todos os níveis (D44); faltam faixas para os níveis seguintes |
+| Dicas de controle | feitas nos níveis 1 e 5 (rodada 13) |
+| Exportar para amigos testarem (web no itch.io e/ou .exe) | aguardando autorização para baixar os templates |
 | Tema e narrativa (laboratório?) | em aberto |
 | Nome do jogo | em aberto |
 | Controle de versão (git) | a pasta não é um repositório |

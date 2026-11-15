@@ -9,6 +9,8 @@ const InputSetup := preload("res://scripts/input_setup.gd")
 const BAR_SIZE := Vector2(40, 3)
 const BAR_POS := Vector2(320 - 40 - 6, 180 - 3 - 6)
 const MIX_RATE := 22050
+const MUSIC_DB := -9.0       # volume da música; abaixo dos efeitos para eles continuarem audíveis
+const MUSIC_OFF_DB := -40.0
 
 var room: Node2D
 var index := 0
@@ -16,6 +18,7 @@ var transitioning := false
 var finished := false
 var fade_rect: ColorRect
 var title: Label
+var hint: Label
 var end_label: Label
 var bar_bg: ColorRect
 var bar_fill: ColorRect
@@ -24,8 +27,14 @@ var ready_player: AudioStreamPlayer
 var jump_player: AudioStreamPlayer
 var death_player: AudioStreamPlayer
 var win_player: AudioStreamPlayer
+var music: AudioStreamPlayer
+var music_path := ""
+var music_tween: Tween
 var thud_player: AudioStreamPlayer
 var thud2_player: AudioStreamPlayer
+var gate_open_player: AudioStreamPlayer
+var gate_close_player: AudioStreamPlayer
+var platform_player: AudioStreamPlayer
 var sensor_on_player: AudioStreamPlayer
 var sensor_off_player: AudioStreamPlayer
 var prev_lock := 0
@@ -47,6 +56,14 @@ func _make_ui() -> void:
 	title.add_theme_font_size_override("font_size", 8)
 	title.add_theme_color_override("font_color", Color(0.89, 0.87, 0.81, 0.55))
 	layer.add_child(title)
+	hint = Label.new()
+	hint.position = Vector2(0, 153)  # embaixo: não briga com o título no canto de cima
+	hint.size = Vector2(320, 24)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 8)
+	hint.add_theme_constant_override("line_spacing", -1)
+	hint.add_theme_color_override("font_color", Color(0.93, 0.91, 0.85, 0.9))
+	layer.add_child(hint)
 	bar_bg = ColorRect.new()
 	bar_bg.color = Color(1, 1, 1, 0.14)
 	bar_bg.position = BAR_POS
@@ -84,6 +101,9 @@ func _make_audio() -> void:
 	ready_player.stream = _make_ready_blip()
 	ready_player.volume_db = -14.0
 	add_child(ready_player)
+	music = AudioStreamPlayer.new()
+	music.volume_db = MUSIC_OFF_DB
+	add_child(music)
 	jump_player = AudioStreamPlayer.new()
 	jump_player.stream = _make_jump_sound()
 	jump_player.volume_db = -16.0
@@ -103,6 +123,18 @@ func _make_audio() -> void:
 	thud2_player = AudioStreamPlayer.new()
 	thud2_player.stream = thud_player.stream
 	add_child(thud2_player)
+	gate_open_player = AudioStreamPlayer.new()
+	gate_open_player.stream = _make_gate_sound(true)
+	gate_open_player.volume_db = -13.0
+	add_child(gate_open_player)
+	gate_close_player = AudioStreamPlayer.new()
+	gate_close_player.stream = _make_gate_sound(false)
+	gate_close_player.volume_db = -13.0
+	add_child(gate_close_player)
+	platform_player = AudioStreamPlayer.new()
+	platform_player.stream = _make_platform_sound()
+	platform_player.volume_db = -20.0
+	add_child(platform_player)
 	sensor_on_player = AudioStreamPlayer.new()
 	sensor_on_player.stream = _make_sensor_sound(true)
 	sensor_on_player.volume_db = -17.0
@@ -147,6 +179,42 @@ func _make_win_sound() -> AudioStreamWAV:
 		v = roundf(v * 10.0) / 10.0          # quantização grosseira
 		var env := minf(t * 25.0, 1.0) * (0.35 + 0.65 * t) * (1.0 - smoothstep(0.96, 1.0, t))
 		data.encode_s16(i * 2, int(clampf(v * env, -1.0, 1.0) * 30000.0))
+	return _wav(data)
+
+
+## Comporta: deslizar mecânico (ruído filtrado com um zumbido que desce ao abrir, sobe ao fechar)
+## e uma batida seca no fim.
+func _make_gate_sound(opening: bool) -> AudioStreamWAV:
+	var n := int(MIX_RATE * 0.32)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21 if opening else 22
+	var phase := 0.0
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / float(n)
+		var f := lerpf(220.0, 110.0, t) if opening else lerpf(110.0, 200.0, t)
+		phase += TAU * f / float(MIX_RATE)
+		lp += (rng.randf_range(-1.0, 1.0) - lp) * 0.12
+		var hum := (1.0 if sin(phase) > 0.0 else -1.0) * 0.25 + sin(phase) * 0.35
+		var slide := (hum + lp * 1.4) * minf(t * 20.0, 1.0) * (1.0 - smoothstep(0.7, 0.85, t))
+		var tk := maxf(t - 0.8, 0.0)
+		var knock := sin(TAU * 70.0 * tk) * exp(-tk * 60.0) * (1.0 if t >= 0.8 else 0.0)
+		data.encode_s16(i * 2, int(clampf(tanh(slide * 1.5) * 0.7 + knock, -1.0, 1.0) * 30000.0))
+	return _wav(data)
+
+
+## Plataforma por orientação mudando: um "tic" de vidro, curto e agudo.
+func _make_platform_sound() -> AudioStreamWAV:
+	var n := int(MIX_RATE * 0.12)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		var t := float(i) / float(MIX_RATE)
+		var env := exp(-t * 45.0)
+		var v := env * (0.5 * sin(TAU * 1760.0 * t) + 0.3 * sin(TAU * 2637.0 * t) + 0.2 * sin(TAU * 3520.0 * t))
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 30000.0))
 	return _wav(data)
 
 
@@ -200,7 +268,41 @@ func _make_sensor_sound(up: bool) -> AudioStreamWAV:
 	return _wav(data)
 
 
+## Troca a música com fade. A mesma faixa continua tocando sem reiniciar.
+func _play_music(path: String) -> void:
+	if path == music_path:
+		return
+	music_path = path
+	if music_tween != null:
+		music_tween.kill()
+	music_tween = create_tween()
+	if music.playing:
+		music_tween.tween_property(music, "volume_db", MUSIC_OFF_DB, 0.8)
+	music_tween.tween_callback(func():
+		music.stop()
+		if path == "" or not ResourceLoader.exists(path):
+			return
+		var s = load(path)
+		if "loop" in s:
+			s.loop = true
+		music.stream = s
+		music.volume_db = MUSIC_OFF_DB
+		music.play())
+	if path != "":
+		music_tween.tween_property(music, "volume_db", MUSIC_DB, 1.5)
+
+
 func _play_sfx(sfx_name: String) -> void:
+	if sfx_name == "gate_open":
+		gate_open_player.play()
+		return
+	if sfx_name == "gate_close":
+		gate_close_player.play()
+		return
+	if sfx_name == "platform":
+		platform_player.pitch_scale = randf_range(0.95, 1.05)
+		platform_player.play()
+		return
 	if sfx_name == "sensor_on":
 		sensor_on_player.play()
 		return
@@ -341,6 +443,11 @@ func _load_room(i: int) -> void:
 	room = r
 	prev_lock = 0
 	title.text = "%d · %s" % [index + 1, Levels.ROOMS[index]["name"]]
+	hint.text = Levels.ROOMS[index].get("hint", "")
+	_play_music(Levels.ROOMS[index].get("music", Levels.DEFAULT_MUSIC))
+	hint.modulate.a = 0.0
+	if hint.text != "":
+		create_tween().tween_property(hint, "modulate:a", 1.0, 0.6).set_delay(0.3)
 	end_label.visible = false
 	finished = false
 
@@ -363,6 +470,7 @@ func _advance() -> void:
 			room = null
 		finished = true
 		title.text = ""
+		hint.text = ""
 		end_label.visible = true
 	else:
 		_load_room(index + 1)

@@ -11,7 +11,7 @@ Um coelho em pixel art precisa fugir atravessando salas cada vez mais difíceis.
 
 Referências de sensação de controle: Celeste e Super Meat Boy.
 
-**Escopo do piloto:** 5 salas, jogáveis do início ao fim, com controle polido.
+**Escopo do piloto:** 10 níveis com dificuldade crescente, jogáveis do início ao fim, com controle polido. *(Eram 5; ver D42.)*
 
 ## 2. Pilares
 
@@ -59,6 +59,12 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 - A porta aberta é um vão iluminado. Ao tocá-la, o coelho é puxado para dentro e a porta se fecha antes da transição.
 - Tocar a porta aberta conclui a sala.
 
+### 3.4b Comportas e plataformas por orientação
+
+- **Comporta:** trecho de parede, em verde-água com barras, que divide a sala em etapas. Abre enquanto os compartimentos ligados a ela têm caixa parada e volta a fechar se a caixa sair. Os compartimentos de comporta têm a moldura na mesma cor dela. Nunca fecha em cima do coelho ou de uma caixa: espera o caminho ficar livre.
+- **Plataforma por orientação:** tile lilás com uma seta. Só é sólido quando a seta aponta para cima na tela; nas outras orientações aparece tracejado e é atravessável. Também espera ficar livre antes de virar sólido.
+- Os dois têm som e um brilho curto ao mudar de estado.
+
 ### 3.5 Controles
 
 | Ação | Teclado | Controle |
@@ -71,9 +77,10 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 ### 3.6 Estética
 
 - Resolução interna de 320×180, escala inteira.
-- Tiles de 8 px; sala de 20×20 tiles (160×160 px); coelho e caixa com cerca de 16×16 px.
+- Tiles de 8 px; salas de qualquer tamanho; coelho e caixa com cerca de 16×16 px.
+- Salas maiores que a tela: a câmera segue o coelho, com suavização, e para nas bordas da sala. No eixo em que a sala cabe, ela fica centralizada.
 - Fundo preto, linhas off-white.
-- Cores reservadas: caixa azul, porta amarela (aberta) e azul-acinzentada (trancada), compartimento cinza, olho vermelho do coelho.
+- Cores reservadas: caixa azul, porta amarela (aberta) e azul-acinzentada (trancada), compartimento cinza, comporta verde-água, plataforma por orientação lilás, espinhos coral, olho vermelho do coelho.
 - O aspecto suave vem de brilho leve, easing na câmera, squash & stretch, partículas discretas e áudio lo-fi.
 
 ## 4. Tecnologia
@@ -119,7 +126,7 @@ scripts/
   room.gd              # tiles, rotação, caixas, compartimentos, porta, espinhos, desenho
   rabbit.gd            # movimento e pulo
   box.gd
-  levels.gd            # as salas, desenhadas em texto (20x20)
+  levels.gd            # as salas, desenhadas em texto (qualquer tamanho)
   input_setup.gd       # teclas e controle registrados em código
 tests/
   run_tests.gd         # formato das salas, pulo e bots que resolvem cada sala
@@ -135,28 +142,26 @@ Cada sala introduz uma ideia. A dificuldade cresce porque as ideias se combinam.
 
 Vocabulário: um **buraco** é um compartimento aberto para cima (a caixa cai nele); um **nicho** é um compartimento aberto para o lado, com teto (a caixa entra empurrada ou por gravidade lateral). Um buraco só derrama a caixa com a gravidade para cima; um nicho só derrama com a gravidade para o lado da abertura.
 
-| # | Nome | Ensina | Como funciona (implementado) |
-|---|---|---|---|
-| 1 | Toca | Andar, pular, empurrar; compartimento abre a porta | Sem rotação. A caixa é empurrada para um buraco no chão; a porta fica em um degrau logo depois. |
-| 2 | Vertigem | Girar; tudo que está solto cai | A sala de `concept.png`: começa girada, com o compartimento no canto superior direito. Um giro horário coloca o coelho e a caixa em queda; ele precisa passar para o lado esquerdo da caixa, empurrá-la até o nicho e subir na plataforma da porta. |
-| 3 | Derrame | A porta fecha de novo; o sentido do giro importa | Encaixada a caixa, a porta está pendurada no teto e pede 180°. Girar duas vezes no sentido horário mantém tudo; girar no sentido anti-horário derrama a caixa e fecha a porta. |
-| 4 | Espinhos | Morte e giro no ar | Um campo de espinhos de 6 tiles separa o coelho do buraco. Pular e girar no ar cruza por cima, e a caixa atravessa pelo chão e cai no buraco. A porta fica do lado de onde o coelho veio, então a volta é outro pulo com giro no sentido oposto. Girar do chão mata. |
-| 5 | Fuga | Síntese | A sala 4 com uma segunda caixa e um segundo buraco ao lado da porta. A caixa da esquerda tem de ser encaixada antes de cruzar. As duas abrem a porta. |
+Terceira versão (15/11/2026): **10 níveis** com dificuldade crescente (D42). No teste da segunda versão, as salas 1 e 2 estavam bem mais difíceis que a 3. Agora cada nível apresenta **uma ideia nova** e os seguintes a combinam com as anteriores; as salas longas da versão anterior foram mantidas e reposicionadas onde sua dificuldade cabe.
 
-Todas as salas foram resolvidas por bots em `tests/run_tests.gd`. A sala 5 está pouco diferente da 4; ela é o ponto mais fraco do piloto e o primeiro candidato a redesenho (ideias: espinhos na parede para forçar a altura do pulo, a segunda caixa só alcançável depois do cruzamento).
+| # | Nome | Tamanho | Ideia nova | Como funciona |
+|---|---|---|---|---|
+| 1 | Primeiros passos | 20×10 | Caixa no buraco abre a porta | Andar, empurrar a única caixa no buraco, entrar na porta. Sem pulo obrigatório, sem perigo. |
+| 2 | Degraus | 29×14 | Pular | Um degrau de 2 tiles, um bloco de 3 e um vão no chão (cair nele não mata; dá para sair). Depois, a caixa no buraco. |
+| 3 | Comporta | 30×12 | Comporta; espinhos | Caixa no buraco "a" abre a comporta. Depois, só dois espinhos para pular e a segunda caixa no buraco da porta. |
+| 4 | Toca | 46×14 | (combinação, sem girar) | Bloco, comporta, pulos entre dois pilares sobre espinhos, segunda caixa. |
+| 5 | Giro | 18×15 | Girar a sala | A caixa vai fácil para o buraco, mas a porta está deitada na parede da direita, alta demais. Girando no sentido horário, essa parede vira chão e a porta fica ao alcance. |
+| 6 | Derrame | 36×16 | Nichos; o sentido do giro; virar de cabeça para baixo | Dois nichos abertos para a esquerda; girar no sentido horário até virar a sala mantém as caixas, no anti-horário elas caem e a comporta fecha. A porta está pendurada no teto. |
+| 7 | Setas | 20×16 | Plataformas por orientação | Caixa no nicho e virar a sala, como em Derrame. O teto vira chão cheio de espinhos, e a fileira de setas que apontava para baixo passa a apontar para cima e vira a ponte até a porta. |
+| 8 | Vertigem | 38×20, começa girada | (combinação) | O puzzle do esboço abre a comporta; depois, derrubar a segunda caixa num poço, girar, e a coluna de setas vira ponte sobre os espinhos. |
+| 9 | Espinhos | 28×20 | Girar no ar | Cruzar 14 tiles de espinhos pulando e girando no ar, com pousos que só existem depois do giro; voltar pelo ar até a porta. Girar do chão mata. |
+| 10 | Fuga | 32×36, alta | (síntese) | A travessia pelo ar abre a comporta do teto; escadaria de plataformas; virar a sala para jogar a segunda caixa no compartimento do teto e atravessar o antigo teto até a porta. |
 
-### Redesenho previsto (decidido, ainda não implementado)
+Todos os níveis são resolvidos por bots em `tests/run_tests.gd` e foram conferidos em captura de tela. Os bots provam que há solução, não que a curva está boa: isso depende do teste de quem joga.
 
-As salas acima foram consideradas monótonas no primeiro teste. O piloto continua com 5 salas, mas elas serão refeitas com estas regras (motivos em [DECISOES.md](DECISOES.md), D23 a D26):
+**Ponto de atenção da curva:** os níveis 1 a 4 não têm giro; o giro só aparece no 5. Se a espera parecer longa, dá para trazer "Giro" para antes de "Toca".
 
-- **Mais longas e em etapas:** cada sala encadeia três ou quatro ideias, separadas por portas intermediárias.
-- **Tamanhos variados:** corredores largos, poços altos e salas maiores que a tela. Girar uma sala larga a transforma em um poço.
-- **Câmera segue o coelho** quando a sala passa da tela; o pixel art não muda de tamanho.
-- **Mais plataforma:** trechos de pulo entre os momentos de puzzle, com espinhos em paredes e tetos que viram chão ao girar.
-- **Dois elementos novos:** plataformas que só são sólidas em certa orientação, e portas intermediárias.
-- **Fora por enquanto:** botões de peso, segunda cor de caixa, zonas onde o giro é proibido.
-
-O desenho sala por sala ainda será detalhado.
+**Pendente da versão anterior:** a sala Fuga continua com uma comporta e um compartimento na saída, em vez de duas e dois (D41).
 
 ## 7. Etapas de implementação
 
@@ -166,7 +171,7 @@ O desenho sala por sala ainda será detalhado.
 | M1 | Controlador do coelho | Andar e pular em uma sala de teste, com todas as tolerâncias da seção 3.1 | feito (falta ajuste por quem joga) |
 | M2 | Rotação | Giro para os dois lados, coelho cai para o novo chão, giro no ar funciona | feito |
 | M3 | Caixa, compartimento, porta, espinhos | Sala 2 jogável do início ao fim | feito |
-| M4 | As 5 salas em graybox | Sequência completa jogável, com morte e reinício | feito (resolvidas por bots; ninguém jogou ainda) |
+| M4 | As 5 salas em graybox | Sequência completa jogável, com morte e reinício | feito; 2ª versão (salas longas) feita, aguardando teste |
 | M5 | Arte, áudio e polimento | Sprites, partículas, sons e transições entre salas | pendente |
 
 A sensação de controle é ajustada em M1 e M2, antes de qualquer fase ou arte. O coelho já tem um sprite provisório de 14×14 desenhado em código.
@@ -179,7 +184,7 @@ PageDown e PageUp pulam entre salas. R reinicia a sala.
 
 - **Tipos de caixa:** pesada (esmaga espinhos), de vidro (quebra na queda), magnética (gruda na parede), balão (cai para cima).
 - **Regras de rotação:** giros limitados por sala, giro de 180°, setores que giram separados, zonas que bloqueiam o giro, momento preservado após o giro.
-- **Cenário:** água que escorre com a gravidade, botões de peso, plataformas que só existem em certa orientação, inimigos que também caem.
+- **Cenário:** água que escorre com a gravidade, botões de peso, segunda cor de caixa, zonas onde o giro é proibido, inimigos que também caem. (Plataformas por orientação e comportas já entraram no piloto.)
 - **Rejogabilidade:** cronômetro de speedrun, cenouras colecionáveis em rotas arriscadas, versões difíceis das salas.
 - **Narrativa:** coelho de laboratório fugindo de câmaras de teste, o que justifica o visual estéril e as salas que giram.
 
@@ -193,8 +198,9 @@ O registro completo, com motivos e alternativas, está em [DECISOES.md](DECISOES
 | Caixa esmaga o coelho | adotado |
 | Porta fechada é sólida | revertido: ela não é sólida (D34) |
 | Recarga do giro com barra e som | adotado (pedido no primeiro teste) |
-| Salas de tamanho variado, não só 1:1 | decidido; implementação pendente |
-| Câmera segue o coelho em salas grandes | decidido; implementação pendente |
-| Piloto com 5 salas longas | decidido; implementação pendente |
-| Novos elementos: plataformas por orientação e portas intermediárias | decidido; implementação pendente |
+| Salas de tamanho variado, não só 1:1 | implementado (D39) |
+| Câmera segue o coelho em salas grandes | implementado (D39) |
+| Piloto com 5 salas longas | substituído: 10 níveis com dificuldade crescente (D42) |
+| Etapas bloqueadas por comportas | implementado (D37) |
+| Plataformas por orientação | implementado (D38) |
 | Tema de laboratório | em aberto |

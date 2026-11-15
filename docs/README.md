@@ -13,8 +13,8 @@ Jogo de plataforma e puzzle em que um coelho foge por salas que podem ser girada
 
 - Etapas M0 a M4 prontas: 5 salas jogáveis em graybox.
 - Primeira rodada de retorno de jogo aplicada: sprite do coelho, pulo, porta, recarga do giro.
-- Direção do redesenho das salas decidida (5 salas longas, tamanhos variados, câmera seguindo o coelho, plataformas por orientação e portas intermediárias). Nada disso está implementado.
-- Pendente: detalhar e implementar o redesenho; arte e áudio finais (M5).
+- 10 níveis com dificuldade crescente (D42), de tamanhos variados, com câmera seguindo o coelho, comportas e plataformas por orientação. Resolvidos por bots; aguardando teste de quem joga.
+- Pendente: ajustes das salas depois do teste; arte e áudio finais (M5).
 
 ## Como rodar
 

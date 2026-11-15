@@ -156,6 +156,73 @@ Quando uma decisão for revertida, não apague a entrada: marque como substituí
 - **Visual** (soma-se à animação de D21, de 44 quadros): três ondas de luz que saem da porta, uma a cada 8 quadros; 26 faíscas em todas as direções e 10 subindo; feixe de luz vertical da porta até o teto, que cresce e some; véu dourado sobre a sala no fim; tremor leve de 1,5 px na entrada.
 - **Ligação:** a sala emite `sfx("win")`; `main.gd` toca. *(O feixe atravessava a borda da sala; foi cortado em D36.)*
 
+---
+
+## Salas longas: implementação (15/11/2026)
+
+### D37 — Etapas bloqueadas por comportas
+- **Autor:** Victor escolheu entre três opções propostas por Claude (comporta, porta-portal, sem bloqueio). Substitui as "portas intermediárias" de D25, que não funcionariam depois de D34 (a porta não é sólida).
+- **Decisão:** comporta é um trecho de parede ligado a um ou mais compartimentos. Fechada, é sólida para o coelho e as caixas. Abre enquanto todos os seus compartimentos têm caixa parada e volta a fechar se a caixa sair.
+- **Nunca esmaga:** se deveria fechar com o coelho ou uma caixa dentro, espera o caminho ficar livre. *(Decisão de Claude: segue o espírito de D34, de a porta nunca prender ninguém.)*
+- **Formato:** tiles `1`–`9`; o compartimento que abre a comporta `n` é um bloco 2×2 da letra correspondente (`a` abre `1`, `b` abre `2`...). `S` continua sendo o compartimento da porta.
+- **Visual e som (Claude):** bloco escuro com barras verde-água, que encolhem ao abrir; os compartimentos de comporta têm a moldura na mesma cor. Som de deslizar mecânico com batida no fim, diferente ao abrir e ao fechar.
+- **Consequência boa:** a regra de "a caixa só fica pela gravidade" passa a valer no meio da sala também. Se um giro derrama a caixa de uma comporta, ela fecha (sala 3).
+
+### D38 — Plataformas por orientação: sólidas só com a seta para cima
+- **Autor:** Claude definiu a regra; o elemento foi aprovado em D25.
+- **Decisão:** tile com uma seta. Só é sólido quando a seta aponta para cima na tela. A seta gira com a sala, como os espinhos. Fora disso, é desenhado tracejado e é atravessável.
+- **Formato:** `=` seta para cima, `}` para a direita, `_` para baixo, `{` para a esquerda.
+- **Nunca esmaga:** igual à comporta, só vira sólido quando está livre.
+- **Visual e som:** sólido é lilás com a borda de cima clara; atravessável é contorno tracejado com a seta. "Tic" de vidro ao mudar.
+- **Como as salas usam:** uma coluna de plataformas que, girada, vira ponte (sala 2); pousos que só existem depois do giro, na frente de espinhos (sala 4); uma escadaria que só existe na orientação normal e por isso não atrapalha os voos girados (sala 5).
+- **Ponto aprendido ao desenhar:** uma plataforma não pode "sumir debaixo de uma caixa" e fazê-la cair na mesma gravidade, porque ela só deixa de ser sólida quando a sala gira, e aí a gravidade já é outra. O uso natural é como ponte, pouso ou parede que aparece e some com o giro.
+
+### D39 — Salas de qualquer tamanho e câmera
+- **Autor:** Claude, seguindo D22 e D23.
+- **Tamanho:** a sala é lida das linhas de texto (largura e altura livres). A cada giro, largura e altura trocam: girar uma sala larga a transforma em um poço.
+- **Câmera:** fica centralizada no eixo em que a sala cabe na tela (320×180); no outro, segue o coelho com suavização (`CAM_SMOOTH` = 0,12 por quadro) e para nas bordas da sala. Ao reiniciar, vai direto ao coelho.
+- **Câmera no giro:** a câmera é rotacionada junto com a sala, e o desenho gira em volta do centro da tela. Assim o primeiro quadro da animação é idêntico ao último antes do giro, sem salto. Depois do giro, a câmera desliza até o coelho.
+- **Desempenho:** fora da animação de giro, só as paredes visíveis são desenhadas.
+
+### D40 — Testes de mecânica com salas próprias
+- **Autor:** Claude.
+- **Decisão:** os testes de mecânica (pulo, animação, sons, impacto, porta, câmera, comporta, plataforma, recarga) usam salas de teste definidas no próprio arquivo de testes, não as salas do jogo.
+- **Motivo:** ao redesenhar as salas, metade dos testes quebrou só porque dependia do desenho antigo. Agora redesenhar uma sala só afeta o bot dela.
+
+### D41 — As 5 salas longas
+- **Autor:** Claude desenhou, a partir do plano aprovado por Victor (D24 a D26). Descritas no GDD, seção 6.
+- **Método:** cada sala reaproveita mecânicas já provadas nas salas antigas (o puzzle do esboço, o nicho e a virada de 180°, a travessia pelo ar) e as encadeia com comportas, trechos de pulo e plataformas por orientação. Cada uma tem um bot que a resolve.
+- **Cuidado de desenho registrado:** cada giro afeta a sala inteira. Uma caixa de uma etapa tem de estar segura (num buraco ou nicho) em todas as orientações que as etapas seguintes usam, ou o giro estraga o que já foi resolvido.
+- **Ajustes feitos por causa dos bots:** na sala 1, o trecho depois dos espinhos ficou com 4 tiles (com 2, o coelho caía em cima da caixa); na sala 3, a segunda caixa foi afastada da descida (o coelho caía em cima dela); na sala 5, a escadaria foi refeita em três colunas (em zigue-zague de duas, o coelho ficava preso embaixo de um degrau) e os espinhos finais foram afastados um tile.
+- **Desvio do plano:** a sala 5 tem uma comporta e um compartimento na saída, não duas e dois.
+- **Pendente:** tudo isso foi validado por bots e capturas, não por alguém jogando. Dificuldade, ritmo e clareza de cada sala dependem do teste de Victor.
+
+### D42 — 10 níveis, uma ideia nova por vez
+- **Autor:** Victor pediu (15/11/2026): as salas 1 e 2 estavam bem mais difíceis que a 3; passar para 10 níveis com complexidade crescente, e o primeiro bem mais simples. Claude montou a sequência. Substitui D24.
+- **Regra da curva:** cada nível apresenta uma ideia nova (em sala pequena e sem distrações), e os seguintes a combinam com as anteriores. A ordem das ideias: caixa no buraco → pular → comporta e espinhos → combinação → girar → nichos e sentido do giro → plataformas por orientação → combinação → girar no ar → síntese.
+- **Reaproveitamento:** as 5 salas da versão anterior foram mantidas sem mudança e reposicionadas: Toca (4), Derrame (6), Vertigem (8), Espinhos (9), Fuga (10). Vertigem, que era a 2ª, virou a 8ª: ela pede giro, um truque de posicionamento e plataformas, e estava cedo demais.
+- **Salas novas (Claude):** Primeiros passos (1), Degraus (2), Comporta (3), Giro (5), Setas (7). Cada uma é pequena e tem um só ponto a aprender. Em "Giro", a porta fica deitada na parede, inalcançável, para que girar seja a resposta óbvia. Em "Setas", reaproveita a virada de Derrame, já conhecida, para que a única novidade seja a ponte.
+- **Formato:** em `levels.gd`, cada sala é uma constante com nome, e `ROOMS` é só a lista na ordem dos níveis. Os bots procuram a sala pelo nome, então mudar a ordem não quebra os testes.
+- **A conferir no teste:** os níveis 1 a 4 não têm giro, e a mecânica principal só aparece no 5. Se a espera parecer longa, a alternativa é trazer "Giro" para antes de "Toca".
+
+### D43 — Dicas de texto nos níveis que apresentam controles
+- **Autor:** Victor pediu (15/11/2026) texto sobre os movimentos no nível 1 e sobre o giro na sala do giro. Claude escreveu os textos e definiu onde aparecem.
+- **Decisão:** cada sala pode ter um campo `hint`. O texto aparece centralizado na parte de baixo da tela, surgindo aos poucos ao entrar na sala, e fica visível enquanto o jogador está nela.
+- **Textos:**
+  - Nível 1 (Primeiros passos): "Ande com A/D ou as setas · Pule com W, seta para cima ou Espaço" e "Empurre a caixa até o buraco para abrir a porta".
+  - Nível 5 (Giro): "Q e E giram a sala (no controle, LB e RB)" e "Tudo o que está solto cai para o novo chão".
+- **Posição:** embaixo, porque no topo a primeira linha do nível 1 encostava no título "1 · Primeiros passos".
+- **Fonte:** a fonte padrão do Godot, em tamanho 8. Fica legível, mas destoa do pixel art; uma fonte pixelada é trabalho do M5.
+
+### D44 — Trilha sonora
+- **Autor:** Victor compôs a primeira faixa, `music/first-levels-theme.mp3` (39,6 s, feita para repetir em loop). Claude a ligou ao jogo.
+- **Como toca:** um tocador de música separado dos efeitos, em `main.gd`. Entra com fade de 1,5 s. Se a sala seguinte usa a mesma faixa, ela continua sem reiniciar; se usa outra, a atual some em 0,8 s e a nova entra.
+- **Qual faixa:** cada sala pode ter um campo `music`; sem ele, toca `DEFAULT_MUSIC` (em `levels.gd`). Por enquanto, como há uma faixa só, ela toca em **todos os 10 níveis**, embora o nome indique os primeiros. Quando houver outras, basta pôr `music` nas salas a partir de onde a faixa nova começa.
+- **Loop:** ligado na importação do Godot (`loop=true` em `first-levels-theme.mp3.import`) e reforçado no código.
+- **Volume:** −9 dB (`MUSIC_DB`), abaixo dos efeitos, para pulo, giro e caixa continuarem audíveis. Valor de partida; ajustar ouvindo.
+- **Observação sobre MP3:** o formato pode deixar um pequeno silêncio no ponto de repetição. Se for audível, exportar a faixa em OGG Vorbis resolve.
+- **Na versão web:** o navegador só libera o som depois do primeiro clique ou tecla; a música começa aí.
+
 ### D31 — Pouso forte da caixa: efeito e solavanco na direção da gravidade
 - **Autor:** Victor pediu; Claude desenhou.
 - **Quando:** a caixa toca o chão depois de cair. Vale para qualquer queda, não só depois de girar. *(O critério original era a velocidade da queda; foi trocado por distância em D35.)*
@@ -219,12 +286,12 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Descartado:** reduzir o zoom para a sala inteira caber na tela.
 - **A resolver na implementação:** como a câmera se comporta durante a animação do giro, e o que ela mostra logo depois, quando o coelho cai para longe.
 
-### D24 — O piloto continua com 5 salas, mais longas
+### D24 — O piloto continua com 5 salas, mais longas *(substituída por D42: 10 níveis)*
 - **Autor:** Victor.
 - **Decisão:** manter 5 salas e alongar cada uma, em vez de subir para 8 a 10 salas curtas.
 - **Consequência:** cada sala passa a encadear várias ideias, o que combina com D26.
 
-### D25 — Elementos novos que entram agora: só dois
+### D25 — Elementos novos que entram agora: só dois *(as "portas intermediárias" viraram comportas, D37)*
 - **Autor:** Claude (recomendação), aceita por Victor.
 - **Entram:**
   - **Plataformas por orientação:** só são sólidas em certa orientação da sala.
@@ -239,7 +306,9 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Mais plataforma dentro da sala:** trechos de pulo entre os momentos de puzzle, com espinhos em paredes e tetos que viram chão ao girar.
 - **Salas em etapas:** três ou quatro ideias encadeadas por sala, separadas por portas intermediárias.
 
-### Impacto no código (levantado por Claude, nada feito ainda)
+**Estado (15/11/2026):** D23 a D26 implementadas na rodada 11. O que mudou ao implementar está em D37 a D41.
+
+### Impacto no código (levantado antes de implementar)
 - `room.gd` usa `GRID` e `SIZE` como constantes; precisa aceitar largura e altura por sala.
 - A rotação de retângulos (`_rot_rect`) e da grade assume sala quadrada; em sala W×H, o giro troca as dimensões.
 - O desenho gira em torno do centro da sala; com câmera seguindo o coelho, o centro do giro e o enquadramento precisam ser repensados.
