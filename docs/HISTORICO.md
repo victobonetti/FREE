@@ -202,6 +202,39 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 
 ---
 
+## Rodada 15 — Exportação para amigos testarem (15/11/2026)
+
+**Pedido do Victor:** como exportar o projeto para os amigos analisarem.
+
+**Feito (D45):**
+- Templates de exportação do Godot 4.7.2 baixados e instalados.
+- `export_presets.cfg` com as versões Web (sem threads) e Windows.
+- Gerados `build/coelho-web.zip` (11,2 MB) e `build/coelho-windows.zip` (37,8 MB).
+- Testado: o `.exe` abre e roda; a versão web foi servida localmente, os arquivos carregam com os tipos certos e o jogo foi aberto no navegador do Victor.
+- Passo a passo de publicação no itch.io e de envio do `.exe` em [COMPARTILHAR.md](COMPARTILHAR.md).
+
+**Falta (com o Victor):** criar a página no itch.io e enviar o zip; mandar o link aos amigos.
+
+---
+
+## Rodada 16 — Tela de início e cutscene de abertura (15/11/2026)
+
+**Entrada do Victor:** esboço `start-screen.jpeg` e a descrição da abertura; o jogo se chama "Free". No meio do trabalho, pediu que a abertura tenha só efeitos sonoros, pois a música ele adiciona depois.
+
+**Feito (D46):**
+- `scripts/intro.gd`: tela de título e cutscene em 11 fases, desenhada em código.
+- Sala de início (`Levels.START`) onde a cutscene termina; campo `door_open`.
+- `main.gd` começa pela abertura; depois do fim do jogo, volta a ela. Ação de entrada `start`.
+- Sem música na abertura e na sala de início; efeitos reaproveitados.
+- Testes: a cutscene não começa sozinha, começa com Enter, termina sozinha, pode ser pulada, emite os efeitos, e a sala de início coincide com o quadrado da cutscene. Capturas das 10 etapas conferidas (`tests/intro_shot.gd`).
+- Corrigido no caminho: uma colina do cenário gerava um polígono inválido; e as linhas da cutscene estavam 1 px fora das linhas da sala.
+
+**Ainda não validado por quem joga:** o ritmo da cutscene (10,3 s) e os efeitos sonoros escolhidos.
+
+**Atenção:** as versões em `build/` são anteriores a esta rodada; é preciso exportar de novo antes de mandar aos amigos.
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |
@@ -212,7 +245,9 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 | Arte final (sprites, tiles) | não iniciado; hoje tudo é desenhado em código |
 | Áudio | efeitos gerados em código; primeira faixa de música do Victor ligada a todos os níveis (D44); faltam faixas para os níveis seguintes |
 | Dicas de controle | feitas nos níveis 1 e 5 (rodada 13) |
-| Exportar para amigos testarem (web no itch.io e/ou .exe) | aguardando autorização para baixar os templates |
+| Exportar para amigos testarem | versões geradas (rodada 15); falta publicar no itch.io |
 | Tema e narrativa (laboratório?) | em aberto |
-| Nome do jogo | em aberto |
+| Nome do jogo | "Free" (D46) |
+| Música da abertura | Victor vai compor; hoje a abertura só tem efeitos |
+| Exportar de novo para `build/` | pendente desde a rodada 16 |
 | Controle de versão (git) | a pasta não é um repositório |

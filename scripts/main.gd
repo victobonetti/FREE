@@ -5,6 +5,7 @@ extends Node2D
 const Levels := preload("res://scripts/levels.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const InputSetup := preload("res://scripts/input_setup.gd")
+const IntroScript := preload("res://scripts/intro.gd")
 
 const BAR_SIZE := Vector2(40, 3)
 const BAR_POS := Vector2(320 - 40 - 6, 180 - 3 - 6)
@@ -13,7 +14,8 @@ const MUSIC_DB := -9.0       # volume da música; abaixo dos efeitos para eles c
 const MUSIC_OFF_DB := -40.0
 
 var room: Node2D
-var index := 0
+var intro: Node2D   # tela de início / cutscene, quando ativa
+var index := 0      # nível atual; -1 na abertura e na sala de início
 var transitioning := false
 var finished := false
 var fade_rect: ColorRect
@@ -44,7 +46,7 @@ func _ready() -> void:
 	InputSetup.setup()
 	_make_ui()
 	_make_audio()
-	_load_room(0)
+	_show_intro()
 
 
 func _make_ui() -> void:
@@ -75,7 +77,7 @@ func _make_ui() -> void:
 	bar_fill.size = BAR_SIZE
 	layer.add_child(bar_fill)
 	end_label = Label.new()
-	end_label.text = "fim do piloto\n\npressione pular para recomeçar"
+	end_label.text = "fim do piloto\n\npressione pular para voltar ao início"
 	end_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	end_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	end_label.size = Vector2(320, 180)
@@ -428,23 +430,56 @@ func _update_rotation_hud() -> void:
 
 # ---------------------------------------------------------------- salas
 
+## Tela de início e cutscene de abertura. Só efeitos sonoros; sem música.
+func _show_intro() -> void:
+	_clear_scene()
+	index = -1
+	finished = false
+	title.text = ""
+	hint.text = ""
+	end_label.visible = false
+	_play_music("")
+	intro = IntroScript.new()
+	add_child(intro)
+	intro.sfx.connect(_play_sfx)
+	intro.impact.connect(_on_impact)
+	intro.finished.connect(_load_start_room)
+
+
+## A sala em que a abertura termina: o coelho anda até a porta para começar o nível 1.
+func _load_start_room() -> void:
+	_spawn_room(Levels.START, -1, "")
+
+
 func _load_room(i: int) -> void:
+	var n := clampi(i, 0, Levels.ROOMS.size() - 1)
+	_spawn_room(Levels.ROOMS[n], n, "%d · %s" % [n + 1, Levels.ROOMS[n]["name"]])
+
+
+func _clear_scene() -> void:
 	if room != null:
 		room.queue_free()
 		room = null
-	index = clampi(i, 0, Levels.ROOMS.size() - 1)
+	if intro != null:
+		intro.queue_free()
+		intro = null
+
+
+func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
+	_clear_scene()
+	index = i
 	var r: Node2D = RoomScript.new()
 	r.position = Vector2(160, 90)
 	add_child(r)
-	r.setup(Levels.ROOMS[index])
+	r.setup(def)
 	r.completed.connect(_on_completed)
 	r.sfx.connect(_play_sfx)
 	r.impact.connect(_on_impact)
 	room = r
 	prev_lock = 0
-	title.text = "%d · %s" % [index + 1, Levels.ROOMS[index]["name"]]
-	hint.text = Levels.ROOMS[index].get("hint", "")
-	_play_music(Levels.ROOMS[index].get("music", Levels.DEFAULT_MUSIC))
+	title.text = title_text
+	hint.text = def.get("hint", "")
+	_play_music(def.get("music", Levels.DEFAULT_MUSIC))
 	hint.modulate.a = 0.0
 	if hint.text != "":
 		create_tween().tween_property(hint, "modulate:a", 1.0, 0.6).set_delay(0.3)
@@ -484,7 +519,13 @@ func _physics_process(_delta: float) -> void:
 func _tick() -> void:
 	if finished:
 		if Input.is_action_just_pressed("jump") and not transitioning:
+			_show_intro()
+		return
+	if intro != null:
+		if Input.is_action_just_pressed("next_room"):
 			_load_room(0)
+			return
+		intro.step(Input.is_action_just_pressed("start"))
 		return
 	if room == null or transitioning:
 		return

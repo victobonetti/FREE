@@ -621,7 +621,7 @@ func _update_sockets() -> void:
 			socket_fx[i] = SENSOR_FRAMES
 			sfx.emit("sensor_on" if f else "sensor_off")
 		socket_filled[i] = f
-	var open := group_filled(0)
+	var open: bool = group_filled(0) or def.get("door_open", false)
 	if open != door_open:
 		door_open = open
 		door_flash = 14

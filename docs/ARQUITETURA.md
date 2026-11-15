@@ -6,11 +6,16 @@ Como o código funciona hoje. Os motivos de cada escolha estão em [DECISOES.md]
 
 ```
 project.godot            320×180, escala inteira, filtro "nearest", 60 Hz
+export_presets.cfg       exportação Web (sem threads) e Windows (D45)
+build/                   saída da exportação; ignorada pelo Godot (.gdignore) e pelo git
+.gitignore               ignora .godot/ (cache) e build/; os arquivos .import ficam no git
+                         porque guardam configurações de importação (ex.: loop da música)
 scenes/main.tscn         só instancia scripts/main.gd
 scripts/
   main.gd                sequência de salas, leitura de entrada, transições, barra e som do giro
   room.gd                uma sala: tiles, rotação, câmera, caixas, compartimentos, porta, espinhos,
                          comportas, plataformas por orientação, desenho
+  intro.gd               tela de início e cutscene de abertura (D46)
   rabbit.gd              controlador do coelho
   box.gd                 dados de uma caixa
   levels.gd              as salas em texto
@@ -23,6 +28,15 @@ docs/                    esta documentação
 ```
 
 Nenhum script usa `class_name`; tudo é carregado com `preload`. A árvore de nós é montada em código: `Main` cria a `Room` (um `Node2D`) e uma `CanvasLayer` com título, barra do giro, tela final e fade.
+
+## Fluxo do jogo
+
+`main.gd` começa em `_show_intro()` → cutscene (`intro.gd`) → `_load_start_room()` (sala `Levels.START`, `index = -1`) → níveis `Levels.ROOMS[0..9]` → tela final → de volta à abertura.
+
+- `intro.gd` é um `Node2D` com `step(pressed)`, chamado por `main.gd` a cada quadro de física, e os sinais `started`, `finished`, `sfx` e `impact` (os dois últimos ligados aos mesmos tocadores das salas). As fases e durações estão no topo do arquivo (`DURATION`).
+- O quadrado e a porta da cutscene (`SQ_OUT`, `SQ_IN`, `DOOR_RECT`, `FLOOR_Y`) têm de coincidir com a sala `START`; um teste verifica. Se mudar um, mude o outro.
+- Para os quadros do coelho, `intro.gd` cria uma `Room` fora da árvore só para usar `_rabbit_tex`.
+- `tests/intro_shot.gd` tira capturas de cada etapa da abertura.
 
 ## Ciclo de um quadro
 

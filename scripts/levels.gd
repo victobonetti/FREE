@@ -18,6 +18,7 @@ extends RefCounted
 ## Atenção: o que está solto precisa estar apoiado na orientação inicial.
 ## "rotate": false desliga o giro.
 ## "hint" (opcional): texto de ajuda mostrado embaixo da tela durante a sala.
+## "door_open" (opcional): true deixa a porta sempre aberta, sem compartimento.
 ## "music" (opcional): faixa da sala; sem o campo, toca DEFAULT_MUSIC. Se duas salas
 ## seguidas usam a mesma faixa, ela continua sem reiniciar.
 
@@ -303,6 +304,33 @@ const SETAS := {
 		"#PP.BB...........SS#",
 		"#PP.BB...........SS#",
 		"####################",
+	],
+}
+
+## Sala de início: o quadrado em que a cutscene de abertura termina (scripts/intro.gd desenha
+## o mesmo quadrado, no mesmo lugar). Só o coelho e a porta, já aberta. Não é um nível.
+const START := {
+	"name": "",
+	"hint": "Ande com A/D ou as setas até a porta",
+	"music": "",
+	"door_open": true,
+	"rotate": false,
+	"start_rot": 0,
+	"rows": [
+		"##############",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#.........DD.#",
+		"#.........DD.#",
+		"#.....PP..DD.#",
+		"#.....PP..DD.#",
+		"##############",
 	],
 }
 

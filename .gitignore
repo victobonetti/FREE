@@ -1,0 +1,15 @@
+# Cache e importações geradas pelo Godot (recriadas ao abrir o projeto).
+# As credenciais de exportação também ficam aqui (.godot/export_credentials.cfg).
+.godot/
+
+# Saída da exportação (versões web e Windows). Gerada de novo a qualquer momento.
+build/
+
+# Arquivos do sistema
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Arquivos temporários de editores
+*.tmp
+*~

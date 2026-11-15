@@ -28,6 +28,7 @@ func _init() -> void:
 	test_platforms()
 	test_rot_cooldown()
 	test_start_is_stable()
+	test_intro()
 	test_passos()
 	test_degraus()
 	test_comporta()
@@ -600,6 +601,58 @@ func test_start_is_stable() -> void:
 		after.sort_custom(func(a, b): return key.call(a) < key.call(b))
 		same = same and before == after
 		check(same and room.state == "play", "sala %d estável (coelho %s -> %s, caixas %s -> %s)" % [i + 1, rp, room.rabbit.pos, before, after])
+
+
+# ------------------------------------------------------------ abertura
+
+func test_intro() -> void:
+	print("abertura")
+	var IntroScript = load("res://scripts/intro.gd")
+	var intro = IntroScript.new()
+	intro._ready()
+	var ev: Array = []
+	var hits: Array = []
+	intro.started.connect(func(): ev.append("started"))
+	intro.finished.connect(func(): ev.append("finished"))
+	intro.sfx.connect(func(n): ev.append(n))
+	intro.impact.connect(func(s): hits.append(s))
+	for i in 200:
+		intro.step(false)
+	check(intro.phase == intro.TITLE and ev.is_empty(), "sem apertar nada, fica na tela de título")
+	intro.step(true)
+	check(ev.has("started") and intro.phase == intro.SURPRISE, "Enter começa a cutscene")
+	var count := 0
+	while not ev.has("finished") and count < 2000:
+		intro.step(false)
+		count += 1
+	print("  duração da cutscene: %.1f s" % (count / 60.0))
+	check(ev.has("finished"), "a cutscene chega ao fim sozinha")
+	check(count > 400 and count < 900, "dura entre 7 e 15 segundos")
+	check(hits.size() >= 2 and ev.has("jump") and ev.has("sensor_on"), "tem efeitos sonoros (buraco, susto, pouso, porta)")
+	intro.free()
+	# pular
+	intro = IntroScript.new()
+	intro._ready()
+	ev.clear()
+	intro.finished.connect(func(): ev.append("finished"))
+	for i in 30:
+		intro.step(false)
+	intro.step(true)
+	for i in 40:
+		intro.step(false)
+	intro.step(true)
+	check(ev.has("finished"), "Enter de novo pula a cutscene")
+	intro.free()
+	# a sala de início bate com o quadrado da cutscene
+	load_def(Levels.START)
+	check(room.door_open, "na sala de início a porta já está aberta")
+	var origin := Vector2(160, 90) - Vector2(room.pw, room.ph) / 2.0
+	check(origin == IntroScript.SQ_OUT.position and Vector2(room.pw, room.ph) == IntroScript.SQ_OUT.size, "a sala de início ocupa o mesmo quadrado da cutscene")
+	check(Rect2(Vector2(room.door.position) + origin, room.door.size) == IntroScript.DOOR_RECT, "a porta está no mesmo lugar")
+	idle(20)
+	check(absf(room.rabbit.pos.x + 6 + origin.x - 160.0) <= 1.0 and room.rabbit.pos.y + 12 + origin.y == IntroScript.FLOOR_Y, "o coelho começa onde pousou")
+	walk_until(1.0, won, 300)
+	check(won(), "andar até a porta começa o jogo")
 
 
 # ------------------------------------------------------------ bots das salas

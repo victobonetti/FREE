@@ -1,0 +1,51 @@
+# Como mandar o jogo para os amigos testarem
+
+Há duas versões, geradas na pasta `build/` do projeto (ela não faz parte do código; pode ser apagada e gerada de novo).
+
+| Versão | Arquivo | Para quem |
+|---|---|---|
+| Web | `build/coelho-web.zip` | Qualquer pessoa com Chrome, Firefox ou Edge, pelo link do itch.io |
+| Windows | `build/coelho-windows.zip` | Quem prefere baixar e rodar; só Windows |
+
+## Gerar de novo (depois de mudar o jogo)
+
+Na pasta do projeto, no PowerShell:
+
+```
+$g = "C:\Users\victo\Desktop\GODOT\Godot_v4.7.2-stable_win64_console.exe"
+& $g --headless --path . --export-release "Web" build/web/index.html
+& $g --headless --path . --export-release "Windows Desktop" build/windows/Coelho.exe
+Compress-Archive -Force build/web/* build/coelho-web.zip
+Compress-Archive -Force build/windows/* build/coelho-windows.zip
+```
+
+Ou peça ao Claude para exportar de novo.
+
+## Publicar no itch.io (versão web)
+
+1. Crie uma conta grátis em itch.io.
+2. No painel, **Create new project**.
+3. Preencha:
+   - **Title:** o nome que quiser (o jogo ainda não tem nome oficial).
+   - **Kind of project:** **HTML**.
+   - **Uploads:** envie `build/coelho-web.zip` e marque **This file will be played in the browser**.
+   - **Embed options:** tamanho **1280 × 720**; marque **Fullscreen button**. A opção **SharedArrayBuffer support** pode ficar desmarcada (a exportação é sem threads justamente para não precisar dela).
+   - **Visibility & access:** **Restricted** (só quem você autorizar) ou **Draft** com o link secreto. Não deixe **Public** se não quiser que apareça para todo mundo.
+4. Salve. Em **Restricted**, a página dá um link secreto para mandar aos amigos.
+
+Ao abrir, o jogo pede um clique para começar: o navegador só libera som depois de alguma interação.
+
+## Mandar o .exe (versão Windows)
+
+1. Mande `build/coelho-windows.zip` por Drive, Discord ou WeTransfer.
+2. Seu amigo extrai o zip e abre `Coelho.exe`.
+3. O Windows vai mostrar **"O Windows protegeu o computador"**, porque o executável não tem assinatura digital. Clique em **Mais informações → Executar assim mesmo**. É normal em jogos independentes não assinados.
+
+## O que pedir para os amigos observarem
+
+- Em que nível travaram, e se entenderam o que fazer sem ajuda.
+- Se algum nível pareceu fácil ou difícil demais em relação ao anterior.
+- Como sentiram o pulo e o giro.
+- Se a música ou algum efeito incomodou.
+
+Controles: A/D ou setas para andar; W, seta para cima ou Espaço para pular; Q e E para girar; R para reiniciar a sala. Controle de videogame também funciona (analógico, A, LB, RB, Y).

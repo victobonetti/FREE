@@ -9,6 +9,7 @@ static func setup() -> void:
 	_add("rotate_ccw", [_key(KEY_Q), _pad(JOY_BUTTON_LEFT_SHOULDER)])
 	_add("rotate_cw", [_key(KEY_E), _pad(JOY_BUTTON_RIGHT_SHOULDER)])
 	_add("restart", [_key(KEY_R), _pad(JOY_BUTTON_Y)])
+	_add("start", [_key(KEY_ENTER), _key(KEY_KP_ENTER), _key(KEY_SPACE), _pad(JOY_BUTTON_START), _pad(JOY_BUTTON_A)])
 	# Atalhos de desenvolvimento
 	_add("next_room", [_key(KEY_PAGEDOWN)])
 	_add("prev_room", [_key(KEY_PAGEUP)])

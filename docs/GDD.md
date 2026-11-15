@@ -1,6 +1,6 @@
 # Documento de design — piloto
 
-> Nome do jogo: a definir.
+> Nome do jogo: **Free**.
 > Estado: **M0 a M4 implementados** e primeira rodada de retorno aplicada. Pendente: redesenho das salas e M5 (arte, áudio, polimento).
 > Referência visual: `concept.png` (raiz do projeto).
 > Este arquivo é o design. Decisões e motivos: [DECISOES.md](DECISOES.md). Código: [ARQUITETURA.md](ARQUITETURA.md). O que foi feito e o que falta: [HISTORICO.md](HISTORICO.md). Como rodar: [README.md](README.md).
@@ -135,6 +135,15 @@ assets/                # (M5) sprites e áudio
 ```
 
 As salas são texto em `levels.gd` em vez de cenas `.tscn`: dá para editar e revisar como código, e os testes conseguem carregar qualquer sala sem abrir o editor. Há um campo `start_rot` para desenhar a sala na orientação em que ela é resolvida e começar girada.
+
+## 5b. Abertura
+
+Esboço em `start-screen.jpeg`; detalhes em D46.
+
+- **Tela de início:** fundo preto, título "FREE", "PRESS ENTER" piscando e uma janela com o coelho num campo verde e ensolarado, o único cenário colorido do jogo.
+- **Cutscene:** um buraco se abre sob o coelho, ele se assusta ("!"), cai e some; a janela se apaga; ele cai girando no vazio até pousar numa pequena plataforma branca, que se expande até virar um quadrado com uma porta.
+- **Sala de início:** esse quadrado é jogável. O jogador anda até a porta e começa o nível 1.
+- Enter de novo pula a cutscene. A abertura não tem música, só efeitos (a música virá depois).
 
 ## 6. As 5 salas
 

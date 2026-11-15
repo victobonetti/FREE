@@ -223,6 +223,35 @@ Quando uma decisão for revertida, não apague a entrada: marque como substituí
 - **Observação sobre MP3:** o formato pode deixar um pequeno silêncio no ponto de repetição. Se for audível, exportar a faixa em OGG Vorbis resolve.
 - **Na versão web:** o navegador só libera o som depois do primeiro clique ou tecla; a música começa aí.
 
+### D46 — Nome do jogo, tela de início e cutscene de abertura
+- **Autor:** Victor, com o esboço `start-screen.jpeg` (6 quadros) e a descrição. Claude implementou e tomou as decisões de detalhe abaixo.
+- **Nome:** o jogo se chama **Free** (título da tela de início; também é o nome do projeto no Godot).
+- **Tela de início:** fundo preto, "FREE" em letras brancas de blocos, "PRESS ENTER" piscando, e uma janela com o coelho num campo colorido e ensolarado (céu, sol, nuvens, colinas, árvores, flores). É o único lugar colorido do jogo, em contraste com as salas.
+- **Cutscene (10,3 s), ao apertar Enter:**
+  1. O texto some; abre-se um buraco sob o coelho; ele dá um sobressalto, aparece um "!" e ele olha para baixo.
+  2. Ele cai no buraco e some; a janela fica vazia e depois some em fade.
+  3. Corte: o coelho cai girando no vazio preto, com riscos de velocidade.
+  4. Ele pousa numa pequena plataforma branca, com impacto.
+  5. A plataforma se alonga, sobe pelos lados e fecha em cima, formando um quadrado; a porta surge.
+- **Decisões de Claude:**
+  - O quadrado final é uma **sala jogável** (`Levels.START`): o jogador anda até a porta, já aberta, para começar o nível 1. A cutscene desenha o quadrado e a porta exatamente onde a sala fica, para a troca não dar salto (há teste).
+  - Apertar Enter de novo durante a cutscene **pula** direto para essa sala.
+  - Enter, Espaço, Start ou A (controle) começam.
+  - Depois da tela final do jogo, volta-se à tela de início.
+  - Novo campo de sala `door_open`: porta sempre aberta, sem compartimento.
+- **Som (pedido de Victor: só efeitos; a música da abertura ele fará depois):** a abertura e a sala de início não têm música; a trilha atual começa no nível 1. Efeitos, reaproveitando os que existem: baque quando o chão cede, som de pulo no sobressalto, baque forte no pouso, bipe do sensor quando a porta surge.
+- **Tudo desenhado em código** (`scripts/intro.gd`), como o resto do jogo. Arte final é do M5.
+- **Pendente:** música da abertura (Victor); talvez um som próprio para a queda no vazio.
+
+### D45 — Distribuição para testes: web no itch.io e .exe
+- **Autor:** Victor pediu um jeito de os amigos testarem; Claude recomendou e configurou.
+- **Web (principal):** exportação HTML5 **sem threads** (`variant/thread_support=false`), que roda no itch.io sem precisar de configuração especial do servidor. Publicar como página **restrita** ou rascunho com link secreto.
+- **Windows (alternativa):** `.exe` com os dados embutidos (um arquivo só). Não é assinado, então o Windows mostra um aviso na primeira execução.
+- **Fora da exportação:** `concept.png`, `tests/` e `docs/`.
+- **Pasta `build/`:** saída da exportação, com um `.gdignore` para o Godot não tratar os arquivos gerados como parte do projeto. Pode ser apagada e gerada de novo.
+- **Templates de exportação:** Godot 4.7.2 oficiais, baixados do GitHub do Godot e instalados em `%APPDATA%\Godot\export_templates\4.7.2.stable`. O arquivo baixado (1,28 GB) ficou em `Downloads\godot-templates-4.7.2` e pode ser apagado.
+- **Passo a passo:** [COMPARTILHAR.md](COMPARTILHAR.md).
+
 ### D31 — Pouso forte da caixa: efeito e solavanco na direção da gravidade
 - **Autor:** Victor pediu; Claude desenhou.
 - **Quando:** a caixa toca o chão depois de cair. Vale para qualquer queda, não só depois de girar. *(O critério original era a velocidade da queda; foi trocado por distância em D35.)*
