@@ -523,3 +523,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Retratos:** no alto, coelho e vidas à esquerda do centro, vidas e Jeffrey à direita. O retrato pisca em vermelho no dano; o do Jeffrey ri quando o coelho morre e fica tonto quando é atingido.
 - **Nozes:** colisão de 7 para 10 px; arco de 1,15 para 1,5 s (gravidade de 190 para 140).
 - **Escolhas de Claude:** a duração da imunidade (40 quadros) e o R reiniciar a luta inteira.
+
+### D69 — Abertura do boss: 3 giros antes de o Jeffrey aparecer
+- **Autor:** Victor.
+- **O quê:** na primeira vez na sala, ela está vazia. O esquilo só aparece depois que o jogador gira o bloco 3 vezes: assim ele descobre sozinho que aqui Q/E giram o bloco, não a sala. Meio segundo depois do terceiro giro, o Jeffrey cai do céu girando. Sem dica na tela.
+- **Não repete:** morrer, reiniciar com R ou voltar à sala não traz a espera de volta.
+- **Escolha de Claude, aberta a revisão:** "primeira vez" vale por sessão de jogo (`intro_seen`, estático em `boss_squirrel.gd`); fechar e abrir o jogo mostra a abertura de novo, porque o jogo ainda não salva progresso do boss.
+- **Também:** o retrato e os corações do Jeffrey só aparecem quando ele entra; a entrada passou a ser sempre de cima.

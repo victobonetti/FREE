@@ -55,6 +55,7 @@ func _init() -> void:
 	test_jeffrey_no_suicide()
 	test_jeffrey_bot()
 	test_jeffrey_lives()
+	test_jeffrey_intro()
 	print("")
 	if failures == 0:
 		print("TODOS OS TESTES PASSARAM")
@@ -1592,7 +1593,10 @@ func test_inverse_gate() -> void:
 
 # ------------------------------------------------------------ boss 1: Jeffrey
 
+const BossSquirrel := preload("res://scripts/boss_squirrel.gd")
+
 func _jeffrey() -> void:
+	BossSquirrel.intro_seen = true   # os testes da luta pulam a abertura
 	load_def(Levels.JEFFREY)
 	seed(7)
 
@@ -1678,6 +1682,39 @@ func test_jeffrey_bot() -> void:
 			won = true
 			break
 	check(won, "o coelho chega à porta depois da luta")
+
+
+## Na primeira vez, o esquilo só aparece depois de 3 giros do bloco; depois, nunca mais espera.
+func test_jeffrey_intro() -> void:
+	print("Jeffrey: abertura com 3 giros")
+	BossSquirrel.intro_seen = false
+	load_def(Levels.JEFFREY)
+	var boss = room.actors[0]
+	idle(300)
+	check(boss.state == "wait" and boss.nuts.is_empty(), "sem girar, o esquilo não aparece")
+	for n in 2:
+		wait_rot_ready()
+		tick({"rotate": 1})
+		idle(60)
+	check(boss.state == "wait", "dois giros ainda não bastam")
+	wait_rot_ready()
+	tick({"rotate": -1})
+	idle(20)
+	check(boss.state == "wait", "depois do terceiro, uma pausa curta")
+	idle(15)
+	check(boss.state == "enter" and boss.pos.y < room.ph / 2.0, "e ele cai do céu, girando (%s em y=%d)" % [boss.state, boss.pos.y])
+	idle(60)
+	check(boss.state != "enter" and boss.state != "wait", "e a luta começa")
+	room.rabbit.pos = Vector2i(24, 100)
+	boss.lives = 1
+	room.kill()
+	var guard := 0
+	while room.state != "play" and guard < 600:
+		tick()
+		guard += 1
+	check(boss.state == "enter", "depois de morrer, ele entra direto, sem esperar os giros")
+	load_def(Levels.JEFFREY)
+	check(room.actors[0].state == "enter", "voltando à sala, também")
 
 
 ## Só nesta sala o coelho tem 3 vidas: cada morte custa uma; na terceira, a luta recomeça.

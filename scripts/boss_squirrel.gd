@@ -19,6 +19,8 @@ extends Node2D
 const SIZE := 12                     # caixa de colisão (o coelho tem 12; dá para pular por cima)
 const HEARTS := 3
 const LIVES := 3                     # vidas do coelho, só nesta sala
+const INTRO_SPINS := 3                # giros do bloco antes de o esquilo aparecer (só na 1ª vez)
+const INTRO_DELAY := 30               # quadros entre o terceiro giro e a entrada
 const INVULN := 40                   # quadros piscando, imune, depois de levar dano
 const HOP_SPEED := 230.0             # px/s nos saltos entre apoios
 const WALK_SPEED := [38.0, 48.0, 58.0]       # por fase (corações perdidos: 0, 1, 2)
@@ -59,10 +61,15 @@ const C_BOMB_DARK := Color("1f1f2b")
 const C_FIRE := Color("ffb347")
 
 var room
+## A abertura já aconteceu nesta sessão de jogo: morrer ou voltar à sala não a repete.
+static var intro_seen := false
+
 var hearts := HEARTS
+var spins_seen := 0      # giros do bloco contados na abertura
+var was_spinning := false
 var lives := LIVES       # vidas do coelho: zerou, a luta recomeça do início
 var hud_hit := 0         # quadros piscando o retrato do coelho
-var state := "enter"     # enter, walk, hop, perch, aim, attack, bounce, stunned, dead, gone
+var state := "enter"     # wait (abertura: esperando os giros), enter, walk, hop, perch, aim, attack, bounce, stunned, dead, gone
 var pos := Vector2.ZERO  # centro
 var t := 0               # quadros no estado atual
 var leg_from := Vector2.ZERO
@@ -104,7 +111,22 @@ func on_reset(r) -> void:
 	lives = LIVES
 	hearts = HEARTS
 	throws = 0
-	_go_leg(Vector2(room.pw + 30, -20), Vector2(room.pw - 40, _floor_y()), 50)
+	if not intro_seen:
+		# primeira vez: a sala está vazia até o jogador girar o bloco 3 vezes
+		state = "wait"
+		spins_seen = 0
+		was_spinning = false
+		t = 0
+		pos = Vector2(room.pw - 40, -40)
+		last_pos = pos
+		return
+	_enter()
+
+
+## Cai do céu, girando.
+func _enter() -> void:
+	_go_leg(Vector2(room.pw - 40, -30), Vector2(room.pw - 40, _floor_y()), 45)
+	last_pos = pos
 	state = "enter"
 	dir = -1
 
@@ -275,6 +297,14 @@ func step(r) -> void:
 	elif not trail.is_empty():
 		trail.pop_front()
 	match state:
+		"wait":
+			if room.spinning and not was_spinning:
+				spins_seen += 1
+				t = 0
+			was_spinning = room.spinning
+			if spins_seen >= INTRO_SPINS and not room.spinning and t >= INTRO_DELAY:
+				intro_seen = true
+				_enter()
 		"enter":
 			_fly()
 			spin += 0.5
@@ -641,7 +671,7 @@ func _draw() -> void:
 		draw_circle(p, BOMB_RADIUS * minf(1.0, 0.4 + k * 1.5), Color(C_FIRE, 0.55 * (1.0 - k)))
 		draw_circle(p, BOMB_RADIUS * 0.6 * (1.0 - k), Color(1, 1, 1, 0.9 * (1.0 - k)))
 		draw_arc(p, BOMB_RADIUS, 0.0, TAU, 20, Color(C_FIRE, 1.0 - k), 1.0)
-	if state != "gone" and state != "dead":
+	if state != "gone" and state != "dead" and state != "wait":
 		if flash == 0 or (flash / 3) % 2 == 0:
 			_draw_squirrel(base)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
@@ -870,7 +900,9 @@ func _draw_hearts() -> void:
 	draw_texture(tex, rb.position + Vector2(2, 1))
 	for i in LIVES:
 		_draw_heart(Vector2(-52 + i * 10, y + 6), i < lives)
-	# Jeffrey
+	# Jeffrey (só depois que ele aparece)
+	if state == "wait":
+		return
 	var jb := Rect2(56, y, 16, 18)
 	_draw_frame(jb, flash > 0 and (flash / 4) % 2 == 0)
 	draw_set_transform_matrix(Transform2D(0.0, Vector2(-1, 1), 0.0, jb.position + Vector2(12, 15)))

@@ -249,7 +249,9 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 
 **A sala:** o coelho cai numa sala que não gira. Q/E giram só um **bloco quadrado com espinhos numa das faces**, no centro da sala. Por ser quadrado, girar não muda a colisão, só qual face tem espinhos. A gravidade e o resto da sala não mudam.
 
-**O esquilo:** entra girando, de fora da borda da tela. Anda no chão e ataca saltando algumas vezes entre as paredes, girando no ar e jogando nozes. Só as nozes matam o coelho; encostar no esquilo não machuca (pedido do Victor depois do primeiro teste). As nozes caem com a gravidade e quebram depois de 3 toques.
+**Abertura (D69):** na primeira vez, a sala está vazia; depois de 3 giros do bloco, o esquilo cai do céu girando. Não se repete ao morrer.
+
+**O esquilo:** entra girando, caindo de cima. Anda no chão e ataca saltando algumas vezes entre as paredes, girando no ar e jogando nozes. Só as nozes matam o coelho; encostar no esquilo não machuca (pedido do Victor depois do primeiro teste). As nozes caem com a gravidade e quebram depois de 3 toques.
 
 **Como vencer:** o esquilo **nunca salta numa face com espinhos**, e depois que um salto começa ele não muda. Ele só mira faces **vizinhas** à dos espinhos, então um giro sempre basta. Girar cedo não adianta (ele escolhe outro alvo), girar tarde também não (ele já ricocheteou): o acerto vem de girar no último instante, no meio do salto dele.
 

@@ -417,3 +417,11 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 **Feito (D68):** `boss_squirrel.gd`, `room.gd` (`invuln`, `absorb_kill`) e teste novo das vidas. Todos os testes passam.
 
 **Ainda não validado por quem joga:** a duração da imunidade e o tamanho novo das nozes.
+
+---
+
+## Rodada 30 — Abertura do boss (16/11/2026)
+
+**Entrada do Victor:** na primeira vez, o jogador faz 3 giros antes de o Jeffrey aparecer, para entender a mecânica na prática; ele aparece rodando do céu; se o jogador morrer, a cena não se repete.
+
+**Feito (D69):** estado `wait` em `boss_squirrel.gd` e teste da abertura. Todos os testes passam.
