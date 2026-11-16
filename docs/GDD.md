@@ -234,6 +234,30 @@ PageDown e PageUp pulam entre salas. R reinicia a sala.
 - **Rejogabilidade:** cronômetro de speedrun, cenouras colecionáveis em rotas arriscadas, versões difíceis das salas.
 - **Narrativa:** coelho de laboratório fugindo de câmaras de teste, o que justifica o visual estéril e as salas que giram.
 
+## 8b. Boss 1 — Jeffrey, o esquilo (conceito, D63)
+
+Ainda não implementado. Esboço do Victor em três quadros: o bloco com espinhos no centro, o esquilo subindo as paredes, o giro no último instante.
+
+**A sala:** o coelho cai numa sala que não gira. Q/E giram só um **bloco quadrado com espinhos numa das faces**, no centro da sala. Por ser quadrado, girar não muda a colisão, só qual face tem espinhos. A gravidade e o resto da sala não mudam.
+
+**O esquilo:** entra girando, de fora da borda da tela. Anda no chão e ataca saltando algumas vezes entre as paredes, girando no ar e jogando nozes. Encostar no esquilo andando ou numa noz mata o coelho. As nozes caem com a gravidade e quebram depois de 3 toques.
+
+**Como vencer:** o esquilo **nunca salta numa face com espinhos**, e depois que um salto começa ele não muda. Ele só mira faces **vizinhas** à dos espinhos, então um giro sempre basta. Girar cedo não adianta (ele escolhe outro alvo), girar tarde também não (ele já ricocheteou): o acerto vem de girar no último instante, no meio do salto dele.
+
+**Regras decididas:**
+- O coelho morre num toque, como no resto do jogo. O esquilo tem 3 corações. Depois do terceiro acerto, abre-se a porta.
+- O jogo **não pausa** durante o giro do bloco: tudo continua se movendo. É uma prova de reflexo.
+
+**Em aberto:**
+- A partir de que ponto da animação a face nova passa a ter espinhos. Proposta: no fim dela (0,25 s, ou menos, se a janela ficar curta demais).
+- O tamanho da janela de reação (do começo do salto até tocar a face). Proposta: ~1 s no primeiro coração, ~0,7 s no segundo, ~0,5 s no terceiro, com o alvo anunciado (o esquilo olha para a face ou ela pisca).
+- Ao morrer, o esquilo volta a ter 3 corações ou mantém os que perdeu.
+- Limite de nozes na tela (proposta: 2 ou 3); noz que toca nos espinhos quebra na hora; noz parada no chão serve de apoio ou também machuca.
+- Altura do esquilo: no máximo ~16 px e devagar no chão, para o coelho conseguir pular por cima (pulo longo de 30 px).
+- Opcional, para trazer de volta o "tudo que está solto cai": nozes presas nas faces do bloco caem quando ele gira.
+
+**Implementação (quando for a hora):** sala especial. A grade é uma sala comum com o giro apontando para um bloco; o esquilo, as nozes, os corações e as fases ficam numa cena própria. A peça nova no motor é "o giro mira um bloco, não a sala".
+
 ## 9. Decisões
 
 O registro completo, com motivos e alternativas, está em [DECISOES.md](DECISOES.md). Resumo do que afeta o design:

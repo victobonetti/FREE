@@ -453,3 +453,9 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **O quê:** `.github/workflows/deploy-web.yml` exporta a versão web com o Godot 4.7.2 e publica no GitHub Pages a cada push na `main`.
 - **Por que funciona:** a exportação é sem threads, então não precisa dos cabeçalhos COOP/COEP que o Pages não permite configurar.
 - **HTML:** o `head_include` da exportação web põe o jogo em tela cheia no primeiro toque, tenta travar em paisagem e mostra "Gire o celular" quando o aparelho está em pé. No iPhone o Safari não deixa a página entrar em tela cheia; lá o jeito é "Adicionar à Tela de Início".
+
+### D63 — Boss 1: Jeffrey, o esquilo (conceito)
+- **Autor:** Victor (conceito e esboço); Claude (análise), regras confirmadas por Victor.
+- **O quê:** sala que não gira; Q/E giram só um bloco quadrado com espinhos no centro. O esquilo salta entre as paredes jogando nozes e só é ferido se o bloco girar os espinhos para a face em que ele vai ricochetear, no último instante. Detalhes no GDD, seção 8b.
+- **Decidido:** o esquilo só mira faces vizinhas à dos espinhos (um giro sempre basta) e nunca salta numa face com espinhos; o coelho morre num toque; o esquilo tem 3 corações; o jogo não pausa durante o giro do bloco (prova de reflexo).
+- **Em aberto:** quando os espinhos da face nova passam a valer, o tamanho da janela de reação por coração, se os corações voltam ao morrer, as regras das nozes, o tamanho do esquilo.
