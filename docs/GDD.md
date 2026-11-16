@@ -159,7 +159,7 @@ scripts/
   room.gd              # tiles, rotação, caixas, compartimentos, porta, espinhos, desenho
   rabbit.gd            # movimento e pulo
   box.gd
-  levels.gd            # as salas, desenhadas em texto (qualquer tamanho)
+  levels.gd            # carrega a campanha de levels/campaign (as fases são dados, feitos no editor)
   input_setup.gd       # teclas e controle registrados em código
   touch_controls.gd    # controles de toque (celular), apertam as mesmas ações
   boss_squirrel.gd     # boss 1, Jeffrey, o esquilo (ator da sala 17)
@@ -169,7 +169,7 @@ tests/
 assets/                # (M5) sprites e áudio
 ```
 
-As salas são texto em `levels.gd` em vez de cenas `.tscn`: dá para editar e revisar como código, e os testes conseguem carregar qualquer sala sem abrir o editor. Há um campo `start_rot` para desenhar a sala na orientação em que ela é resolvida e começar girada.
+As salas são texto (hoje em `levels/campaign/*.json`, feitas no editor; D71) em vez de cenas `.tscn`: dá para editar e revisar como código, e os testes conseguem carregar qualquer sala sem abrir o editor. Há um campo `start_rot` para desenhar a sala na orientação em que ela é resolvida e começar girada.
 
 ## 5b. Abertura
 
@@ -201,7 +201,7 @@ Terceira versão (15/11/2026): **10 níveis** com dificuldade crescente (D42). N
 | 9 | Espinhos | 28×20 | Girar no ar | Cruzar 14 tiles de espinhos pulando e girando no ar, com pousos que só existem depois do giro; voltar pelo ar até a porta. Girar do chão mata. |
 | 10 | Fuga | 32×36, alta | (síntese) | A travessia pelo ar abre a comporta do teto; escadaria de plataformas; virar a sala para jogar a segunda caixa no compartimento do teto e atravessar o antigo teto até a porta. |
 
-**Ato introdutório (D53):** a ordem atual das fases é a de `Levels.ROOMS` em `scripts/levels.gd`, comentada fase a fase. São 16 hoje: Primeiros passos, Degraus, Giro, Comporta, Derrame, Toca, Setas, Espinhos, Prumo, Vertigem, Água, Maré, Represa, Naufrágio, Mergulho, Fuga (Corda, Laço e Salto no vazio foram removidas, D58 e D60). As tabelas desta seção são anteriores a essa ordem.
+**Ato introdutório (D53):** a ordem atual das fases é a de `levels/campaign/ordem.json` (D71); as notas de projeto de cada fase estão no campo `notes` do arquivo dela. São 16 hoje: Primeiros passos, Degraus, Giro, Comporta, Derrame, Toca, Setas, Espinhos, Prumo, Vertigem, Água, Maré, Represa, Naufrágio, Mergulho, Fuga (Corda, Laço e Salto no vazio foram removidas, D58 e D60). As tabelas desta seção são anteriores a essa ordem.
 
 Depois do piloto, dois níveis que apresentam mecânicas novas (15/11/2026, D47 a D50):
 
@@ -291,7 +291,7 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 - Arte e efeitos sonoros próprios (hoje: desenho em código e efeitos reaproveitados). A música é a do Victor: `music/boss-rush-groove.mp3`, em loop.
 - Opcional, para trazer de volta o "tudo que está solto cai": nozes presas nas faces do bloco caem quando ele gira.
 
-**Implementação:** a grade é uma sala comum em `levels.gd` (`JEFFREY`) com dois campos novos: `spin_block` (o giro mira o bloco, não a sala) e `actors` (scripts que a sala cria e chama a cada quadro). O esquilo, as nozes e os corações ficam em `scripts/boss_squirrel.gd`; a sala só oferece o bloco, `kill()` e `door_unlocked`.
+**Implementação:** a grade é uma sala comum (`levels/campaign/jeffrey.json`) com dois campos novos: `spin_block` (o giro mira o bloco, não a sala) e `actors` (scripts que a sala cria e chama a cada quadro). O esquilo, as nozes e os corações ficam em `scripts/boss_squirrel.gd`; a sala só oferece o bloco, `kill()` e `door_unlocked`.
 
 ## 9. Decisões
 

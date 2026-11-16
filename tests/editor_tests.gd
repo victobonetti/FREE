@@ -5,6 +5,8 @@ extends SceneTree
 const Levels := preload("res://scripts/levels.gd")
 const LevelData := preload("res://scripts/level_data.gd")
 const LevelStore := preload("res://scripts/level_store.gd")
+const CampaignStore := preload("res://scripts/campaign_store.gd")
+const Replay := preload("res://scripts/replay.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const EditModel := preload("res://scripts/editor/edit_model.gd")
 const EditTools := preload("res://scripts/editor/edit_tools.gd")
@@ -24,7 +26,9 @@ func _initialize() -> void:
 	test_tools()
 	test_inverse_in_editor()
 	test_time_params()
-	test_campaign_override()
+	test_extra_fields()
+	test_campaign_store()
+	test_replay()
 	await test_flow()
 	print("")
 	if failures == 0:
@@ -53,7 +57,7 @@ func has_error(d, text: String) -> bool:
 
 func test_data_campaign() -> void:
 	print("fases da campanha na validação")
-	var all: Array = Levels.ROOMS.duplicate()
+	var all: Array = Levels.rooms().duplicate()
 	all.append(Levels.START)
 	for def in all:
 		if def.has("actors"):
@@ -68,7 +72,7 @@ func test_data_roundtrip() -> void:
 	var ok_def := true
 	var ok_json := true
 	var ok_code := true
-	for def in Levels.ROOMS:
+	for def in Levels.rooms():
 		if def.has("actors"):
 			continue   # sala de boss: fora do que o editor representa
 		var d: RefCounted = LevelData.from_def(def)
@@ -85,7 +89,7 @@ func test_data_roundtrip() -> void:
 	check(ok_def, "from_def e to_def devolvem a mesma fase (as 16)")
 	check(ok_json, "JSON devolve a mesma fase (as 16)")
 	check(ok_code, "o código de texto devolve a mesma fase (as 16)")
-	var code: String = LevelData.from_def(Levels.ROOMS[2]).to_code()
+	var code: String = LevelData.from_def(Levels.rooms()[2]).to_code()
 	print("  código da fase 3: %d caracteres" % code.length())
 	check(code.begins_with("FREE1:") and code.length() < 900, "o código é curto")
 	check(LevelData.from_code("lixo") == null and LevelData.from_code("FREE1:5:@@@") == null, "código inválido devolve nulo")
@@ -597,34 +601,121 @@ func test_flow() -> void:  # espera um quadro para o jogo ficar pronto
 	LevelStore.dir_override = ""
 
 
-func test_campaign_override() -> void:
-	print("campanha: ajuste do editor no lugar da fase")
-	Levels.campaign_dir = "user://campaign_test"
-	DirAccess.make_dir_recursive_absolute(Levels.campaign_dir)
-	check(Levels.campaign_def(2) == Levels.ROOMS[2] and not Levels.has_campaign_override(2), "sem ajuste, vale a fase de levels.gd")
-	var d: RefCounted = LevelData.from_def(Levels.ROOMS[2])
-	d.name = "Giro editado"
-	d.set_cell(3, 3, "^")
-	var f := FileAccess.open(Levels.campaign_path(2), FileAccess.WRITE)
-	f.store_string(d.to_json())
-	f.close()
-	var got: Dictionary = Levels.campaign_def(2)
-	check(Levels.has_campaign_override(2) and got["name"] == "Giro editado" and String(got["rows"][3])[3] == "^", "com ajuste, vale o do arquivo")
-	check(Levels.campaign_def(3) == Levels.ROOMS[3], "as outras não mudam")
-	var bad: RefCounted = LevelData.from_def(Levels.ROOMS[2])
-	bad.set_block(2, 10, ".")
-	f = FileAccess.open(Levels.campaign_path(2), FileAccess.WRITE)
-	f.store_string(bad.to_json())
-	f.close()
-	check(Levels.campaign_def(2) == Levels.ROOMS[2], "um ajuste com erro é ignorado")
-	f = FileAccess.open(Levels.campaign_path(2), FileAccess.WRITE)
-	f.store_string("isto não é json")
-	f.close()
-	check(Levels.campaign_def(2) == Levels.ROOMS[2], "um arquivo quebrado também")
-	DirAccess.remove_absolute(Levels.campaign_path(2))
-	Levels.campaign_dir = "res://levels/campaign"
-	check(Levels.campaign_def(2) == Levels.ROOMS[2], "restaurar volta à original")
+## Campos que o editor não edita (o boss) sobrevivem a abrir e salvar.
+func test_extra_fields() -> void:
+	print("campos extras (sala de boss)")
+	var boss: Dictionary = Levels.by_id("jeffrey")
+	var d: RefCounted = LevelData.from_def(boss)
+	d.set_cell(5, 5, "#")
+	var back: RefCounted = LevelData.from_json(d.to_json())
+	var def: Dictionary = back.to_def()
+	check(def.has("actors") and def.has("spin_block") and def.has("boss_music"), "atores, bloco giratório e música do boss continuam depois de editar e salvar")
+	check(back.errors().is_empty(), "a sala do boss passa na validação (a porta é do boss)")
+	var from_disk: RefCounted = LevelData.from_json(FileAccess.get_file_as_string(Levels.level_path("jeffrey")))
+	check(from_disk.is_verified(), "a sala do boss lida do disco continua verificada (números do JSON não mudam o hash)")
+	var holed: RefCounted = LevelData.from_def(boss)
+	holed.set_cell(18, 9, ".")
+	check(not holed.errors().is_empty(), "bloco giratório com um buraco é erro")
+	var nospin: RefCounted = LevelData.from_def(boss)
+	nospin.extra.erase("spin_block")
+	check(not nospin.errors().is_empty(), "Jeffrey sem bloco giratório é erro")
+	var plain: RefCounted = LevelData.from_def(Levels.by_id("giro"))
+	var h0: String = plain.content_hash()
+	plain.extra["notes"] = "outra nota"
+	check(plain.content_hash() == h0, "notas não mudam o hash da verificação")
+	var b2: RefCounted = LevelData.from_def(boss)
+	var hb: String = b2.content_hash()
+	b2.extra["spin_cooldown"] = 10
+	check(b2.content_hash() != hb, "campos de jogo extras mudam o hash")
 
+
+## Canonizar, ordem e tirar da história, numa cópia da campanha.
+func test_campaign_store() -> void:
+	print("campanha: canonizar, ordem, tirar")
+	var real := Levels.campaign_dir
+	var tmp := "user://campaign_test"
+	DirAccess.make_dir_recursive_absolute(tmp)
+	for f in DirAccess.get_files_at(tmp):
+		DirAccess.remove_absolute(tmp + "/" + f)
+	for id in ["passos", "degraus", "giro"]:
+		DirAccess.copy_absolute(real + "/%s.json" % id, tmp + "/%s.json" % id)
+	var fo := FileAccess.open(tmp + "/ordem.json", FileAccess.WRITE)
+	fo.store_string(JSON.stringify({"ordem": ["passos", "degraus", "giro"]}))
+	fo.close()
+	Levels.campaign_dir = tmp
+	Levels.refresh()
+	LevelStore.dir_override = "user://levels_test"
+	check(Levels.ids() == ["passos", "degraus", "giro"], "lê a ordem do arquivo")
+	check(Levels.def_at(1)["name"] == "Degraus" and Levels.by_id("giro")["id"] == "giro", "lê cada fase pelo id")
+
+	var d: RefCounted = LevelData.from_def(Levels.by_id("passos"))
+	d.name = "Fase nova"
+	d.set_cell(10, 2, "#")
+	check(CampaignStore.canonize(d, {}).has("erro"), "sem vencer, não canoniza")
+	d.mark_verified()
+	check(CampaignStore.canonize(d, {}).has("erro"), "vencida mas sem replay, não canoniza")
+	var old := Replay.pack([[10, {}]], "outro hash")
+	check(CampaignStore.canonize(d, old).has("erro"), "replay de outra versão não vale")
+	var rep := Replay.pack([[10, {}]], d.content_hash())
+	var res: Dictionary = CampaignStore.canonize(d, rep, "", 1)
+	check(res.get("id", "") == "fase-nova" and Levels.ids() == ["passos", "fase-nova", "degraus", "giro"], "fase nova entra na posição escolhida (%s)" % str(Levels.ids()))
+	check(FileAccess.file_exists(Levels.replay_path("fase-nova")), "o replay vai junto")
+	d.name = "Fase nova, revista"
+	d.mark_verified()
+	var res2: Dictionary = CampaignStore.canonize(d, Replay.pack([[10, {}]], d.content_hash()), "fase-nova")
+	check(res2.get("id", "") == "fase-nova" and Levels.ids().size() == 4 and Levels.by_id("fase-nova")["name"] == "Fase nova, revista", "canonizar a fase aberta grava por cima, no mesmo lugar")
+	d.set_cell(11, 2, "#")
+	check(CampaignStore.canonize(d, Replay.pack([[10, {}]], d.content_hash()), "fase-nova").has("erro"), "editou depois de vencer: precisa vencer de novo")
+
+	check(CampaignStore.move("fase-nova", 1) and Levels.ids() == ["passos", "degraus", "fase-nova", "giro"], "desce uma posição")
+	check(CampaignStore.move("fase-nova", -1) and Levels.ids()[1] == "fase-nova", "sobe uma posição")
+	check(not CampaignStore.move("passos", -1), "a primeira não sobe")
+	var draft := CampaignStore.remove("fase-nova")
+	check(draft != "" and not Levels.ids().has("fase-nova") and not FileAccess.file_exists(Levels.level_path("fase-nova")), "tirar da história apaga os arquivos da campanha")
+	check(LevelStore.load_level(draft) != null, "e a fase vira rascunho em Minhas fases")
+
+	LevelStore.delete(draft)
+	LevelStore.dir_override = ""
+	for f in DirAccess.get_files_at(tmp):
+		DirAccess.remove_absolute(tmp + "/" + f)
+	Levels.campaign_dir = real
+	Levels.refresh()
+	check(Levels.count() >= 17, "volta à campanha de verdade")
+
+
+## O replay reproduz a partida: gravado de um bot, roda de novo e vence igual.
+func test_replay() -> void:
+	print("replay")
+	var def: Dictionary = Levels.by_id("passos")
+	var room: Node2D = RoomScript.new()
+	room.setup(def)
+	var runs: Array = []
+	var frames := 0
+	# bot simples da primeira fase: empurra a caixa até o buraco e segue para a porta
+	while room.state == "play" and frames < 1200:
+		var inp := {"move": 1.0, "jump_pressed": false, "jump_held": false, "climb": 0.0, "rotate": 0}
+		if room.group_filled(0) and room.rabbit.on_ground and frames % 40 == 0:
+			inp["jump_pressed"] = true
+			inp["jump_held"] = true
+		Replay.record(runs, inp)
+		room.step(inp)
+		frames += 1
+	var won_live: bool = room.state == "won" or room.state == "done"
+	room.free()
+	check(won_live, "o bot de teste vence a primeira fase (%d quadros)" % frames)
+	var rep := Replay.pack(runs, LevelData.from_def(def).content_hash())
+	check(rep["runs"].size() < frames / 4, "quadros iguais seguidos são compactados (%d entradas para %d quadros)" % [rep["runs"].size(), frames])
+	var again: Dictionary = Replay.run(def, rep)
+	check(again["won"], "rodar o replay vence de novo")
+	var reread: Dictionary = JSON.parse_string(JSON.stringify(rep))
+	check(Replay.run(def, reread)["won"], "o replay continua valendo depois de ir e voltar do JSON")
+	var cut := Replay.pack([[60, {"move": 1.0}]], rep["hash"])
+	check(not Replay.run(def, cut)["won"], "um replay que não chega à porta não vence")
+	# R no meio: o replay registra o reset
+	var with_reset: Array = [[30, {"move": 1.0}], [1, {"reset": true}]]
+	for r in rep["runs"]:
+		with_reset.append(r)
+	check(Replay.run(def, Replay.pack(with_reset, rep["hash"]))["won"], "um R no meio é reproduzido")
 
 func test_inverse_in_editor() -> void:
 	print("comporta inversa no editor")

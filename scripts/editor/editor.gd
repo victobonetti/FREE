@@ -6,6 +6,8 @@ extends Control
 const LevelData := preload("res://scripts/level_data.gd")
 const LevelStore := preload("res://scripts/level_store.gd")
 const Levels := preload("res://scripts/levels.gd")
+const CampaignStore := preload("res://scripts/campaign_store.gd")
+const Replay := preload("res://scripts/replay.gd")
 const EditModel := preload("res://scripts/editor/edit_model.gd")
 const EditTools := preload("res://scripts/editor/edit_tools.gd")
 const EditorCanvas := preload("res://scripts/editor/editor_canvas.gd")
@@ -14,6 +16,13 @@ const GlyphDraw := preload("res://scripts/editor/glyph_draw.gd")
 
 const DESIGN_SIZE := Vector2i(960, 540)
 
+## Bosses que uma fase pode ter: o comportamento é código (o ator); o editor só liga a fase a ele.
+const BOSSES := [
+	{"name": "Nenhum"},
+	{"name": "Jeffrey, o esquilo", "actors": ["res://scripts/boss_squirrel.gd"],
+		"boss_music": "res://music/boss-rush-groove.mp3", "needs_spin": true},
+]
+
 signal exit_requested
 signal play_requested(def: Dictionary)
 
@@ -21,13 +30,17 @@ var model: RefCounted
 var tools: RefCounted
 var canvas: Control
 var current_id := ""                    # arquivo em user://levels, ou "" se ainda não foi salvo
-var campaign_index := -1                # fase da campanha que está aberta (cópia), ou -1
+var campaign_id := ""                   # fase da campanha que está aberta, ou ""
+var last_replay := {}                   # replay da última vitória (vale só para a versão vencida)
 var playing := false
 
 var _tool_buttons := {}
 var _glyph_buttons := {}
 var _name_edit: LineEdit
 var _hint_edit: LineEdit
+var _hint_touch_edit: LineEdit
+var _boss_option: OptionButton
+var _spin_label: Label
 var _rotate_check: CheckBox
 var _limiter_check: CheckBox
 var _open_check: CheckBox
@@ -43,7 +56,9 @@ var _toast: Label
 var _toast_t := 0.0
 var _undo_btn: Button
 var _campaign_btn: Button
-var _restore_btn: Button
+var _dialog_campaign: AcceptDialog
+var _campaign_list: ItemList
+var _campaign_info: Label
 var _redo_btn: Button
 var _dialog_open: ConfirmationDialog
 var _open_list: ItemList
@@ -111,9 +126,8 @@ func _build() -> void:
 	_btn(top, "Importar código", _on_import)
 	if OS.is_debug_build():
 		top.add_child(VSeparator.new())
-		_campaign_btn = _btn(top, "→ Campanha", _on_to_campaign)
-		_campaign_btn.tooltip_text = "Só em desenvolvimento: grava esta fase no lugar da fase aberta da campanha."
-		_restore_btn = _btn(top, "Restaurar original", _on_restore_campaign)
+		_campaign_btn = _btn(top, "Campanha…", _show_campaign)
+		_campaign_btn.tooltip_text = "Só em desenvolvimento: a história em ordem; canonizar, mudar a ordem, tirar."
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(spacer)
@@ -224,6 +238,29 @@ func _build_right(right: VBoxContainer) -> void:
 	_title(right, "FASE")
 	_name_edit = _line(right, "Nome", func(t): _prop("name", t))
 	_hint_edit = _line(right, "Dica de texto", func(t): _prop("hint", t))
+	_hint_touch_edit = _line(right, "Dica no celular", func(t): _extra("hint_touch", t))
+	var br := HBoxContainer.new()
+	right.add_child(br)
+	var bl := Label.new()
+	bl.text = "Boss"
+	bl.add_theme_font_size_override("font_size", 12)
+	bl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	br.add_child(bl)
+	_boss_option = OptionButton.new()
+	_boss_option.focus_mode = Control.FOCUS_NONE
+	for b in BOSSES:
+		_boss_option.add_item(b["name"])
+	_boss_option.item_selected.connect(_on_boss)
+	br.add_child(_boss_option)
+	var sr := HBoxContainer.new()
+	right.add_child(sr)
+	_spin_label = Label.new()
+	_spin_label.add_theme_font_size_override("font_size", 12)
+	_spin_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sr.add_child(_spin_label)
+	var spb := _btn(sr, "Da seleção", _on_spin_from_selection)
+	spb.tooltip_text = "Bloco giratório (sala de boss): selecione um quadrado de parede. Q/E giram só ele e os espinhos encostados."
+	_btn(sr, "Tirar", func(): _extra("spin_block", null); _sync_props())
 	_rotate_check = _check(right, "Giro permitido", func(v): _prop("rotate", v))
 	_limiter_check = _check(right, "Limitador (desfaz o giro sozinho)", func(v): _prop("limiter", v))
 	_open_check = _check(right, "Porta aberta (sem caixa)", func(v): _prop("door_open", v))
@@ -336,6 +373,8 @@ func _build_dialogs() -> void:
 	_dialog_open.confirmed.connect(_do_open)
 	add_child(_dialog_open)
 
+	_build_campaign_dialog()
+
 	_dialog_import = ConfirmationDialog.new()
 	_dialog_import.title = "Importar código"
 	_dialog_import.ok_button_text = "Importar"
@@ -372,8 +411,9 @@ func new_level() -> void:
 	load_level(LevelData.blank(24, 14), "")
 
 
-func load_level(level: RefCounted, id: String, campaign := -1) -> void:
-	campaign_index = campaign
+func load_level(level: RefCounted, id: String, campaign := "") -> void:
+	campaign_id = campaign
+	last_replay = CampaignStore.load_replay(campaign) if campaign != "" else {}
 	if model == null:
 		model = EditModel.new(level)
 		tools = EditTools.new(model)
@@ -401,12 +441,60 @@ func _sync_props() -> void:
 	_limiter_check.button_pressed = d.limiter
 	_open_check.button_pressed = d.door_open
 	_rot_spin.value = d.start_rot
+	_hint_touch_edit.text = str(d.extra.get("hint_touch", ""))
+	var boss_i := 0
+	for k in BOSSES.size():
+		if BOSSES[k].has("actors") and d.extra.get("actors", []) == BOSSES[k]["actors"]:
+			boss_i = k
+	_boss_option.select(boss_i)
+	var sb = d.extra.get("spin_block", null)
+	_spin_label.text = "Bloco giratório: %d×%d em (%d, %d)" % [int(sb[2]), int(sb[2]), int(sb[0]), int(sb[1])] if sb is Array else "Bloco giratório: nenhum"
 	_reload_spin.value = d.reload_time
 	_limit_spin.value = d.limiter_time
 	_limit_spin.editable = d.limiter
 	_w_spin.value = d.width()
 	_h_spin.value = d.height()
 	_syncing = false
+
+
+## Campos guardados em `extra` (os que só fases especiais usam). Vazio/null apaga o campo.
+func _extra(key: String, v) -> void:
+	if _syncing:
+		return
+	if v == null or (v is String and v == ""):
+		model.data.extra.erase(key)
+	else:
+		model.data.extra[key] = v
+	model.dirty = true
+	model.version += 1
+
+
+func _on_boss(i: int) -> void:
+	if _syncing:
+		return
+	var b: Dictionary = BOSSES[i]
+	_extra("actors", b.get("actors", null))
+	_extra("boss_music", b.get("boss_music", null))
+	if b.get("needs_spin", false) and not model.data.extra.has("spin_block"):
+		toast("Este boss precisa de um bloco giratório: selecione um quadrado de parede e use 'Da seleção'")
+
+
+func _on_spin_from_selection() -> void:
+	if not tools.has_selection:
+		toast("Selecione um quadrado de parede com a ferramenta de seleção")
+		return
+	var a: Vector2i = tools.sel_a
+	var b: Vector2i = tools.sel_b
+	var lo := Vector2i(mini(a.x, b.x), mini(a.y, b.y))
+	var n := absi(b.x - a.x) + 1
+	if absi(b.y - a.y) + 1 != n:
+		toast("O bloco giratório precisa ser quadrado (a seleção tem %d×%d)" % [n, absi(b.y - a.y) + 1])
+		return
+	_extra("spin_block", [lo.x, lo.y, n])
+	if not model.data.extra.has("spin_cooldown"):
+		_extra("spin_cooldown", 45)
+	_sync_props()
+	toast("Bloco giratório marcado. Ponha espinhos encostados nele.")
 
 
 func _prop(key: String, v) -> void:
@@ -587,13 +675,12 @@ func _show_open() -> void:
 		_open_list.add_item("%s%s  (%dx%d)" % ["✔ " if d.is_verified() else "", d.name if d.name != "" else e["id"], d.width(), d.height()])
 		_open_entries.append({"kind": "mine", "id": e["id"]})
 	var i := 0
-	for def in Levels.ROOMS:
+	for cid in Levels.ids():
 		i += 1
-		var cdef: Dictionary = Levels.campaign_def(i - 1)
-		_open_list.add_item("Campanha %02d · %s%s" % [i, cdef["name"], " (editada)" if Levels.has_campaign_override(i - 1) else ""])
-		_open_entries.append({"kind": "campaign", "def": cdef, "index": i - 1})
-	_open_list.add_item("Campanha · sala de início")
-	_open_entries.append({"kind": "campaign", "def": Levels.START, "index": -1})
+		_open_list.add_item("História %02d · %s" % [i, Levels.by_id(cid)["name"]])
+		_open_entries.append({"kind": "campaign", "id": cid})
+	_open_list.add_item("História · sala de início")
+	_open_entries.append({"kind": "start"})
 	if not mine.is_empty():
 		_open_list.select(0)
 	_dialog_open.popup_centered()
@@ -611,45 +698,135 @@ func _do_open() -> void:
 			return
 		load_level(d, e["id"])
 		toast("Aberta: %s" % d.name)
+	elif e["kind"] == "campaign":
+		_open_campaign(e["id"])
 	else:
-		var d2: RefCounted = LevelData.from_def(e["def"])
-		var idx: int = e["index"]
-		load_level(d2, "", idx)
+		load_level(LevelData.from_def(Levels.START), "")
 		model.dirty = true
-		if OS.is_debug_build() and idx >= 0:
-			toast("Fase %d da campanha. '→ Campanha' grava por cima; Salvar faz uma cópia." % (idx + 1))
-		else:
-			toast("Cópia da campanha: salve com outro nome")
+		toast("Cópia da sala de início: salve com outro nome")
 
 
-## Só em desenvolvimento: grava esta fase como a fase da campanha que estava aberta.
-func _on_to_campaign() -> void:
-	if campaign_index < 0:
-		toast("Abra uma fase da campanha primeiro (Abrir)")
+## Abre uma fase da história com a marca de verificada e o replay dela.
+func _open_campaign(cid: String) -> void:
+	var f := FileAccess.open(Levels.level_path(cid), FileAccess.READ)
+	var d: RefCounted = LevelData.from_json(f.get_as_text()) if f != null else null
+	if d == null:
+		toast("Não consegui abrir %s" % cid)
 		return
-	var errs: Array = model.data.errors()
-	if not errs.is_empty():
-		toast("Corrija: %s" % errs[0]["msg"])
+	load_level(d, "", cid)
+	if OS.is_debug_build():
+		toast("História %d · %s" % [Levels.index_of(cid) + 1, d.name])
+	else:
+		toast("Cópia da história: salve com outro nome")
+
+
+# ---------------------------------------------------------------- campanha (modo história)
+
+func _build_campaign_dialog() -> void:
+	_dialog_campaign = AcceptDialog.new()
+	_dialog_campaign.title = "Campanha (modo história)"
+	_dialog_campaign.ok_button_text = "Fechar"
+	_dialog_campaign.size = Vector2i(560, 470)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	_dialog_campaign.add_child(box)
+	_campaign_list = ItemList.new()
+	_campaign_list.custom_minimum_size = Vector2(520, 300)
+	_campaign_list.item_activated.connect(func(_i): _campaign_open_selected())
+	box.add_child(_campaign_list)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	box.add_child(row)
+	_btn(row, "Abrir", _campaign_open_selected)
+	_btn(row, "↑ Subir", func(): _campaign_move(-1))
+	_btn(row, "↓ Descer", func(): _campaign_move(1))
+	_btn(row, "Tirar da história", _campaign_remove)
+	var canon := _btn(row, "Canonizar a fase aberta", _campaign_canonize)
+	canon.tooltip_text = "Fase da história aberta: grava por cima, no mesmo lugar. Fase nova: entra logo depois da selecionada."
+	_campaign_info = Label.new()
+	_campaign_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_campaign_info.custom_minimum_size = Vector2(520, 0)
+	box.add_child(_campaign_info)
+	add_child(_dialog_campaign)
+
+
+func _show_campaign() -> void:
+	Levels.refresh()
+	_refresh_campaign()
+	_dialog_campaign.popup_centered()
+
+
+func _refresh_campaign(select_id := "") -> void:
+	_campaign_list.clear()
+	var ids: Array = Levels.ids()
+	for k in ids.size():
+		var cid: String = ids[k]
+		var proof := "replay" if FileAccess.file_exists(Levels.replay_path(cid)) else "sem replay"
+		_campaign_list.add_item("%02d · %s   [%s]%s" % [k + 1, Levels.by_id(cid)["name"], proof, "  ← aberta" if cid == campaign_id else ""])
+	var sel := ids.find(select_id if select_id != "" else campaign_id)
+	if sel >= 0:
+		_campaign_list.select(sel)
+		_campaign_list.ensure_current_is_visible()
+	var why := CampaignStore.why_not(model.data, last_replay)
+	var what := "A fase aberta é a %02d da história" % (Levels.index_of(campaign_id) + 1) if campaign_id != "" else "A fase aberta é nova"
+	_campaign_info.text = "%s. %s" % [what, "Pronta para canonizar." if why == "" else why]
+
+
+func _campaign_selected_id() -> String:
+	var sel := _campaign_list.get_selected_items()
+	if sel.is_empty():
+		return ""
+	return Levels.ids()[sel[0]]
+
+
+func _campaign_open_selected() -> void:
+	var cid := _campaign_selected_id()
+	if cid == "":
 		return
-	DirAccess.make_dir_recursive_absolute(Levels.campaign_dir)
-	var f := FileAccess.open(Levels.campaign_path(campaign_index), FileAccess.WRITE)
-	if f == null:
-		toast("Não consegui gravar em %s" % Levels.campaign_dir)
+	_dialog_campaign.hide()
+	_confirm_discard(func(): _open_campaign(cid))
+
+
+func _campaign_move(delta: int) -> void:
+	var cid := _campaign_selected_id()
+	if cid != "" and CampaignStore.move(cid, delta):
+		_refresh_campaign(cid)
+
+
+func _campaign_remove() -> void:
+	var cid := _campaign_selected_id()
+	if cid == "":
 		return
-	f.store_string(model.data.to_json())
-	f.close()
+	_dialog_confirm.title = "Tirar da história"
+	_dialog_confirm.dialog_text = "Tirar '%s' da história? Ela vira um rascunho em Minhas fases." % Levels.by_id(cid)["name"]
+	_confirm_action = func():
+		var draft := CampaignStore.remove(cid)
+		if draft == "":
+			toast("Não consegui tirar da história")
+			return
+		if campaign_id == cid:
+			campaign_id = ""
+			current_id = draft
+		_refresh_campaign()
+		toast("Fora da história; rascunho: %s" % draft)
+	_dialog_confirm.popup_centered()
+
+
+func _campaign_canonize() -> void:
+	var at := -1
+	var sel := _campaign_list.get_selected_items()
+	if not sel.is_empty():
+		at = sel[0] + 1
+	var res := CampaignStore.canonize(model.data, last_replay, campaign_id, at)
+	if res.has("erro"):
+		toast(res["erro"])
+		_refresh_campaign()
+		return
+	campaign_id = res["id"]
 	model.dirty = false
 	model.version += 1
-	toast("Gravada como fase %d da campanha" % (campaign_index + 1))
-
-
-func _on_restore_campaign() -> void:
-	if campaign_index < 0 or not Levels.has_campaign_override(campaign_index):
-		toast("Esta fase não tem edição para restaurar")
-		return
-	DirAccess.remove_absolute(Levels.campaign_path(campaign_index))
-	load_level(LevelData.from_def(Levels.ROOMS[campaign_index]), "", campaign_index)
-	toast("Fase %d restaurada ao original" % (campaign_index + 1))
+	_refresh_campaign(campaign_id)
+	toast("Na história: %02d · %s. Faça commit para ir ao ar." % [Levels.index_of(campaign_id) + 1, model.data.name])
 
 
 func _on_export() -> void:
@@ -698,13 +875,14 @@ func _on_play() -> void:
 
 
 ## Chamado pelo jogo quando o teste termina (venceu ou saiu).
-func play_finished(won: bool) -> void:
+func play_finished(won: bool, runs: Array = [], state := {}) -> void:
 	playing = false
 	if won:
 		model.data.mark_verified()
+		last_replay = Replay.pack(runs, model.data.content_hash(), state)
 		model.dirty = true
 		model.version += 1
-		toast("Você venceu! A fase está verificada. Salve para guardar.")
+		toast("Você venceu! Fase verificada e replay gravado. Salve, ou canonize em Campanha….")
 	else:
 		toast("Teste encerrado")
 	canvas.refresh()

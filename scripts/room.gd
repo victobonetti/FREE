@@ -364,7 +364,7 @@ func _init_spin_block() -> void:
 	if not has_spin:
 		return
 	var b: Array = def["spin_block"]
-	spin_rect = Rect2i(b[0] * TILE, b[1] * TILE, b[2] * TILE, b[2] * TILE)
+	spin_rect = Rect2i(int(b[0]) * TILE, int(b[1]) * TILE, int(b[2]) * TILE, int(b[2]) * TILE)
 	var ring := spin_rect.grow(TILE)
 	for sp in spikes:
 		if ring.encloses(sp["rect"]) and not spin_rect.intersects(sp["rect"]):

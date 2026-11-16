@@ -1,5 +1,11 @@
 extends RefCounted
-## Salas do piloto. Cada sala é uma grade de tiles de 8 px, de qualquer tamanho
+## A campanha (modo história). As fases são dados, feitos no editor: um arquivo por fase em
+## `res://levels/campaign/<id>.json`, e a ordem em `res://levels/campaign/ordem.json`.
+## Aqui ficam só o carregador, a sala de início (presa à cutscene) e a legenda do formato.
+## A prova de que cada fase tem solução é um replay gravado no editor (`<id>.replay.json`),
+## rodado pelos testes; as fases antigas ainda têm bots em tests/run_tests.gd.
+##
+## Cada sala é uma grade de tiles de 8 px, de qualquer tamanho
 ## (todas as linhas com o mesmo comprimento, cercadas de parede).
 ##
 ## Legenda:
@@ -32,580 +38,100 @@ extends RefCounted
 ## "actors": scripts que a sala cria e chama a cada quadro (o boss). Um ator pode abrir a porta.
 ## "music" (opcional): faixa da sala; sem o campo, toca DEFAULT_MUSIC. Se duas salas
 ## seguidas usam a mesma faixa, ela continua sem reiniciar.
+## "notes" (opcional): notas de projeto da fase; o jogo ignora.
 
 const DEFAULT_MUSIC := "res://music/first-levels-theme.mp3"
+const LevelData := preload("res://scripts/level_data.gd")
 
-## Pasta dos ajustes da campanha feitos no editor (um arquivo por fase: 01.json, 02.json...).
-## Quando existe, vale no lugar da fase escrita neste arquivo. Os testes trocam a pasta.
+## Pasta da campanha. Os testes trocam por uma pasta temporária.
 static var campaign_dir := "res://levels/campaign"
 
-
-static func campaign_path(i: int) -> String:
-	return "%s/%02d.json" % [campaign_dir, i + 1]
-
-
-## A fase `i` da campanha: o ajuste do editor, se houver e for jogável; senão a daqui.
-static func campaign_def(i: int) -> Dictionary:
-	var p := campaign_path(i)
-	if FileAccess.file_exists(p):
-		var f := FileAccess.open(p, FileAccess.READ)
-		if f != null:
-			var d = load("res://scripts/level_data.gd").from_json(f.get_as_text())
-			f.close()
-			if d != null and d.is_playable():
-				return d.to_def()
-	return ROOMS[i]
+static var _loaded_from := ""
+static var _ids: Array = []
+static var _defs := {}
 
 
-static func has_campaign_override(i: int) -> bool:
-	return FileAccess.file_exists(campaign_path(i))
+static func order_path() -> String:
+	return "%s/ordem.json" % campaign_dir
 
-const VERTIGEM := {
-		# Desenhada na orientação em que a 1ª etapa se resolve; começa girada (alta), como o
-		# esboço. Etapa 1: o puzzle do esboço abre a comporta. Etapa 2: derrubar a caixa no
-		# poço, girar de novo; a caixa escorrega até "S" e as plataformas viram ponte sobre
-		# os espinhos até a porta.
-		"name": "Vertigem",
-		"rotate": true,
-		"start_rot": -1,
-		"rows": [
-			"######################################",
-			"#..................#.................#",
-			"#..................#.............DDDD#",
-			"#..................#.............DDDD#",
-			"#PP................#.................#",
-			"#PP................#.................#",
-			"#..................#.................#",
-			"#..................#..............{..#",
-			"#..................#..............{.<#",
-			"###................#..............{.<#",
-			"###BB..............#..............{.<#",
-			"###BB..............#..............{.<#",
-			"###................1..............{..#",
-			"#..................1.................#",
-			"#..................1BB...............#",
-			"#..................1BB...............#",
-			"#............##########..............#",
-			"#................aa####............SS#",
-			"#................aa####^^^^^^^^^^^^SS#",
-			"######################################",
-		],
-}
 
-const DERRAME := {
-		# Etapa 1: caixa no nicho "a" mantém a comporta aberta. Etapa 2: caixa no nicho "S"
-		# e giro de 180° até a porta pendurada no teto. Os dois nichos se abrem para a
-		# esquerda: girar no sentido horário os mantém; anti-horário derrama as duas caixas.
-		"name": "Derrame",
-		"rotate": true,
-		"start_rot": 0,
-		"rows": [
-			"####################################",
-			"#...............#.........DD.......#",
-			"#...............#.........DD.......#",
-			"#...............#.........DD.......#",
-			"#...............#.........DD.......#",
-			"#...............#..................#",
-			"#...............#..................#",
-			"#...............#..................#",
-			"#...............1..................#",
-			"#...............1..................#",
-			"#...............1..................#",
-			"#...............1..................#",
-			"#..........#########..........######",
-			"#PP.BB........aa####.....BB......SS#",
-			"#PP.BB........aa####.....BB......SS#",
-			"####################################",
-		],
-}
+static func level_path(id: String) -> String:
+	return "%s/%s.json" % [campaign_dir, id]
 
-const ESPINHOS := {
-		# Pular e girar no ar para cruzar o campo de espinhos; a caixa atravessa pelo chão e
-		# cai no buraco junto à parede. A parede da direita tem espinhos: as plataformas na
-		# frente deles só existem depois do giro e amparam o coelho. A volta é outro pulo
-		# com giro, no sentido oposto, até a porta.
-		"name": "Espinhos",
-		"rotate": true,
-		"start_rot": 0,
-		"rows": [
-			"############################",
-			"#..........................#",
-			"#..........................#",
-			"#..........................#",
-			"#..........................#",
-			"#..........................#",
-			"#..........................#",
-			"#..........................#",
-			"#..........................#",
-			"#........................{<#",
-			"#........................{<#",
-			"#........................{<#",
-			"#........................{<#",
-			"#DD......................{<#",
-			"#DD......................{<#",
-			"#DDPP.BB..................<#",
-			"#DDPP.BB.^^^^^^^^^^^^^^...<#",
-			"#########################SS#",
-			"#########################SS#",
-			"############################",
-		],
-}
 
-const FUGA := {
-	# Sala alta, com o limitador: cada giro dura 2,5 s e é desfeito sozinho. Embaixo: pular e
-	# girar no ar para cruzar os espinhos; ao voltar, a caixa cai no buraco "a" e abre a
-	# comporta do teto. Volta pelo ar, e a escadaria de plataformas (só sólidas sem giro)
-	# sobe até a comporta. Em cima: a porta está na parede da direita, alta demais. Dá para
-	# chegar ao pé da parede e girar no sentido horário: a parede vira chão por 2,5 s, tempo
-	# de subir por ela, pulando os espinhos, até a porta; o teto é de espinhos e há uma
-	# plataforma de espinhos suspensa acima da porta.
-	"name": "Fuga",
-	"door_open": true,
-	"rotate": true,
-	"limiter": true,
-	"start_rot": 0,
-	"rows": [
-		"################################",
-		"#vvvvvvvvvvvvvvvvvvvvvvvvvvvvvv#",
-		"#..............................#",
-		"#..............................#",
-		"#..............................#",
-		"#..........................^^^^#",
-		"#..........................#####",
-		"#..........................DDDD#",
-		"#..........................DDDD#",
-		"#..............................#",
-		"#..............................#",
-		"#.............................<#",
-		"#.............................<#",
-		"#..............................#",
-		"#..............................#",
-		"#..............................#",
-		"#111############################",
-		"#..............................#",
-		"#..............................#",
-		"#===...........................#",
-		"#..............................#",
-		"#...===........................#",
-		"#..............................#",
-		"#..............................#",
-		"#......===...................{<#",
-		"#............................{<#",
-		"#............................{<#",
-		"#...===......................{<#",
-		"#............................{<#",
-		"#............................{<#",
-		"#===...PPBB...................<#",
-		"#......PPBB.^^^^^^^^^^^^^^^...<#",
-		"#############################aa#",
-		"#############################aa#",
-		"################################",
-		"################################",
-	],
-}
+static func replay_path(id: String) -> String:
+	return "%s/%s.replay.json" % [campaign_dir, id]
 
-const PASSOS := {
-	# A primeira sala: andar, empurrar a caixa para o buraco, entrar na porta.
-	"name": "Primeiros passos",
-	"hint": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço",
-	"hint_touch": "Ande com o joystick  ·  Pule com o botão grande",
-	"rotate": false,
-	"start_rot": 0,
-	"rows": [
-		"####################",
-		"#..................#",
-		"#..................#",
-		"#...............DD.#",
-		"#...............DD.#",
-		"#.PP...BB.......DD.#",
-		"#.PP...BB.......DD.#",
-		"###########SS#######",
-		"###########SS#######",
-		"####################",
-	],
-}
 
-const DEGRAUS := {
-	# Pular: um degrau baixo, um bloco de 3 tiles e um vão no chão; depois, a caixa no buraco.
-	"name": "Degraus",
-	"rotate": false,
-	"start_rot": 0,
-	"rows": [
-		"#############################",
-		"#...........................#",
-		"#...........................#",
-		"#...........................#",
-		"#...........................#",
-		"#...........................#",
-		"#...........................#",
-		"#.........................DD#",
-		"#.........###.............DD#",
-		"#.PP..##..###.......BB....DD#",
-		"#.PP..##..###.......BB....DD#",
-		"###############..#######SS###",
-		"###############..#######SS###",
-		"#############################",
-	],
-}
+## Relê a campanha do disco (o editor chama depois de mudar algo).
+static func refresh() -> void:
+	_loaded_from = campaign_dir
+	_ids = []
+	_defs = {}
+	var order = _read_json(order_path())
+	if typeof(order) != TYPE_DICTIONARY:
+		push_error("campanha: não consegui ler %s" % order_path())
+		return
+	for id in order.get("ordem", []):
+		var raw = _read_json(level_path(str(id)))
+		if typeof(raw) != TYPE_DICTIONARY:
+			push_error("campanha: fase '%s' não encontrada" % id)
+			continue
+		var def: Dictionary = LevelData.from_def(raw).to_def()
+		def["id"] = str(id)
+		_ids.append(str(id))
+		_defs[str(id)] = def
 
-const COMPORTA := {
-	# Apresenta a comporta: a caixa no buraco "a" abre a passagem. Depois, um par de
-	# espinhos para pular e a segunda caixa no buraco da porta. Dá para girar, mas o teto e o
-	# vão acima da porta são de espinhos: girar do chão é cair neles.
-	"name": "Comporta",
-	"rotate": true,
-	"start_rot": 0,
-	"rows": [
-		"##############################",
-		"#vvvvvvvvvvvv1vvvvvvvvvvvvvvv#",
-		"#............1...............#",
-		"#............1.............^^#",
-		"#............1.............###",
-		"#............1.............DD#",
-		"#............1.............DD#",
-		"#PP..BB......1.......BB....DD#",
-		"#PP..BB......1..^^...BB....DD#",
-		"#########aa##############SS###",
-		"#########aa##############SS###",
-		"##############################",
-	],
-}
 
-const GIRO := {
-	# O primeiro giro. A caixa vai fácil para o buraco, mas a porta está deitada na parede
-	# da direita, alta demais. Girando no sentido horário, essa parede vira chão.
-	"name": "Giro",
-	"hint": "Q e E giram a sala (no controle, LB e RB)",
-	"hint_touch": "Os botões de seta giram a sala",
-	"rotate": true,
-	"start_rot": 0,
-	"rows": [
-		"##################",
-		"#................#",
-		"#................#",
-		"#............DDDD#",
-		"#............DDDD#",
-		"#................#",
-		"#................#",
-		"#................#",
-		"#................#",
-		"#................#",
-		"#.PP..BB.........#",
-		"#.PP..BB.........#",
-		"###########SS#####",
-		"###########SS#####",
-		"##################",
-	],
-}
+static func _ensure() -> void:
+	if _loaded_from != campaign_dir:
+		refresh()
 
-const SETAS := {
-	# Apresenta as plataformas por orientação. Caixa no nicho, sala virada de cabeça para
-	# baixo (como em Derrame): o teto vira chão cheio de espinhos, e a fileira de setas que
-	# apontava para baixo passa a apontar para cima e vira uma ponte até a porta.
-	"name": "Setas",
-	"rotate": true,
-	"start_rot": 0,
-	"rows": [
-		"####################",
-		"#DD..vvvvvvvv......#",
-		"#DD................#",
-		"#DD.__________.....#",
-		"#DD................#",
-		"#..................#",
-		"#..................#",
-		"#..................#",
-		"#..................#",
-		"#..................#",
-		"#..................#",
-		"#..................#",
-		"#..............#####",
-		"#PP.BB...........SS#",
-		"#PP.BB...........SS#",
-		"####################",
-	],
-}
 
-const AGUA := {
-	# Apresenta a água e o ralo (esboço water-mechanics.png). A água cobre boa parte da porta e
-	# a bloqueia. O ralo fica num nicho alto da parede esquerda, seco. Girando no sentido
-	# anti-horário essa parede vira chão, o nicho vira um poço e a água escorre para o ralo.
-	# Depois de escoar o bastante, girar de volta: a porta fica livre.
-	"name": "Água",
-	"door_open": true,
-	"rotate": true,
-	"start_rot": 0,
-	"rows": [
-		"########################",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"#......................#",
-		"#o.....................#",
-		"#......................#",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"###....................#",
-		"###.................DD.#",
-		"###~~~~~~~~~~~~~~~~~DD~#",
-		"###~~PP~~~~~~~~~~~~~DD~#",
-		"###~~PP~~~~~~~~~~~~~DD~#",
-		"########################",
-	],
-}
+static func _read_json(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return null
+	var v = JSON.parse_string(f.get_as_text())
+	f.close()
+	return v
 
-const TOCA := {
-	# Respiro de plataforma: pilares de alturas diferentes sobre espinhos; no fim, a caixa no
-	# buraco abre a porta. Dá para girar, mas o teto é de espinhos e há uma plataforma de espinhos suspensa acima da porta.
-	"name": "Toca",
-	"rotate": true,
-	"start_rot": 0,
-	"rows": [
-		"######################################",
-		"#vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv#",
-		"#....................................#",
-		"#....................................#",
-		"#....................................#",
-		"#..................................^^#",
-		"#..................................###",
-		"#..................................DD#",
-		"#..........##.........###..........DD#",
-		"#.PP..##...##....##...###...BB.....DD#",
-		"#.PP..##^^^##^^^^##^^^###...BB.....DD#",
-		"################################SS####",
-		"################################SS####",
-		"######################################",
-	],
-}
 
-const PRUMO := {
-	# Descer pela corda escolhe o arco. Só a parede da esquerda é segura (o resto tem
-	# espinhos), e o coelho começa em pé nela, com a sala girada: a corda, presa no teto
-	# desenhado, está deitada. Pular, girar a sala no ar e agarrar a corda que cai; descer
-	# até a ponta e girar de novo: o arco passa pela porta.
-	"name": "Prumo",
-	"door_open": true,
-	"rotate": true,
-	"start_rot": -1,
-	"rows": [
-		"####################################",
-		"#vvv|vvvvvvvvvvvvvvvvvvvvvvvvvvvvv<#",
-		"#...|.............................<#",
-		"#PP.|.............................<#",
-		"#PP.|.............................<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#...|..............DD.............<#",
-		"#...|..............DD.............<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#...|.............................<#",
-		"#.................................<#",
-		"#.................................<#",
-		"#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#",
-		"####################################",
-	],
-}
+## Ids das fases, na ordem da história.
+static func ids() -> Array:
+	_ensure()
+	return _ids.duplicate()
 
-const MARE := {
-	# A água como elevador, com o limitador: o giro é desfeito sozinho quando a recarga
-	# termina (barra vermelha). Desenhada em pé; começa deitada, com a água espalhada pelo
-	# chão. Girando, a sala vira um poço estreito e a água sobe; só as duas últimas
-	# plataformas ficaram, então é a água que leva o coelho até a primeira delas. Quando o
-	# limitador desfaz o giro, a água se espalha de novo e tudo cai.
-	"name": "Maré",
-	"door_open": true,
-	"rotate": true,
-	"limiter": true,
-	"start_rot": -1,
-	"rows": [
-		"############",
-		"#..........#",
-		"#..........#",
-		"#..........#",
-		"#..........#",
-		"#..........#",
-		"#..........#",
-		"#..........#",
-		"#..........#",
-		"#DD........#",
-		"#DD........#",
-		"#DD........#",
-		"#DD........#",
-		"#####......#",
-		"#..........#",
-		"#..........#",
-		"#~~~~~~#####",
-		"#~~~~~~~~~~#",
-		"#~~~~~~~~~~#",
-		"#~~~~~~~~~~#",
-		"#~~~~~~~~~~#",
-		"#PP~~~~~~~~#",
-		"#PP~~~~~~~~#",
-		"#~~~~~~~~~~#",
-		"############",
-	],
-}
 
-const REPRESA := {
-	# A água alaga a porta, que está no fundo de uma cuia. Girando no sentido horário a cuia
-	# derrama e a água corre para a parede da direita; voltando, ela cai na cuia da direita,
-	# separada por uma plataforma, e a porta fica seca. O coelho cai junto, nas duas vezes.
-	# O fundo da cuia da porta tem espinhos: é preciso pular para cair em cima da porta.
-	"name": "Represa",
-	"door_open": true,
-	"rotate": true,
-	"start_rot": 0,
-	"rows": [
-		"########################################",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#..............PP......................#",
-		"#..............PP......................#",
-		"##~~~~~~~DD~##############.............#",
-		"##~~~~~~~DD~##############.............#",
-		"##~~~~~~~DD~##############.............#",
-		"##^^^^^^^DD^##############.............#",
-		"########################################",
-	],
-}
+static func count() -> int:
+	_ensure()
+	return _ids.size()
 
-const NAUFRAGIO := {
-	# As duas caixas precisam ir para os compartimentos do outro lado de um poço de espinhos
-	# cheio de água; empurrá-las para dentro é perdê-las (afundam). Girando no sentido
-	# horário, o coelho e as caixas caem rente à parede, passam do poço e se empilham na
-	# parede da direita; ao voltar, as caixas caem nos compartimentos. A porta está do lado
-	# de lá: a volta é a nado, por cima dos espinhos, e um espinho solitário guarda a porta.
-	"name": "Naufrágio",
-	"rotate": true,
-	"start_rot": 0,
-	"rows": [
-		"########################################",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#DD....................................#",
-		"#DD....................................#",
-		"#DD.PPBBBB.............................#",
-		"#DD^PPBBBB.............................#",
-		"###########....................####SSSS#",
-		"#############~~~~~~~~~~~~~~~~~~####SSSS#",
-		"#############~~~~~~~~~~~~~~~~~~#########",
-		"#############~~~~~~~~~~~~~~~~~~#########",
-		"#############~~~~~~~~~~~~~~~~~~#########",
-		"#############~~^^^^^^^^^^^^~~~~#########",
-		"########################################",
-	],
-}
 
-const MERGULHO := {
-	# Corda sobre a água, com a porta trancada por uma caixa: no palco do começo, empurrar a caixa para o compartimento. Depois, a corda. Desenhada depois do giro; começa com a corda no teto e a água rasa
-	# no chão. Girando pendurado, o arco leva o coelho até a parede oposta, e a água escorre
-	# para o poço fundo ao pé dela: cair ali é seguro, apesar dos espinhos do fundo. Quem gira
-	# sem a corda cai na parte rasa. Do poço, um pulo alcança a porta na borda.
-	"name": "Mergulho",
-	"rotate": true,
-	"start_rot": -1,
-	"rows": [
-		"######################",
-		"###..................#",
-		"###PP................#",
-		"###PP................#",
-		"###.-----------------#",
-		"###BB................#",
-		"###BB................#",
-		"###..................#",
-		"#SS..................#",
-		"#SS..................#",
-		"###..................#",
-		"###..................#",
-		"###..................#",
-		"###..................#",
-		"###..................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#....................#",
-		"#..........DD........#",
-		"#..........DD........#",
-		"#..........DD........#",
-		"#^^^^^^^^^^DD~~~~....#",
-		"#############~~~~~~~~#",
-		"#############~~~~~~~~#",
-		"#############~~~~~~~~#",
-		"#############~~~~~~~~#",
-		"#############^^^^^^^^#",
-		"######################",
-	],
-}
+## As fases, na ordem (dicionários que `room.setup()` consome; cada um tem "id").
+static func rooms() -> Array:
+	_ensure()
+	var out: Array = []
+	for id in _ids:
+		out.append(_defs[id])
+	return out
 
-## Sala de início: o quadrado em que a cutscene de abertura termina (scripts/intro.gd desenha
-## o mesmo quadrado, no mesmo lugar). Só o coelho e a porta, já aberta. Não é um nível.
-const JEFFREY := {
-	# Boss 1 (GDD 8b, D63). A sala não gira: Q/E giram só o bloco do meio, com os espinhos.
-	# O esquilo nunca salta numa face com espinhos; o acerto é girar no último instante,
-	# no meio do salto de ataque dele. 3 corações; depois do último, a porta abre.
-	"name": "Jeffrey",
-	# a música do boss só começa quando o esquilo entra (antes, toca a música normal dos níveis)
-	"boss_music": "res://music/boss-rush-groove.mp3",
-	"spin_block": [17, 8, 6],
-	"spin_cooldown": 45,
-	"actors": ["res://scripts/boss_squirrel.gd"],
-	"rows": [
-		"########################################",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#................^^^^^^................#",
-		"#................######................#",
-		"#................######................#",
-		"#................######................#",
-		"#................######................#",
-		"#................######................#",
-		"#................######................#",
-		"#......................................#",
-		"#......................................#",
-		"#......................................#",
-		"#...................................DD.#",
-		"#...................................DD.#",
-		"#..PP...............................DD.#",
-		"#..PP...............................DD.#",
-		"########################################",
-	],
-}
+
+static func def_at(i: int) -> Dictionary:
+	_ensure()
+	return _defs[_ids[clampi(i, 0, _ids.size() - 1)]]
+
+
+static func by_id(id: String) -> Dictionary:
+	_ensure()
+	return _defs.get(id, {})
+
+
+static func index_of(id: String) -> int:
+	_ensure()
+	return _ids.find(id)
 
 
 const START := {
@@ -633,31 +159,3 @@ const START := {
 		"##############",
 	],
 }
-
-## A ordem dos níveis: cada bloco apresenta um elemento numa fase curta, usa-o em puzzles e
-## fecha com uma combinação.
-const ROOMS := [
-	# o básico
-	PASSOS,     # 1  empurrar a caixa no buraco abre a porta
-	DEGRAUS,    # 2  pular degraus e um vão
-	GIRO,       # 3  o primeiro giro: a parede vira chão
-	COMPORTA,   # 4  comporta; espinhos baixos; girar do chão é cair nos espinhos do teto
-	# girar com intenção
-	DERRAME,    # 5  nichos, o sentido do giro, virar a sala de cabeça para baixo
-	TOCA,       # 6  respiro de plataforma: pilares sobre espinhos; teto de espinhos
-	SETAS,      # 7  plataformas por orientação
-	ESPINHOS,   # 8  o giro no ar valendo a vida
-	# corda
-	PRUMO,      # 9  agarrar a corda no giro e descer até a ponta
-	VERTIGEM,   # 10 combinação
-	# água
-	AGUA,       # 11 a água tranca a porta; o ralo
-	MARE,       # 12 a água como elevador, com o limitador
-	REPRESA,    # 13 despejar a água na cuia certa
-	NAUFRAGIO,  # 14 carregar as caixas pela gravidade; a volta a nado
-	# tudo junto
-	MERGULHO,   # 15 caixa, corda e água
-	FUGA,       # 16 giro limitado até a porta, na parede
-	# boss
-	JEFFREY,    # 17 Jeffrey, o esquilo: girar o bloco no último instante
-]

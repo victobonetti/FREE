@@ -127,6 +127,14 @@ func _draw() -> void:
 		var dr := Rect2(offset + Vector2(door_lo) * cell_size, Vector2(door_hi - door_lo + Vector2i.ONE) * cell_size)
 		draw_rect(dr, RoomScript.C_DOOR_OPEN, false, 2.0)
 		draw_rect(dr.grow(-cell_size * 0.2), Color(RoomScript.C_DOOR_INNER, 0.7))
+	# bloco giratório (sala de boss): contorno tracejado laranja
+	var sb = model.data.extra.get("spin_block", null)
+	if sb is Array and sb.size() == 3:
+		var br := cell_rect(int(sb[0]), int(sb[1]), int(sb[2]))
+		var col := Color(1.0, 0.6, 0.2, 0.95)
+		var corners: Array[Vector2] = [br.position, br.position + Vector2(br.size.x, 0), br.end, br.position + Vector2(0, br.size.y)]
+		for k in 4:
+			draw_dashed_line(corners[k], corners[(k + 1) % 4], col, 2.0, 6.0)
 	if show_grid and cell_size >= 10.0:
 		var gc := Color(1, 1, 1, 0.06)
 		for c in range(w + 1):

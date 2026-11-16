@@ -60,9 +60,23 @@ const C_BOMB := Color("3a3a4c")
 const C_BOMB_DARK := Color("1f1f2b")
 const C_FIRE := Color("ffb347")
 
+## Sorteio próprio, com semente fixa: as decisões do esquilo se repetem iguais a cada vez que a
+## sala é criada, e um replay gravado no editor reproduz a luta exatamente. (As partículas usam
+## o sorteio global: são só visuais.)
+const RNG_SEED := 20261116
+var rng := RandomNumberGenerator.new()
 var room
 ## A abertura já aconteceu nesta sessão de jogo: morrer ou voltar à sala não a repete.
 static var intro_seen := false
+
+
+## Para o replay (scripts/replay.gd): a abertura muda a luta, então entra no estado de partida.
+static func replay_state() -> Dictionary:
+	return {"intro_seen": intro_seen}
+
+
+static func apply_replay_state(d: Dictionary) -> void:
+	intro_seen = bool(d.get("intro_seen", false))
 
 var hearts := HEARTS
 var spins_seen := 0      # giros do bloco contados na abertura
@@ -95,6 +109,10 @@ var laugh := 0           # quadros rindo (o coelho morreu)
 var anchors: Array = []  # pontos de apoio
 var faces: Array = []    # [ponto de ataque (encostado na face), apoio de onde sai]
 var zone := Rect2()      # bloco, espinhos e folga: nenhuma rota passa por aqui
+
+
+func _init() -> void:
+	rng.seed = RNG_SEED
 
 
 func on_reset(r) -> void:
@@ -250,7 +268,11 @@ func _valid_faces() -> Array:
 
 func _pick_attack() -> void:
 	var opts := _valid_faces()
-	opts.shuffle()
+	for i in range(opts.size() - 1, 0, -1):   # embaralha com o sorteio próprio
+		var j := rng.randi_range(0, i)
+		var tmp = opts[i]
+		opts[i] = opts[j]
+		opts[j] = tmp
 	for f in opts:
 		var from: Vector2 = faces[f][1]
 		path = _route(pos, from)
@@ -424,7 +446,7 @@ func _zigzag() -> void:
 	if opts.is_empty():
 		_pick_attack()
 		return
-	path = [opts[randi() % opts.size()]]
+	path = [opts[rng.randi_range(0, opts.size() - 1)]]
 	_next_hop("zigzag")
 
 

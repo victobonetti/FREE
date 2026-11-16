@@ -1,0 +1,27 @@
+{
+	"name": "Setas",
+	"notes": "plataformas por orientação. Apresenta as plataformas por orientação. Caixa no nicho, sala virada de cabeça para baixo (como em Derrame): o teto vira chão cheio de espinhos, e a fileira de setas que apontava para baixo passa a apontar para cima e vira uma ponte até a porta.",
+	"rotate": true,
+	"rows": [
+		"####################",
+		"#DD..vvvvvvvv......#",
+		"#DD................#",
+		"#DD.__________.....#",
+		"#DD................#",
+		"#..................#",
+		"#..................#",
+		"#..................#",
+		"#..................#",
+		"#..................#",
+		"#..................#",
+		"#..................#",
+		"#..............#####",
+		"#PP.BB...........SS#",
+		"#PP.BB...........SS#",
+		"####################"
+	],
+	"start_rot": 0,
+	"verified": true,
+	"verified_hash": "d171d16adf8e59900a7352589097ffcf0548be6340377081a9b780030897fe8e",
+	"version": 1
+}

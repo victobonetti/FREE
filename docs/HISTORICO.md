@@ -380,6 +380,16 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 
 ---
 
+## Rodada 25 — Campanha canônica no editor (16/11/2026)
+
+**Entrada do Victor:** criar salas e canonizá-las no modo história usando só o editor; replays gravados por ele; tirar as fases de `levels.gd`.
+
+**Feito (D71):** fases em `levels/campaign/*.json` com `ordem.json`; painel **Campanha…** no editor (abrir, subir, descer, tirar, canonizar); canonizar exige vitória e replay da mesma versão; replay gravado no teste do editor e rodado pelos testes; sorteio próprio do Jeffrey; o editor não apaga mais os campos do boss e ganhou dica no celular, boss e bloco giratório. Testes novos nos dois conjuntos.
+
+**Próximo passo do Victor:** gravar o replay de cada fase (abrir na Campanha…, ▶ Jogar, vencer, Canonizar) e fazer commit. Cada fase com replay pode perder o bot.
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |

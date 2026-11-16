@@ -18,7 +18,9 @@ scripts/
   intro.gd               tela de início e cutscene de abertura (D46)
   rabbit.gd              controlador do coelho
   box.gd                 dados de uma caixa
-  levels.gd              as salas em texto
+  levels.gd              carregador da campanha (levels/campaign), sala de início e legenda do formato
+  campaign_store.gd      canonizar, ordem e tirar da história (o editor chama)
+  replay.gd              grava, compacta e roda os comandos de uma partida
   input_setup.gd         teclas e botões
   touch_controls.gd      joystick e botões de toque (D61)
   boss_squirrel.gd       boss 1, Jeffrey: ator da sala 17 (D64)
@@ -54,7 +56,10 @@ tests/editor_tests.gd        testes do editor, sem janela
 - **Ferramentas (`EditTools`):** lápis (arrasta sem pular tiles), borracha, retângulo, moldura, linha (Bresenham), balde, seleção com copiar/recortar/colar (o vazio do recorte não apaga; R gira e F espelha o recorte antes de colar), porta (arrastar um retângulo), corda (arrastar uma reta; para antes das paredes). Botão direito apaga.
 - **Janela:** ao abrir o editor, `main.gd` troca a janela para 960×540 em modo `canvas_items` (a resolução do jogo, 320×180, é pequena demais para editar); ao sair ou jogar, volta a 320×180 em modo `viewport`, escala inteira. O editor fica vivo e escondido enquanto se testa a fase.
 - **Teste e tela de início:** `main.gd` tem `custom` ("editor" ou "list"): uma fase avulsa usa o mesmo `_spawn_room`, e `_end_custom(won)` volta ao editor (que marca a fase como verificada se venceu) ou à lista. Esc sai da fase avulsa. Na tela de início, E abre o editor e L abre "Minhas fases" (só verificadas; Enter joga, E edita).
-- **Campanha:** `Levels.campaign_def(i)` devolve o ajuste `res://levels/campaign/NN.json` se existir e for jogável, senão a fase de `levels.gd`. Em build de depuração o editor tem "→ Campanha" (grava por cima da fase aberta) e "Restaurar original". Os testes e os bots continuam usando `levels.gd`. Os JSON entram no pacote exportado pelo `include_filter` do preset.
+- **Campanha (D71):** a história são dados em `res://levels/campaign/`: um `<id>.json` por fase (o mesmo JSON do editor, com `notes` de projeto), a ordem em `ordem.json` e a prova em `<id>.replay.json`. `Levels` carrega (`ids()`, `rooms()`, `def_at(i)`, `by_id(id)`, `refresh()`); jogo, testes e editor leem o mesmo lugar. No editor (build de depuração), **Campanha…** mostra a história em ordem: abrir, subir, descer, tirar da história (vira rascunho em Minhas fases) e **canonizar a fase aberta** (grava por cima, se ela veio da história; senão entra depois da selecionada). Canonizar exige a fase verificada e o replay da mesma versão (`CampaignStore.why_not`). Para ir ao ar: commit e deploy.
+- **Replay:** quando o autor vence no teste do editor, `main.gd` entrega os comandos de cada quadro (e os R) gravados por `Replay.record`; o editor guarda `Replay.pack(...)` com o `content_hash` da versão vencida e o estado de partida dos atores (o Jeffrey lembra se a abertura já foi vista). `Replay.run` roda numa sala sem janela. A simulação é determinística (pixels inteiros, 60 quadros fixos, o boss com sorteio próprio de semente fixa); os testes conferem isso refazendo a luta do boss quadro a quadro.
+- **Campos que o editor não edita** ficam em `LevelData.extra` e voltam intactos em `to_def()`. Os de jogo (`spin_block`, `actors`, `spin_cooldown`, `boss_music`) entram no hash da verificação; os de texto (`hint_touch`, `notes`) não. O editor edita a dica no celular, o boss (catálogo `BOSSES` em `editor.gd`) e o bloco giratório (a partir de uma seleção quadrada).
+- **Antes (substituído):** `Levels.campaign_def(i)` devolvia o ajuste `res://levels/campaign/NN.json` se existisse, senão a fase de `levels.gd`. Em build de depuração o editor tem "→ Campanha" (grava por cima da fase aberta) e "Restaurar original". Os testes e os bots continuam usando `levels.gd`. Os JSON entram no pacote exportado pelo `include_filter` do preset.
 
 ## Fluxo do jogo
 
@@ -195,7 +200,7 @@ Medido pelos testes: pulo longo 30 px, pulo curto 8 px. Degraus de até 3 tiles 
 - **Comporta inversa** (D65): entrada de `gates` com `inverse: true`, lida dos caracteres `¹²³⁴⁵⁶⁷⁸⁹`. Usa o mesmo grupo de compartimentos da comporta comum de mesmo número (`g["id"]`), mas quer fechar quando o grupo está **cheio** e abrir quando está vazio. Começa aberta. Nunca fecha em cima do coelho ou de uma caixa (mesma regra da comum), bloqueia a água quando fechada e gira com a sala. Quando a comum e a inversa mudam juntas, os dois sons tocam.
 - Estados da sala: `play`, `dead` (20 quadros, depois reinicia), `won` (44 quadros de animação), `done` (emite `completed`).
 
-## Formato das salas (`levels.gd`)
+## Formato das salas (`levels/campaign/*.json`; legenda em `levels.gd`)
 
 Grade de tiles de 8 px, de qualquer tamanho: todas as linhas com o mesmo comprimento, cercadas de parede (o teste de formato verifica).
 

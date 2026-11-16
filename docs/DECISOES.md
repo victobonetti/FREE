@@ -88,7 +88,7 @@ Quando uma decisão for revertida, não apague a entrada: marque como substituí
 - **Autor:** Claude.
 - **Decisão:** cada sala é uma grade de caracteres. O campo `start_rot` permite desenhar a sala na orientação em que é resolvida e começar girada.
 - **Motivo:** editável e revisável como código; os testes carregam qualquer sala sem abrir o editor.
-- **Em aberto:** se as salas ficarem grandes ou cheias de elementos, vale reconsiderar um editor (TileMap do Godot ou LDtk).
+- **Em aberto:** se as salas ficarem grandes ou cheias de elementos, vale reconsiderar um editor (TileMap do Godot ou LDtk). *(Resolvido: editor próprio, D61; a campanha virou dados, D71.)*
 
 ### D16 — Regras das caixas
 - **Autor:** Claude.
@@ -535,3 +535,12 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Autor:** Victor.
 - **O quê:** durante a abertura (3 giros), toca a música normal dos níveis e não há retratos nem vidas no alto. Quando o Jeffrey entra, o tema do boss começa (com fade) e as barras aparecem. Nas tentativas seguintes, o tema já toca desde o início.
 - **Como:** o campo da sala passou de `music` para `boss_music`; o esquilo pede a faixa por `room.music_request` (e deixa em `room.music_override` para quem conecta depois).
+
+### D71 — Campanha canônica feita no editor
+- **Autor:** Victor (objetivo: criar salas e canonizá-las no modo história usando só o editor; replays gravados por ele no lugar dos bots; tirar as fases de `levels.gd`); Claude (formato e fluxo).
+- **Dados:** as 17 fases saíram de `levels.gd` para `levels/campaign/<id>.json` (os comentários de projeto foram para o campo `notes`), com a ordem em `ordem.json`. `levels.gd` ficou só com o carregador, a sala de início (presa à cutscene) e a legenda. Substitui o "ajuste por cima" de D64 (`NN.json`).
+- **Canonizar:** no editor, **Campanha…** (só em build de depuração). Exige a fase verificada e um replay da mesma versão; o replay vai junto (`<id>.replay.json`). Dá para inserir numa posição, subir, descer e tirar da história (vira rascunho).
+- **Prova:** os testes rodam o replay de cada fase da campanha e conferem que ele é da versão atual e chega à porta. As 17 fases antigas continuam provadas pelos bots até ganharem replay (`BOT_IDS` em `tests/run_tests.gd`); fase nova só entra com replay. Quando uma fase ganhar replay, o bot dela pode sair.
+- **Determinismo:** o Jeffrey ganhou sorteio próprio com semente fixa, e o replay guarda o estado de partida dos atores (se a abertura do boss já foi vista).
+- **Corrigido junto:** o editor apagava campos que não conhecia (`spin_block`, `actors`, `hint_touch`): editar a sala do Jeffrey destruía o boss. Agora ficam em `extra`, e o editor edita a dica no celular, o boss e o bloco giratório.
+- **Atenção:** o replay é gravado no Windows e rodado pelos testes onde eles rodarem. Contas com seno e cosseno (corda, água) podem, em tese, diferir entre sistemas; se um replay passar num e falhar noutro, é isso.

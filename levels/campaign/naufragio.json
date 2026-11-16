@@ -1,0 +1,30 @@
+{
+	"name": "Naufrágio",
+	"notes": "carregar as caixas pela gravidade; a volta a nado. As duas caixas precisam ir para os compartimentos do outro lado de um poço de espinhos cheio de água; empurrá-las para dentro é perdê-las (afundam). Girando no sentido horário, o coelho e as caixas caem rente à parede, passam do poço e se empilham na parede da direita; ao voltar, as caixas caem nos compartimentos. A porta está do lado de lá: a volta é a nado, por cima dos espinhos, e um espinho solitário guarda a porta.",
+	"rotate": true,
+	"rows": [
+		"########################################",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#DD....................................#",
+		"#DD....................................#",
+		"#DD.PPBBBB.............................#",
+		"#DD^PPBBBB.............................#",
+		"###########....................####SSSS#",
+		"#############~~~~~~~~~~~~~~~~~~####SSSS#",
+		"#############~~~~~~~~~~~~~~~~~~#########",
+		"#############~~~~~~~~~~~~~~~~~~#########",
+		"#############~~~~~~~~~~~~~~~~~~#########",
+		"#############~~^^^^^^^^^^^^~~~~#########",
+		"########################################"
+	],
+	"start_rot": 0,
+	"verified": true,
+	"verified_hash": "42b3433baba1f009430b7c3332f9253b0b96094fe330755100ac31ce5c49f53b",
+	"version": 1
+}

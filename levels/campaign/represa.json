@@ -1,0 +1,29 @@
+{
+	"door_open": true,
+	"name": "Represa",
+	"notes": "despejar a água na cuia certa. A água alaga a porta, que está no fundo de uma cuia. Girando no sentido horário a cuia derrama e a água corre para a parede da direita; voltando, ela cai na cuia da direita, separada por uma plataforma, e a porta fica seca. O coelho cai junto, nas duas vezes. O fundo da cuia da porta tem espinhos: é preciso pular para cair em cima da porta.",
+	"rotate": true,
+	"rows": [
+		"########################################",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#..............PP......................#",
+		"#..............PP......................#",
+		"##~~~~~~~DD~##############.............#",
+		"##~~~~~~~DD~##############.............#",
+		"##~~~~~~~DD~##############.............#",
+		"##^^^^^^^DD^##############.............#",
+		"########################################"
+	],
+	"start_rot": 0,
+	"verified": true,
+	"verified_hash": "65b682f1c62b16f039b43703148f316add096d5c35b420bffcc4017a8a76527b",
+	"version": 1
+}

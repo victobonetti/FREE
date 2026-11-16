@@ -1,0 +1,31 @@
+{
+	"name": "Espinhos",
+	"notes": "o giro no ar valendo a vida. Pular e girar no ar para cruzar o campo de espinhos; a caixa atravessa pelo chão e cai no buraco junto à parede. A parede da direita tem espinhos: as plataformas na frente deles só existem depois do giro e amparam o coelho. A volta é outro pulo com giro, no sentido oposto, até a porta.",
+	"rotate": true,
+	"rows": [
+		"############################",
+		"#..........................#",
+		"#..........................#",
+		"#..........................#",
+		"#..........................#",
+		"#..........................#",
+		"#..........................#",
+		"#..........................#",
+		"#..........................#",
+		"#........................{<#",
+		"#........................{<#",
+		"#........................{<#",
+		"#........................{<#",
+		"#DD......................{<#",
+		"#DD......................{<#",
+		"#DDPP.BB..................<#",
+		"#DDPP.BB.^^^^^^^^^^^^^^...<#",
+		"#########################SS#",
+		"#########################SS#",
+		"############################"
+	],
+	"start_rot": 0,
+	"verified": true,
+	"verified_hash": "e5042d106f8fbcb5faa44a97adf422ca23d29faf0680867c763b2ec4b90bf75b",
+	"version": 1
+}

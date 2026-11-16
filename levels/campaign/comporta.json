@@ -1,0 +1,23 @@
+{
+	"name": "Comporta",
+	"notes": "comporta; espinhos baixos; girar do chão é cair nos espinhos do teto. Apresenta a comporta: a caixa no buraco \"a\" abre a passagem. Depois, um par de espinhos para pular e a segunda caixa no buraco da porta. Dá para girar, mas o teto e o vão acima da porta são de espinhos: girar do chão é cair neles.",
+	"rotate": true,
+	"rows": [
+		"##############################",
+		"#vvvvvvvvvvvv1vvvvvvvvvvvvvvv#",
+		"#............1...............#",
+		"#............1.............^^#",
+		"#............1.............###",
+		"#............1.............DD#",
+		"#............1.............DD#",
+		"#PP..BB......1.......BB....DD#",
+		"#PP..BB......1..^^...BB....DD#",
+		"#########aa##############SS###",
+		"#########aa##############SS###",
+		"##############################"
+	],
+	"start_rot": 0,
+	"verified": true,
+	"verified_hash": "4722b13081d0b36fbfcc20fe134a3e76cd66c5fde30605ccaa0162992d3a24ed",
+	"version": 1
+}

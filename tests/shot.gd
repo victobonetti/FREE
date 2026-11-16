@@ -18,7 +18,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
-	for i in Levels.ROOMS.size():
+	for i in Levels.count():
 		plan.append({"name": "room_%d" % (i + 1), "room": i, "mode": ""})
 	plan.append({"name": "room_1_gate_open", "room": 0, "mode": "fill_gate"})
 	plan.append({"name": "room_2_rotated", "room": 1, "mode": "rotate"})

@@ -1,0 +1,27 @@
+{
+	"name": "Derrame",
+	"notes": "nichos, o sentido do giro, virar a sala de cabeça para baixo. Etapa 1: caixa no nicho \"a\" mantém a comporta aberta. Etapa 2: caixa no nicho \"S\" e giro de 180° até a porta pendurada no teto. Os dois nichos se abrem para a esquerda: girar no sentido horário os mantém; anti-horário derrama as duas caixas.",
+	"rotate": true,
+	"rows": [
+		"####################################",
+		"#...............#.........DD.......#",
+		"#...............#.........DD.......#",
+		"#...............#.........DD.......#",
+		"#...............#.........DD.......#",
+		"#...............#..................#",
+		"#...............#..................#",
+		"#...............#..................#",
+		"#...............1..................#",
+		"#...............1..................#",
+		"#...............1..................#",
+		"#...............1..................#",
+		"#..........#########..........######",
+		"#PP.BB........aa####.....BB......SS#",
+		"#PP.BB........aa####.....BB......SS#",
+		"####################################"
+	],
+	"start_rot": 0,
+	"verified": true,
+	"verified_hash": "4b448a55569a23aee4d5f261fb56edc8c8785badbe21febe6f9a1b52cc7acd68",
+	"version": 1
+}

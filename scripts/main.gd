@@ -2,6 +2,7 @@ extends Node2D
 ## Carrega as salas em sequência, lê o teclado/controle e faz as transições.
 ## Também cuida da barra de recarga do giro e do som dela.
 
+const Replay := preload("res://scripts/replay.gd")
 const Levels := preload("res://scripts/levels.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const InputSetup := preload("res://scripts/input_setup.gd")
@@ -61,6 +62,8 @@ var ui_layer: CanvasLayer
 var editor_layer: CanvasLayer
 var in_editor_window := false   # janela na escala do editor: o layout de toque não mexe nela
 var editor: Control
+var rec_runs: Array = []    # comandos gravados no teste do editor (replay)
+var rec_state := {}         # estado de partida dos atores, para o replay
 var custom := ""            # "", "editor" (teste a partir do editor) ou "list" (fase da lista)
 var list_label: Label       # tela "Minhas fases"
 var list_items: Array = []
@@ -672,8 +675,8 @@ func _load_start_room() -> void:
 
 
 func _load_room(i: int) -> void:
-	var n := clampi(i, 0, Levels.ROOMS.size() - 1)
-	var def: Dictionary = Levels.campaign_def(n)
+	var n := clampi(i, 0, Levels.count() - 1)
+	var def: Dictionary = Levels.def_at(n)
 	_spawn_room(def, n, "%d · %s" % [n + 1, def["name"]])
 
 
@@ -738,7 +741,7 @@ func _on_completed() -> void:
 
 
 func _advance() -> void:
-	if index + 1 >= Levels.ROOMS.size():
+	if index + 1 >= Levels.count():
 		if room != null:
 			room.queue_free()
 			room = null
@@ -792,19 +795,24 @@ func _tick() -> void:
 		return
 	if Input.is_action_just_pressed("restart"):
 		room.reset()
+		if custom == "editor":
+			Replay.record(rec_runs, {"reset": true})
 		return
 	var rot := 0
 	if Input.is_action_just_pressed("rotate_cw"):
 		rot += 1
 	if Input.is_action_just_pressed("rotate_ccw"):
 		rot -= 1
-	room.step({
+	var inp := {
 		"move": Input.get_axis("move_left", "move_right"),
 		"jump_pressed": Input.is_action_just_pressed("jump"),
 		"jump_held": Input.is_action_pressed("jump"),
 		"climb": Input.get_action_strength("climb_down"),
 		"rotate": rot,
-	})
+	}
+	if custom == "editor":
+		Replay.record(rec_runs, inp)   # teste do editor: grava para o replay
+	room.step(inp)
 
 
 # ---------------------------------------------------------------- editor e fases do jogador
@@ -858,6 +866,8 @@ func _play_from_editor(def: Dictionary) -> void:
 	ui_layer.visible = true
 	custom = "editor"
 	transitioning = false
+	rec_runs = []
+	rec_state = Replay.capture_state(def)
 	_spawn_room(def, -1, "")
 
 
@@ -872,7 +882,7 @@ func _end_custom(won: bool) -> void:
 		ui_layer.visible = false
 		_set_window_for_editor(true)
 		editor_layer.visible = true
-		editor.play_finished(won)
+		editor.play_finished(won, rec_runs, rec_state)
 	else:
 		show_list()
 

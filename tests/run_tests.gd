@@ -6,6 +6,8 @@ extends SceneTree
 ## salas do jogo forem redesenhadas. Cada sala do jogo tem um bot que a resolve.
 
 const Levels := preload("res://scripts/levels.gd")
+const LevelData := preload("res://scripts/level_data.gd")
+const Replay := preload("res://scripts/replay.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const Rabbit := preload("res://scripts/rabbit.gd")
 
@@ -16,6 +18,7 @@ var frames := 0
 
 func _init() -> void:
 	test_format()
+	test_campaign_proof()
 	test_jump_height()
 	test_no_flicker_at_wall()
 	test_push_animation()
@@ -54,6 +57,7 @@ func _init() -> void:
 	test_spin_block()
 	test_jeffrey_no_suicide()
 	test_jeffrey_bot()
+	test_jeffrey_replay()
 	test_jeffrey_lives()
 	test_jeffrey_intro()
 	print("")
@@ -132,14 +136,14 @@ func check(cond: bool, msg: String) -> void:
 
 
 func load_room(i: int) -> void:
-	load_def(Levels.ROOMS[i])
+	load_def(Levels.rooms()[i])
 
 
 ## Carrega a sala pelo nome (os bots não dependem da ordem dos níveis).
 func load_named(n: String) -> void:
-	for d in Levels.ROOMS:
+	for d in Levels.rooms():
 		if d["name"] == n:
-			print("%s — nível %d" % [n, Levels.ROOMS.find(d) + 1])
+			print("%s — nível %d" % [n, Levels.rooms().find(d) + 1])
 			load_def(d)
 			return
 	check(false, "sala '%s' existe" % n)
@@ -270,8 +274,8 @@ func where() -> String:
 
 func test_format() -> void:
 	print("formato das salas")
-	for i in Levels.ROOMS.size():
-		var d: Dictionary = Levels.ROOMS[i]
+	for i in Levels.count():
+		var d: Dictionary = Levels.rooms()[i]
 		var rows: Array = d["rows"]
 		var w: int = rows[0].length()
 		var ok := true
@@ -688,7 +692,7 @@ func test_reload_params() -> void:
 
 func test_start_is_stable() -> void:
 	print("estado inicial estável (nada se mexe sozinho)")
-	for i in Levels.ROOMS.size():
+	for i in Levels.count():
 		load_room(i)
 		var before: Array = []
 		for b in room.boxes:
@@ -1169,7 +1173,7 @@ func test_mergulho() -> void:
 	tick({"rotate": 1})
 	idle(300)
 	check(not won() and room.state == "play" and not room.door_open, "girando sem a corda, a porta não abre (%s)" % where())
-	load_def(Levels.MERGULHO)
+	load_def(Levels.by_id("mergulho"))
 	idle(30)
 	check(walk_until(1.0, func(): return room.group_filled(0), 600), "empurra a caixa no compartimento do palco (%s)" % where())
 	walk_to(int(room.ropes[0]["anchor"].x))
@@ -1355,7 +1359,7 @@ func test_agua() -> void:
 
 ## Sala Prumo: pula, gira no ar, agarra a corda, desce `down` quadros e gira de novo.
 func _prumo(rise: int, down: int, dir: int) -> String:
-	load_def(Levels.PRUMO)
+	load_def(Levels.by_id("prumo"))
 	for r in room.ropes:
 		wait_rope(r)
 	idle(20)
@@ -1385,7 +1389,7 @@ func test_prumo() -> void:
 	check(_prumo(8, 500, 1) in ["won", "done"], "descendo até a ponta e girando, o arco leva à porta")
 	check(_prumo(16, 500, 1) in ["won", "done"], "agarrando mais embaixo também funciona")
 	check(_prumo(8, 500, -1) == "play", "girando para o outro lado, não chega à porta")
-	load_def(Levels.PRUMO)
+	load_def(Levels.by_id("prumo"))
 	idle(10)
 	rot(1)
 	check(dies_within(300), "girar do chão, sem a corda, é cair nos espinhos")
@@ -1430,7 +1434,7 @@ func test_mare() -> void:
 	idle(160)
 	check(room.gw > room.gh and got.has("limiter"), "sem fazer nada, o giro é desfeito aos 2,5 s")
 	# a solução, dentro dos 5 s
-	load_def(Levels.MARE)
+	load_def(Levels.by_id("mare"))
 	idle(60)
 	tick({"rotate": 1})
 	var stage := 0
@@ -1481,7 +1485,7 @@ func test_represa() -> void:
 		tick(inp)
 	check(won(), "chega à porta dobrando a borda e pulando sobre os espinhos (%s)" % where())
 	# o giro para o outro lado só devolve a água ao ponto de partida
-	load_def(Levels.REPRESA)
+	load_def(Levels.by_id("represa"))
 	idle(40)
 	rot(-1)
 	idle(120)
@@ -1514,7 +1518,7 @@ func test_naufragio() -> void:
 	check(swam, "a volta é a nado, por cima dos espinhos")
 	check(won(), "chega à porta, pulando o espinho (%s)" % where())
 	# empurrar uma caixa para dentro do poço é perdê-la
-	load_def(Levels.NAUFRAGIO)
+	load_def(Levels.by_id("naufragio"))
 	idle(40)
 	walk_until(1.0, func(): return room.boxes[0].pos.x > 112 or room.boxes[1].pos.x > 112, 900)
 	idle(400)
@@ -1597,7 +1601,7 @@ const BossSquirrel := preload("res://scripts/boss_squirrel.gd")
 
 func _jeffrey() -> void:
 	BossSquirrel.intro_seen = true   # os testes da luta pulam a abertura
-	load_def(Levels.JEFFREY)
+	load_def(Levels.by_id("jeffrey"))
 	seed(7)
 
 
@@ -1684,11 +1688,45 @@ func test_jeffrey_bot() -> void:
 	check(won, "o coelho chega à porta depois da luta")
 
 
+## O replay da luta se repete igual: grava os comandos de um bot que vence (sem trapaça de
+## vidas) e roda de novo, com e sem a abertura já vista no jogo.
+func test_jeffrey_replay() -> void:
+	print("Jeffrey: replay da luta")
+	for seen in [true, false]:
+		BossSquirrel.intro_seen = seen
+		var def: Dictionary = Levels.by_id("jeffrey")
+		var state := Replay.capture_state(def)
+		load_def(def)
+		var boss = room.actors[0]
+		var runs: Array = []
+		var i := 0
+		while room.state != "won" and room.state != "done" and i < 30000:
+			var inp := {"rotate": 0, "move": 0.0}
+			if boss.state == "wait" and room.rot_lock == 0 and i % 20 == 0:
+				inp["rotate"] = 1   # abertura: gira o bloco até ele aparecer
+			if boss.state == "attack" and boss.t == boss.leg_frames - room.SPIN_FRAMES - 4:
+				inp["rotate"] = 1 if boss.target_face == (room.spin_face + 1) % 4 else -1
+			if boss.hearts <= 0:
+				inp["move"] = 1.0
+			Replay.record(runs, inp)
+			tick(inp)
+			i += 1
+		var live_won: bool = room.state == "won" or room.state == "done"
+		var rep := Replay.pack(runs, LevelData.from_def(def).content_hash(), state)
+		BossSquirrel.intro_seen = not seen   # o jogo em outro estado: o replay tem de restaurar
+		var res: Dictionary = Replay.run(def, rep)
+		check(BossSquirrel.intro_seen == not seen, "rodar o replay devolve o estado do jogo")
+		var live_end := {"state": room.state, "rabbit": room.rabbit.pos, "frame": i, "hearts": boss.hearts}
+		check(res["end"] == live_end, "abertura %s: o replay termina exatamente igual à partida (%s)" % ["vista" if seen else "nova", str(live_end)])
+		check(res["won"] == live_won, "e com o mesmo resultado (%s)" % ("venceu" if live_won else "não venceu"))
+	BossSquirrel.intro_seen = false
+
+
 ## Na primeira vez, o esquilo só aparece depois de 3 giros do bloco; depois, nunca mais espera.
 func test_jeffrey_intro() -> void:
 	print("Jeffrey: abertura com 3 giros")
 	BossSquirrel.intro_seen = false
-	load_def(Levels.JEFFREY)
+	load_def(Levels.by_id("jeffrey"))
 	var boss = room.actors[0]
 	idle(300)
 	check(boss.state == "wait" and boss.nuts.is_empty(), "sem girar, o esquilo não aparece")
@@ -1715,7 +1753,7 @@ func test_jeffrey_intro() -> void:
 		tick()
 		guard += 1
 	check(boss.state == "enter", "depois de morrer, ele entra direto, sem esperar os giros")
-	load_def(Levels.JEFFREY)
+	load_def(Levels.by_id("jeffrey"))
 	check(room.actors[0].state == "enter", "voltando à sala, também")
 
 
@@ -1750,3 +1788,29 @@ func test_jeffrey_lives() -> void:
 	room.reset()
 	check(boss.lives == 3 and boss.hearts == 3, "reiniciar com R também recomeça a luta")
 	check(boss.blast_hits(Vector2(50, 50), Rect2(60, 44, 12, 12)) and not boss.blast_hits(Vector2(50, 50), Rect2(70, 44, 12, 12)), "a explosão fere só dentro do raio")
+
+
+# ------------------------------------------------------------ prova da campanha
+
+## Fases que ainda são provadas por um bot escrito à mão (neste arquivo). Cada uma sai desta
+## lista quando ganhar um replay gravado no editor; fases novas só entram com replay.
+const BOT_IDS := ["passos", "degraus", "giro", "comporta", "derrame", "toca", "setas", "espinhos",
+	"prumo", "vertigem", "agua", "mare", "represa", "naufragio", "mergulho", "fuga", "jeffrey"]
+
+
+func test_campaign_proof() -> void:
+	print("campanha: toda fase tem prova (replay ou bot)")
+	var with_replay := 0
+	for id in Levels.ids():
+		var path := Levels.replay_path(id)
+		if FileAccess.file_exists(path):
+			with_replay += 1
+			var rep: Dictionary = Replay.load_file(path)
+			var raw := FileAccess.get_file_as_string(Levels.level_path(id))
+			var data: RefCounted = LevelData.from_json(raw)
+			check(Replay.is_for(rep, data.content_hash()), "%s: o replay é da versão atual da fase" % id)
+			var res: Dictionary = Replay.run(Levels.by_id(id), rep)
+			check(res["won"], "%s: o replay chega à porta (quadro %d)" % [id, res["frame"]])
+		else:
+			check(BOT_IDS.has(id), "%s: tem replay ou bot" % id)
+	print("  %d de %d fases com replay; as outras ainda com bot" % [with_replay, Levels.count()])

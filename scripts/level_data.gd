@@ -33,6 +33,9 @@ var limiter_time := 2.5     # s: tempo até o limitador desfazer o giro
 var start_rot := 0
 var rows: Array = []        # Array[String]
 var verified := false       # o autor venceu esta versão da fase
+# Campos que o editor não edita (sala de boss: "spin_block", "actors"...; "hint_touch", "notes"):
+# guardados como vieram e devolvidos em to_def(), para editar a grade não apagar nada.
+var extra := {}
 var verified_hash := ""     # hash da versão vencida; vale só se for igual ao hash atual
 
 
@@ -70,7 +73,17 @@ static func from_def(def: Dictionary) -> RefCounted:
 		d.rows.append(str(r))
 	d.verified = bool(def.get("verified", false))
 	d.verified_hash = str(def.get("verified_hash", ""))
+	for k in def:
+		if not KNOWN_KEYS.has(k):
+			d.extra[k] = def[k]
 	return d
+
+
+## Campos que esta classe edita (os outros vão para `extra`).
+const KNOWN_KEYS := ["name", "hint", "music", "door_open", "rotate", "limiter", "reload_time",
+	"limiter_time", "start_rot", "rows", "verified", "verified_hash", "version", "id"]
+## Campos de `extra` que não mudam a jogabilidade (não entram no hash da verificação).
+const TEXT_KEYS := ["hint_touch", "notes"]
 
 
 ## O dicionário que `room.setup()` e o resto do jogo entendem.
@@ -91,11 +104,13 @@ func to_def() -> Dictionary:
 		def["reload_time"] = reload_time
 	if not is_equal_approx(limiter_time, 2.5):
 		def["limiter_time"] = limiter_time
+	for k in extra:
+		def[k] = extra[k]
 	return def
 
 
 func duplicate_data() -> RefCounted:
-	var d: RefCounted = from_def(to_def())
+	var d: RefCounted = from_def(to_def().duplicate(true))
 	d.verified = verified
 	d.verified_hash = verified_hash
 	return d
@@ -140,7 +155,30 @@ func set_block(c: int, r: int, ch: String) -> void:
 ## Hash do que muda a jogabilidade (não conta nome nem dica de texto).
 func content_hash() -> String:
 	var parts: Array = [rotate, limiter, start_rot, door_open, rows, snappedf(reload_time, 0.01), snappedf(limiter_time, 0.01)]
-	return JSON.stringify(parts).sha256_text()
+	var play := {}
+	for k in extra:
+		if not TEXT_KEYS.has(k):
+			play[k] = extra[k]
+	if not play.is_empty():
+		parts.append(_norm(play))   # só quando há: o hash das fases sem campos extras não muda
+	return JSON.stringify(parts, "", true).sha256_text()
+
+
+## Números inteiros lidos de JSON chegam como 17.0: normaliza para o hash não mudar.
+static func _norm(v: Variant) -> Variant:
+	if typeof(v) == TYPE_FLOAT and v == floorf(v):
+		return int(v)
+	if typeof(v) == TYPE_ARRAY:
+		var out: Array = []
+		for x in v:
+			out.append(_norm(x))
+		return out
+	if typeof(v) == TYPE_DICTIONARY:
+		var d := {}
+		for k in v:
+			d[k] = _norm(v[k])
+		return d
+	return v
 
 
 func is_verified() -> bool:
@@ -302,7 +340,25 @@ func validate() -> Array:
 	var sockets := door_sockets + gate_sockets.size()
 	if boxes < sockets:
 		out.append({"erro": true, "msg": "Há %d compartimentos e só %d caixas." % [sockets, boxes], "pos": no_pos})
-	if door_sockets == 0 and not door_open and dcount > 0:
+	# bloco giratório (sala de boss): quadrado, dentro da sala, todo de parede
+	if extra.has("spin_block"):
+		var sb = extra["spin_block"]
+		if not (sb is Array) or sb.size() != 3:
+			out.append({"erro": true, "msg": "Bloco giratório mal definido.", "pos": no_pos})
+		else:
+			var c0 := int(sb[0])
+			var r0 := int(sb[1])
+			var n := int(sb[2])
+			var ok := n >= 1
+			for rr in n:
+				for cc in n:
+					ok = ok and in_bounds(c0 + cc, r0 + rr) and cell(c0 + cc, r0 + rr) == "#"
+			if not ok:
+				out.append({"erro": true, "msg": "O bloco giratório precisa ser todo de parede '#'.", "pos": Vector2i(c0, r0)})
+	if extra.has("actors") and not extra.has("spin_block") and str(extra["actors"]).contains("boss_squirrel"):
+		out.append({"erro": true, "msg": "O Jeffrey precisa de um bloco giratório.", "pos": no_pos})
+	# numa sala com ator (boss), quem abre a porta é ele
+	if door_sockets == 0 and not door_open and dcount > 0 and not extra.has("actors"):
 		out.append({"erro": true, "msg": "A porta não tem compartimento 'S': marque 'porta aberta' ou ponha um.", "pos": no_pos})
 	if door_sockets > 0 and door_open:
 		out.append({"erro": false, "msg": "'Porta aberta' está ligado: o compartimento 'S' não será usado.", "pos": no_pos})

@@ -1,0 +1,25 @@
+{
+	"name": "Toca",
+	"notes": "respiro de plataforma: pilares sobre espinhos; teto de espinhos. Respiro de plataforma: pilares de alturas diferentes sobre espinhos; no fim, a caixa no buraco abre a porta. Dá para girar, mas o teto é de espinhos e há uma plataforma de espinhos suspensa acima da porta.",
+	"rotate": true,
+	"rows": [
+		"######################################",
+		"#vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv#",
+		"#....................................#",
+		"#....................................#",
+		"#....................................#",
+		"#..................................^^#",
+		"#..................................###",
+		"#..................................DD#",
+		"#..........##.........###..........DD#",
+		"#.PP..##...##....##...###...BB.....DD#",
+		"#.PP..##^^^##^^^^##^^^###...BB.....DD#",
+		"################################SS####",
+		"################################SS####",
+		"######################################"
+	],
+	"start_rot": 0,
+	"verified": true,
+	"verified_hash": "b0aa4d3eacc97332270668200423f09ae1c64f35cce6999c329eb862cead129f",
+	"version": 1
+}
