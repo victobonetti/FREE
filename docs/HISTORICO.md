@@ -338,6 +338,16 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 
 ---
 
+## Rodada 24 — Boss 1, Jeffrey, o esquilo (16/11/2026)
+
+**Entrada do Victor:** esboço do boss (D63); respostas: só faces vizinhas, coelho morre num toque, esquilo com 3 corações, sem pausa; encurtar o giro do bloco; começar a implementação.
+
+**Feito (D64):** sala 17 com o bloco que gira (0,15 s, sem pausa) e o esquilo: entra girando, anda, zigue-zague pelas paredes, mira com aviso e ataca em linha reta; nozes a partir do segundo coração; tonto ao ser atingido; porta abre no fim. Testes: o bloco gira sem pausar, o esquilo nunca se acerta sozinho, e um bot vence girando no último instante.
+
+**Ainda não validado por quem joga:** tudo. Em especial as janelas de reação (1,0 / 0,7 / 0,5 s) e se o esquilo andando no chão é justo.
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |

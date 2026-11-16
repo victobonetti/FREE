@@ -156,6 +156,7 @@ scripts/
   levels.gd            # as salas, desenhadas em texto (qualquer tamanho)
   input_setup.gd       # teclas e controle registrados em código
   touch_controls.gd    # controles de toque (celular), apertam as mesmas ações
+  boss_squirrel.gd     # boss 1, Jeffrey, o esquilo (ator da sala 17)
 tests/
   run_tests.gd         # formato das salas, pulo e bots que resolvem cada sala
   shot.gd              # capturas de tela de cada sala
@@ -234,9 +235,9 @@ PageDown e PageUp pulam entre salas. R reinicia a sala.
 - **Rejogabilidade:** cronômetro de speedrun, cenouras colecionáveis em rotas arriscadas, versões difíceis das salas.
 - **Narrativa:** coelho de laboratório fugindo de câmaras de teste, o que justifica o visual estéril e as salas que giram.
 
-## 8b. Boss 1 — Jeffrey, o esquilo (conceito, D63)
+## 8b. Boss 1 — Jeffrey, o esquilo (D63, D64)
 
-Ainda não implementado. Esboço do Victor em três quadros: o bloco com espinhos no centro, o esquilo subindo as paredes, o giro no último instante.
+**Protótipo jogável (rodada 24):** sala 17, depois da Fuga (`./run.ps1 -Level 17`). Esboço do Victor em três quadros: o bloco com espinhos no centro, o esquilo subindo as paredes, o giro no último instante.
 
 **A sala:** o coelho cai numa sala que não gira. Q/E giram só um **bloco quadrado com espinhos numa das faces**, no centro da sala. Por ser quadrado, girar não muda a colisão, só qual face tem espinhos. A gravidade e o resto da sala não mudam.
 
@@ -248,15 +249,33 @@ Ainda não implementado. Esboço do Victor em três quadros: o bloco com espinho
 - O coelho morre num toque, como no resto do jogo. O esquilo tem 3 corações. Depois do terceiro acerto, abre-se a porta.
 - O jogo **não pausa** durante o giro do bloco: tudo continua se movendo. É uma prova de reflexo.
 
+- O giro do bloco é mais curto que o da sala: 0,15 s (9 quadros). Os espinhos passam para a face nova no fim dele. Recarga de 0,75 s.
+
+**Como ficou no protótipo (valores no topo de `scripts/boss_squirrel.gd`, por fase = corações perdidos):**
+
+| | 1º coração | 2º | 3º |
+|---|---|---|---|
+| Andando no chão | 1,7 s, devagar | 1,25 s | 0,9 s, mais rápido |
+| Saltos de zigue-zague antes do ataque | 1 | 2 | 3 |
+| Aviso antes do salto (a face mirada ganha uma linha amarela) | 0,67 s | 0,5 s | 0,4 s |
+| Salto de ataque (janela de reação) | 1,0 s | 0,7 s | 0,5 s |
+| Nozes na tela, no máximo | 0 | 2 | 3 |
+
+- O esquilo pula entre apoios (chão, paredes, teto) e só usa trechos que passam longe do bloco. O ataque sai do apoio em frente à face, em linha reta: cai do teto na face de cima, sai das paredes para as laterais, sobe do chão para a de baixo.
+- Se o jogador gira durante o aviso e a face mirada ganha espinhos, ele troca de alvo.
+- Atingido, perde um coração, é arremessado e fica tonto no chão (1,25 s, sem machucar). Sem corações, some e a porta abre.
+- As nozes saem no meio dos saltos, em arco até o coelho; quicam e quebram no terceiro toque ou ao encostar nos espinhos do bloco.
+- Esquilo com 12 px, como o coelho: dá para pular por cima.
+- **Decidido por Claude, aberto a revisão:** ao morrer, o coelho volta ao início da sala, mas os corações que o esquilo perdeu continuam perdidos.
+
 **Em aberto:**
-- A partir de que ponto da animação a face nova passa a ter espinhos. Proposta: no fim dela (0,25 s, ou menos, se a janela ficar curta demais).
-- O tamanho da janela de reação (do começo do salto até tocar a face). Proposta: ~1 s no primeiro coração, ~0,7 s no segundo, ~0,5 s no terceiro, com o alvo anunciado (o esquilo olha para a face ou ela pisca).
-- Ao morrer, o esquilo volta a ter 3 corações ou mantém os que perdeu.
-- Limite de nozes na tela (proposta: 2 ou 3); noz que toca nos espinhos quebra na hora; noz parada no chão serve de apoio ou também machuca.
-- Altura do esquilo: no máximo ~16 px e devagar no chão, para o coelho conseguir pular por cima (pulo longo de 30 px).
+- Tudo isto precisa ser sentido jogando: janelas, velocidade no chão, quantidade de nozes.
+- Noz parada no chão: hoje ela quica até quebrar; não fica parada servindo de apoio.
+- A entrada: o coelho ainda começa no chão; a queda na sala e a entrada do esquilo podem virar uma pequena cena.
+- Arte e sons próprios (hoje: desenho em código e sons reaproveitados).
 - Opcional, para trazer de volta o "tudo que está solto cai": nozes presas nas faces do bloco caem quando ele gira.
 
-**Implementação (quando for a hora):** sala especial. A grade é uma sala comum com o giro apontando para um bloco; o esquilo, as nozes, os corações e as fases ficam numa cena própria. A peça nova no motor é "o giro mira um bloco, não a sala".
+**Implementação:** a grade é uma sala comum em `levels.gd` (`JEFFREY`) com dois campos novos: `spin_block` (o giro mira o bloco, não a sala) e `actors` (scripts que a sala cria e chama a cada quadro). O esquilo, as nozes e os corações ficam em `scripts/boss_squirrel.gd`; a sala só oferece o bloco, `kill()` e `door_unlocked`.
 
 ## 9. Decisões
 

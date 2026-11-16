@@ -25,6 +25,9 @@ extends RefCounted
 ## "hint" (opcional): só os controles básicos (andar, pular, girar). As mecânicas o jogador descobre.
 ## "hint_touch" (opcional): a mesma dica para quem joga no celular (aparece no lugar de "hint").
 ## "door_open" (opcional): true deixa a porta sempre aberta, sem compartimento.
+## "spin_block": [coluna, linha, lado]: a sala não gira; Q/E giram só esse bloco quadrado e os
+##     espinhos encostados nele, sem pausar o jogo. "spin_cooldown": a recarga desse giro (quadros).
+## "actors": scripts que a sala cria e chama a cada quadro (o boss). Um ator pode abrir a porta.
 ## "music" (opcional): faixa da sala; sem o campo, toca DEFAULT_MUSIC. Se duas salas
 ## seguidas usam a mesma faixa, ela continua sem reiniciar.
 
@@ -541,6 +544,41 @@ const MERGULHO := {
 
 ## Sala de início: o quadrado em que a cutscene de abertura termina (scripts/intro.gd desenha
 ## o mesmo quadrado, no mesmo lugar). Só o coelho e a porta, já aberta. Não é um nível.
+const JEFFREY := {
+	# Boss 1 (GDD 8b, D63). A sala não gira: Q/E giram só o bloco do meio, com os espinhos.
+	# O esquilo nunca salta numa face com espinhos; o acerto é girar no último instante,
+	# no meio do salto de ataque dele. 3 corações; depois do último, a porta abre.
+	"name": "Jeffrey",
+	"spin_block": [17, 8, 6],
+	"spin_cooldown": 45,
+	"actors": ["res://scripts/boss_squirrel.gd"],
+	"rows": [
+		"########################################",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#................^^^^^^................#",
+		"#................######................#",
+		"#................######................#",
+		"#................######................#",
+		"#................######................#",
+		"#................######................#",
+		"#................######................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#...................................DD.#",
+		"#...................................DD.#",
+		"#..PP...............................DD.#",
+		"#..PP...............................DD.#",
+		"########################################",
+	],
+}
+
+
 const START := {
 	"name": "",
 	"hint": "Ande com A/D ou as setas",
@@ -591,4 +629,6 @@ const ROOMS := [
 	# tudo junto
 	MERGULHO,   # 15 caixa, corda e água
 	FUGA,       # 16 giro limitado até a porta, na parede
+	# boss
+	JEFFREY,    # 17 Jeffrey, o esquilo: girar o bloco no último instante
 ]

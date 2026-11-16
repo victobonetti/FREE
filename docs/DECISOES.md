@@ -459,3 +459,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **O quê:** sala que não gira; Q/E giram só um bloco quadrado com espinhos no centro. O esquilo salta entre as paredes jogando nozes e só é ferido se o bloco girar os espinhos para a face em que ele vai ricochetear, no último instante. Detalhes no GDD, seção 8b.
 - **Decidido:** o esquilo só mira faces vizinhas à dos espinhos (um giro sempre basta) e nunca salta numa face com espinhos; o coelho morre num toque; o esquilo tem 3 corações; o jogo não pausa durante o giro do bloco (prova de reflexo).
 - **Em aberto:** quando os espinhos da face nova passam a valer, o tamanho da janela de reação por coração, se os corações voltam ao morrer, as regras das nozes, o tamanho do esquilo.
+
+### D64 — Boss 1 implementado como protótipo
+- **Autor:** Claude, a partir de D63; pedido de Victor: encurtar o giro do bloco.
+- **Giro do bloco:** 9 quadros (0,15 s), sem pausar o jogo; os espinhos passam para a face nova no fim. Recarga de 45 quadros (0,75 s), em vez dos 2,5 s da sala, porque a luta pede um giro por ataque.
+- **Motor:** dois campos de sala, genéricos para os próximos bosses: `spin_block` e `actors`. Um ator recebe `step(room)` e `on_reset(room)` e pode abrir a porta (`door_unlocked`).
+- **Garantia de que o esquilo não se mata:** as rotas só usam trechos que passam longe do bloco; o único trecho perto dele é o salto de ataque, que só sai para uma face vizinha à dos espinhos (contando um giro em andamento). Teste: girando à toa fora do salto, em 6000 quadros, o esquilo nunca se fere. Outro teste: um bot que gira no último instante vence e chega à porta.
+- **Escolha de Claude, aberta a revisão:** os corações perdidos continuam perdidos quando o coelho morre.

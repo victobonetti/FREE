@@ -49,6 +49,9 @@ func _init() -> void:
 	test_represa()
 	test_naufragio()
 	test_mergulho()
+	test_spin_block()
+	test_jeffrey_no_suicide()
+	test_jeffrey_bot()
 	print("")
 	if failures == 0:
 		print("TODOS OS TESTES PASSARAM")
@@ -276,7 +279,9 @@ func test_format() -> void:
 		check(ok, "sala %d (%s): %dx%d, retangular e cercada de parede" % [i + 1, d["name"], w, rows.size()])
 		load_room(i)
 		check(room.has_door, "sala %d tem porta" % (i + 1))
-		if d.get("door_open", false):
+		if d.has("actors"):
+			pass   # sala de boss: quem abre a porta é o boss derrotado
+		elif d.get("door_open", false):
 			check(not room.socket_group.has(0), "sala %d: porta sem compartimento (door_open)" % (i + 1))
 		else:
 			check(room.group_filled(0) == false and room.socket_group.has(0), "sala %d tem compartimento da porta" % (i + 1))
@@ -1485,3 +1490,92 @@ func test_naufragio() -> void:
 		if b.pos.x > 96 and b.pos.x < 248 and b.pos.y > 112:
 			lost = true
 	check(lost, "caixa empurrada para o poço afunda e fica perdida (%s)" % where())
+
+
+# ------------------------------------------------------------ boss 1: Jeffrey
+
+func _jeffrey() -> void:
+	load_def(Levels.JEFFREY)
+	seed(7)
+
+
+func test_spin_block() -> void:
+	print("bloco que gira (sala de boss)")
+	_jeffrey()
+	idle(60)
+	check(room.has_spin and room.spin_face == 0, "o bloco começa com espinhos em cima")
+	var y0: int = room.rabbit.pos.y
+	var w0: int = room.pw
+	wait_rot_ready()
+	tick({"rotate": 1})
+	check(room.spinning and not room.rotating, "girar mexe no bloco, não na sala")
+	var frames_spin := 0
+	while room.spinning and frames_spin < 40:
+		tick()
+		frames_spin += 1
+	check(frames_spin <= room.SPIN_FRAMES, "o giro do bloco é curto (%d quadros)" % frames_spin)
+	check(room.spin_face == 1, "girar no sentido horário leva os espinhos para a direita")
+	check(room.pw == w0, "a sala continua do mesmo tamanho")
+	var right := true
+	for sp in room.spikes:
+		if sp.get("block", false):
+			right = right and sp["facing"] == 1 and sp["rect"].position.x == room.spin_rect.end.x
+	check(right, "os espinhos ficam encostados na face direita, apontando para fora")
+	# o jogo não pausa: o esquilo segue se movendo durante o giro
+	_jeffrey()
+	idle(80)
+	wait_rot_ready()
+	var p0: Vector2 = room.actors[0].pos
+	tick({"rotate": -1})
+	idle(4)
+	check(room.actors[0].pos != p0, "o jogo não pausa durante o giro do bloco")
+
+
+## Girando à toa, mas nunca durante o salto de ataque, o esquilo não pode se ferir.
+func test_jeffrey_no_suicide() -> void:
+	print("Jeffrey: nunca salta nos espinhos")
+	_jeffrey()
+	var boss = room.actors[0]
+	var states := {}
+	var hit := false
+	for i in 6000:
+		var r := 0
+		if boss.state != "attack" and boss.state != "bounce" and randi() % 25 == 0:
+			r = 1 if randi() % 2 == 0 else -1
+		tick({"rotate": r})
+		states[boss.state] = true
+		if boss.hearts < 3:
+			hit = true
+			break
+	check(not hit, "girar fora do salto de ataque nunca acerta o esquilo")
+	check(states.has("attack") and states.has("aim"), "o esquilo mira e ataca (estados vistos: %s)" % ", ".join(states.keys()))
+
+
+## Bot: gira no último instante, no sentido que leva os espinhos para a face mirada.
+func test_jeffrey_bot() -> void:
+	print("Jeffrey: girar no último instante vence")
+	_jeffrey()
+	var boss = room.actors[0]
+	var deaths := 0
+	var was_dead := false
+	var i := 0
+	while boss.hearts > 0 and i < 20000:
+		var r := 0
+		if boss.state == "attack" and boss.t == boss.leg_frames - room.SPIN_FRAMES - 4:
+			r = 1 if boss.target_face == (room.spin_face + 1) % 4 else -1
+		tick({"rotate": r})
+		if room.state == "dead" and not was_dead:
+			deaths += 1
+		was_dead = room.state == "dead"
+		i += 1
+	print("  %d quadros, %d mortes do coelho" % [i, deaths])
+	check(boss.hearts == 0, "o bot tira os 3 corações")
+	idle(120)
+	check(room.door_open, "com o esquilo derrotado, a porta abre")
+	var won := false
+	for k in 900:
+		tick({"move": 1.0})
+		if room.state == "won" or room.state == "done":
+			won = true
+			break
+	check(won, "o coelho chega à porta depois da luta")
