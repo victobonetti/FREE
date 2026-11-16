@@ -3,9 +3,8 @@ extends Node2D
 ## reiniciar no canto de cima. Só "apertam" as ações do InputMap (Input.action_press), então o
 ## resto do jogo não sabe que existe toque. Fica invisível até a primeira vez que a tela é tocada.
 ##
-## Celular deitado é mais largo que 16:9: main alarga a tela para o formato do aparelho e os
-## controles vão para as faixas laterais (set_layout), sem cobrir a sala. Em telas quase 16:9
-## (tablets) as faixas não cabem os botões, e eles ficam por cima do jogo, translúcidos.
+## Celular deitado é mais largo que 16:9: main alarga a tela para o formato do aparelho, e as
+## faixas laterais ficam opacas. Os controles têm sempre o mesmo layout, medido das bordas da tela.
 ##
 ## Fora do joystick e dos botões, arrastar o dedo pela tela move a vista (salas maiores que a
 ## tela); ao soltar, a câmera volta para o coelho. Quem move a câmera é a sala (room.pan).
@@ -52,31 +51,19 @@ func _ready() -> void:
 
 ## Posiciona os controles para uma tela `w` px de largura com faixas laterais de `g` px.
 func set_layout(w: int, g: int) -> void:
+	# O layout é sempre o mesmo (o que o Victor testou e aprovou), medido a partir das bordas
+	# da tela. Com faixas laterais, os controles ficam mais para fora, sobre elas.
 	screen_w = w
 	gutter = g if g >= MIN_GUTTER else 0
-	if gutter > 0:
-		left_zone_x = gutter + 90.0
-		var lx := gutter / 2.0
-		var rx := w - gutter / 2.0
-		var r := minf(gutter / 2.0 - 2.0, 15.0)
-		stick_radius = minf(gutter / 2.0 - 5.0, 16.0)
-		stick_home = Vector2(lx, 138)
-		buttons = {
-			"jump": {"pos": Vector2(rx, 152), "r": r, "hit": 24.0},
-			"rotate_cw": {"pos": Vector2(rx, 114), "r": r - 3.0, "hit": 17.0},
-			"rotate_ccw": {"pos": Vector2(rx, 84), "r": r - 3.0, "hit": 15.0},
-			"restart": {"pos": Vector2(rx, 14), "r": 7.0, "hit": 13.0},
-		}
-	else:
-		left_zone_x = 120.0
-		stick_radius = 18.0
-		stick_home = Vector2(42, 140)
-		buttons = {
-			"jump": {"pos": Vector2(w - 30, 146), "r": 15.0, "hit": 24.0},
-			"rotate_ccw": {"pos": Vector2(w - 76, 120), "r": 10.0, "hit": 17.0},
-			"rotate_cw": {"pos": Vector2(w - 44, 106), "r": 10.0, "hit": 17.0},
-			"restart": {"pos": Vector2(w - 11, 11), "r": 7.0, "hit": 13.0},
-		}
+	left_zone_x = 120.0 + g
+	stick_radius = 18.0
+	stick_home = Vector2(42, 140)
+	buttons = {
+		"jump": {"pos": Vector2(w - 30, 146), "r": 15.0, "hit": 24.0},
+		"rotate_ccw": {"pos": Vector2(w - 76, 120), "r": 10.0, "hit": 17.0},
+		"rotate_cw": {"pos": Vector2(w - 44, 106), "r": 10.0, "hit": 17.0},
+		"restart": {"pos": Vector2(w - 11, 11), "r": 7.0, "hit": 13.0},
+	}
 	if stick_finger == -1:
 		stick_origin = stick_home
 	queue_redraw()

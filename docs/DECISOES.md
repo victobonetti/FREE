@@ -452,6 +452,7 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Autor:** Claude (proposta), aceita por Victor.
 - **O quê:** `.github/workflows/deploy-web.yml` exporta a versão web com o Godot 4.7.2 e publica no GitHub Pages a cada push na `main`.
 - **Por que funciona:** a exportação é sem threads, então não precisa dos cabeçalhos COOP/COEP que o Pages não permite configurar.
+- **Layout dos controles (pedido do Victor depois do teste no iPhone):** sempre o mesmo, medido a partir das bordas da tela: joystick grande à esquerda; pulo grande no canto direito; os dois giros em diagonal acima dele; reiniciar no canto de cima. É o layout que ele testou e aprovou. O layout compacto, com tudo empilhado dentro das faixas laterais, foi descartado.
 - **Tamanho da tela (corrigido depois do primeiro teste no iPhone):** o Safari informava uma área mais alta que a visível, e o fundo da sala ficava cortado. A política de redimensionamento do canvas passou a "nenhuma" (`canvas_resize_policy=0`) e o `head_include` dimensiona o canvas pela área visível de verdade (`visualViewport`), de novo a cada giro do aparelho e quando as barras do navegador aparecem ou somem.
 - **HTML:** o `head_include` da exportação web põe o jogo em tela cheia no primeiro toque, tenta travar em paisagem e mostra "Gire o celular" quando o aparelho está em pé. No iPhone o Safari não deixa a página entrar em tela cheia; lá o jeito é "Adicionar à Tela de Início".
 
