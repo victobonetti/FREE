@@ -332,6 +332,8 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 
 **Feito (D61, D62):** controles de toque (joystick, pulo, dois giros, reiniciar) nas faixas laterais da tela; dicas de controle e "TAP TO START" próprios para toque; tela cheia e aviso para deitar o celular; workflow que publica no GitHub Pages. Conferido em navegador com celular emulado: andar, empurrar, pular andando (dois dedos) e girar. Os testes continuam passando.
 
+Depois: arrastar o dedo pela tela olha a sala (pedido do Victor, pensando em salas maiores), com testes na suíte.
+
 **Ainda não validado por quem joga:** tudo isto num celular de verdade, em especial o tamanho dos botões e o joystick.
 
 ---

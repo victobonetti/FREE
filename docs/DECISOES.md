@@ -445,6 +445,7 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Por que um botão de pulo:** o pulo tem altura variável, buffer e coyote time; "joystick para cima" não dá esse controle.
 - **Onde ficam:** celular deitado é mais largo que 16:9. No modo toque a tela do jogo é alargada para o formato do aparelho (até 432×180), a sala continua 320×180 no centro e os controles vão para as faixas laterais, opacas. Assim nada da sala fica coberto. Em telas quase 16:9 (tablets) as faixas não cabem os botões, e eles ficam por cima do jogo, translúcidos.
 - **Implementação:** `scripts/touch_controls.gd` só aperta as ações do InputMap (`Input.action_press`); o resto do jogo não sabe que existe toque. Os controles só aparecem depois do primeiro toque (ou desde o início em navegador de celular), então no PC nada muda.
+- **Olhar a sala:** fora do joystick (terço esquerdo) e dos botões, arrastar o dedo move a vista, 1:1 com o dedo, sem passar das bordas da sala. Ao soltar, volta suave para o coelho; girar a sala também zera. Dá para andar e olhar ao mesmo tempo. Pensado para salas maiores no futuro; em sala que cabe na tela, não faz nada.
 - **Descartado:** controles em HTML fora do canvas (mais trabalho, dois sistemas de entrada); controles sempre por cima da sala (cobriam porta, compartimento e o coelho em várias salas).
 
 ### D62 — Versão web publicada no GitHub Pages

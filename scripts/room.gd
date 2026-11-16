@@ -15,6 +15,7 @@ signal impact(strength: float)  # pouso de caixa; 0 a 2,5 (mais altura e mais ca
 const TILE := 8
 const VIEW := Vector2(320, 180)  # tamanho da tela (resolução interna)
 const CAM_SMOOTH := 0.12
+const LOOK_RETURN := 0.08   # fração do olhar que volta para o coelho a cada quadro, ao soltar
 const ROT_FRAMES := 16       # duração da animação do giro
 const ROT_COOLDOWN := 134    # espera extra depois do giro: com a animação, 2,5 s (150 quadros)
 const ROT_BUFFER := 6        # apertar até 6 quadros antes do fim da recarga ainda vale
@@ -212,6 +213,10 @@ var limit_t := 0     # quadros até o giro ser desfeito (0 = nada a desfazer)
 var orientation := 0  # giros acumulados (0..3), só informativo
 
 var cam := Vector2.ZERO  # ponto da sala (px) que fica no centro da tela
+# Olhar (celular: arrastar o dedo pela tela): deslocamento da câmera em relação ao coelho.
+# Limitado às bordas da sala; ao soltar, volta para o coelho.
+var look := Vector2.ZERO
+var looking := false     # dedo arrastando agora
 
 var particles: Array = []
 var rabbit_frames := {}
@@ -294,6 +299,7 @@ func reset() -> void:
 	for i in 300:
 		_update_ropes()
 	_update_sockets()
+	look = Vector2.ZERO
 	cam = _cam_target()
 
 
@@ -486,6 +492,7 @@ func _rotate_logic(dir: int) -> void:
 	rabbit.pos = _rot_rect(rabbit.rect, dir).position
 	rabbit.on_rotate()
 	cam = _rot_point(cam, dir)
+	look = Vector2.ZERO   # depois do giro, a vista volta para o coelho
 	for p in particles:
 		p["pos"] = _rot_point(p["pos"], dir)
 		p["vel"] = Vector2(-p["vel"].y, p["vel"].x) if dir > 0 else Vector2(p["vel"].y, -p["vel"].x)
@@ -529,16 +536,48 @@ func _ease(t: float) -> float:
 
 ## Onde a câmera quer estar: centralizada no eixo em que a sala cabe na tela; no outro,
 ## seguindo o coelho, sem mostrar além das bordas da sala.
+## O olhar arrastado (look) soma por cima disso, ainda dentro das bordas.
 func _cam_target() -> Vector2:
-	var rc := Vector2(rabbit.pos) + Vector2(6, 2)
+	return _cam_clamp(_cam_follow() + look)
+
+
+func _cam_follow() -> Vector2:
+	return _cam_clamp(Vector2(rabbit.pos) + Vector2(6, 2))
+
+
+func _cam_clamp(p: Vector2) -> Vector2:
 	var t := Vector2.ZERO
-	t.x = pw / 2.0 if pw <= VIEW.x else clampf(rc.x, VIEW.x / 2.0, pw - VIEW.x / 2.0)
-	t.y = ph / 2.0 if ph <= VIEW.y else clampf(rc.y, VIEW.y / 2.0, ph - VIEW.y / 2.0)
+	t.x = pw / 2.0 if pw <= VIEW.x else clampf(p.x, VIEW.x / 2.0, pw - VIEW.x / 2.0)
+	t.y = ph / 2.0 if ph <= VIEW.y else clampf(p.y, VIEW.y / 2.0, ph - VIEW.y / 2.0)
 	return t
 
 
 func _update_camera() -> void:
-	cam = cam.lerp(_cam_target(), CAM_SMOOTH)
+	if looking:
+		cam = _cam_target()   # arrastando: a sala acompanha o dedo, sem atraso
+	else:
+		look = look.lerp(Vector2.ZERO, LOOK_RETURN)
+		if look.length() < 0.5:
+			look = Vector2.ZERO
+		cam = cam.lerp(_cam_target(), CAM_SMOOTH)
+
+
+## Arrasta a vista `delta` px (sentido do dedo: arrastar para a esquerda mostra o que está à
+## direita). Só tem efeito no eixo em que a sala é maior que a tela.
+func pan(delta: Vector2) -> void:
+	looking = true
+	look -= delta
+	_clamp_look()
+
+
+func end_pan() -> void:
+	looking = false
+
+
+## Não deixa o olhar acumular além das bordas: ao soltar, a volta começa na hora.
+func _clamp_look() -> void:
+	var base := _cam_follow()
+	look = _cam_clamp(base + look) - base
 
 
 # ---------------------------------------------------------------- colisão

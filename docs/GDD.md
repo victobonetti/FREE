@@ -98,6 +98,7 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 | Descer a corda | S ou seta para baixo | Analógico ou direcional para baixo | Joystick para baixo |
 | Girar anti-horário / horário | Q / E | LB / RB | Os dois botões de seta acima do pulo |
 | Reiniciar sala | R | Y | Botão pequeno no canto de cima |
+| Olhar a sala (salas maiores que a tela) | — | — | Arrastar o dedo pela tela; ao soltar, a câmera volta para o coelho |
 
 ### 3.6 Estética
 

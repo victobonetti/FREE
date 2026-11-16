@@ -56,6 +56,6 @@ Ao abrir, o jogo pede um clique para começar: o navegador só libera som depois
 - Como sentiram o pulo e o giro.
 - Se a música ou algum efeito incomodou.
 
-Controles no celular: joystick à esquerda para andar (para baixo desce a corda); à direita, o botão grande pula e as duas setas giram a sala; o botão pequeno no canto de cima reinicia.
+Controles no celular: joystick à esquerda para andar (para baixo desce a corda); à direita, o botão grande pula e as duas setas giram a sala; o botão pequeno no canto de cima reinicia. Arrastar o dedo pelo meio da tela mostra o resto da sala, quando ela é maior que a tela.
 
 Controles: A/D ou setas para andar; W, seta para cima ou Espaço para pular; Q e E para girar; R para reiniciar a sala. Controle de videogame também funciona (analógico, A, LB, RB, Y).
