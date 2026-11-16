@@ -41,7 +41,7 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 - Animação de ~0,25 s com easing. A simulação pausa durante o giro.
 - Ao fim do giro, a velocidade do coelho e das caixas zera, e tudo cai a partir do repouso.
 - **Giro no ar:** um por pulo, recarrega ao tocar o chão.
-- **Recarga do giro:** depois de cada giro, um novo giro fica bloqueado por 0,87 s (animação incluída). Uma barra branca no canto inferior direito enche durante a recarga, com um som que fica mais agudo; um "plim" avisa quando está pronto.
+- **Recarga do giro:** depois de cada giro, um novo giro fica bloqueado por 2,5 s (animação incluída; D60). Uma barra branca no canto inferior direito enche durante a recarga, com um som que fica mais agudo; um "plim" avisa quando está pronto.
 
 ### 3.3 Caixas
 
@@ -65,6 +65,30 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 - **Plataforma por orientação:** tile lilás com uma seta. Só é sólido quando a seta aponta para cima na tela; nas outras orientações aparece tracejado e é atravessável. Também espera ficar livre antes de virar sólido.
 - Os dois têm som e um brilho curto ao mudar de estado.
 
+### 3.4c Corda
+
+- Presa por uma ponta a uma parede. **Só serve quando presa no teto**; nas outras orientações fica frouxa (amontoada no chão ou caída junto à parede) e não faz nada.
+- A corda tem física: depois de um giro ela cai e balança até repousar.
+- O coelho a agarra sozinho ao encostar nela **durante um pulo**. Andando no chão, ou caindo depois de um giro, passa por ela.
+- Pendurado, fica parado. Pode descer pela corda (S ou seta para baixo), mas não subir.
+- Quem pula e gira a sala no ar pode agarrar a corda que o giro acabou de pôr no teto. Pode girar a sala sem gastar o giro do ar: a corda fica de lado e o coelho faz um arco de pêndulo, ganhando velocidade.
+- Pulo solta, com a velocidade do arco. Bater em parede também solta. Espinhos matam normalmente no arco.
+- Onde o coelho agarra define o raio do arco; quem pula de baixo agarra a ponta.
+
+### 3.4e Limitador
+
+- Em salas com limitador, o giro feito é desfeito sozinho quando os 2,5 s de recarga terminam, com um som distorcido. Uma barra vermelha, paralela à branca, esvazia nesse tempo.
+- Quem quer ficar na orientação nova tem de chegar à porta antes do tempo acabar.
+
+### 3.4d Água e ralo
+
+- A água escorre com a gravidade, se nivela e conserva o volume. Ao girar a sala, ela cai para o novo chão. A superfície é contínua, pixel a pixel, e faz ondas quando algo cai nela ou quando ela corre.
+- O coelho boia com a cabeça para fora; ao cair, afunda por um momento. Na água ele anda mais devagar, pula a partir da superfície e pode girar a sala. A água não mata.
+- Espinhos submersos continuam matando: quem cai de alto em água rasa afunda até eles.
+- Caixa na água continua afundando, mais devagar.
+- **Porta com 30% ou mais coberta de água fica bloqueada**, somando-se à regra dos compartimentos. Ela só destrava depois de meio segundo seca.
+- **Ralo:** engole aos poucos a água que chega até ele. Está sempre ligado. A água engolida só volta ao reiniciar a sala.
+
 ### 3.5 Controles
 
 | Ação | Teclado | Controle |
@@ -80,7 +104,7 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 - Tiles de 8 px; salas de qualquer tamanho; coelho e caixa com cerca de 16×16 px.
 - Salas maiores que a tela: a câmera segue o coelho, com suavização, e para nas bordas da sala. No eixo em que a sala cabe, ela fica centralizada.
 - Fundo preto, linhas off-white.
-- Cores reservadas: caixa azul, porta amarela (aberta) e azul-acinzentada (trancada), compartimento cinza, comporta verde-água, plataforma por orientação lilás, espinhos coral, olho vermelho do coelho.
+- Cores reservadas: caixa azul, porta amarela (aberta) e azul-acinzentada (trancada), compartimento cinza, comporta verde-água, plataforma por orientação lilás, espinhos coral, corda laranja (apagada quando frouxa), água azul translúcida, ralo cinza, olho vermelho do coelho.
 - O aspecto suave vem de brilho leve, easing na câmera, squash & stretch, partículas discretas e áudio lo-fi.
 
 ## 4. Tecnologia
@@ -143,7 +167,7 @@ Esboço em `start-screen.jpeg`; detalhes em D46.
 - **Tela de início:** fundo preto, título "FREE", "PRESS ENTER" piscando e uma janela com o coelho num campo verde e ensolarado, o único cenário colorido do jogo.
 - **Cutscene:** um buraco se abre sob o coelho, ele se assusta ("!"), cai e some; a janela se apaga; ele cai girando no vazio até pousar numa pequena plataforma branca, que se expande até virar um quadrado com uma porta.
 - **Sala de início:** esse quadrado é jogável. O jogador anda até a porta e começa o nível 1.
-- Enter de novo pula a cutscene. A abertura não tem música, só efeitos (a música virá depois).
+- Enter de novo pula a cutscene. A tela de início toca `music/free-title.mp3` em loop; a música para na hora em que o jogador aperta Enter, e a cutscene tem só efeitos.
 
 ## 6. As 5 salas
 
@@ -165,6 +189,15 @@ Terceira versão (15/11/2026): **10 níveis** com dificuldade crescente (D42). N
 | 8 | Vertigem | 38×20, começa girada | (combinação) | O puzzle do esboço abre a comporta; depois, derrubar a segunda caixa num poço, girar, e a coluna de setas vira ponte sobre os espinhos. |
 | 9 | Espinhos | 28×20 | Girar no ar | Cruzar 14 tiles de espinhos pulando e girando no ar, com pousos que só existem depois do giro; voltar pelo ar até a porta. Girar do chão mata. |
 | 10 | Fuga | 32×36, alta | (síntese) | A travessia pelo ar abre a comporta do teto; escadaria de plataformas; virar a sala para jogar a segunda caixa no compartimento do teto e atravessar o antigo teto até a porta. |
+
+**Ato introdutório (D53):** a ordem atual das fases é a de `Levels.ROOMS` em `scripts/levels.gd`, comentada fase a fase. São 16 hoje: Primeiros passos, Degraus, Giro, Comporta, Derrame, Toca, Setas, Espinhos, Prumo, Vertigem, Água, Maré, Represa, Naufrágio, Mergulho, Fuga (Corda, Laço e Salto no vazio foram removidas, D58 e D60). As tabelas desta seção são anteriores a essa ordem.
+
+Depois do piloto, dois níveis que apresentam mecânicas novas (15/11/2026, D47 a D50):
+
+| # | Nome | Tamanho | Ideia nova | Como funciona |
+|---|---|---|---|---|
+| 11 | Corda | 36×22, começa de cabeça para baixo | Corda | A porta flutua no meio da sala com espinhos em cima e embaixo, fora do alcance em qualquer orientação. Virar a sala para as cordas penderem do teto, pular e agarrar a ponta de uma, girar pendurado: o arco passa pela lateral da porta. |
+| 12 | Água | 24×22 | Água e ralo | A água cobre boa parte da porta e a tranca. O ralo está num nicho alto da parede, seco. Girando, essa parede vira chão, o nicho vira um poço e a água escoa. Girar de volta com a porta livre. |
 
 Todos os níveis são resolvidos por bots em `tests/run_tests.gd` e foram conferidos em captura de tela. Os bots provam que há solução, não que a curva está boa: isso depende do teste de quem joga.
 
@@ -193,7 +226,7 @@ PageDown e PageUp pulam entre salas. R reinicia a sala.
 
 - **Tipos de caixa:** pesada (esmaga espinhos), de vidro (quebra na queda), magnética (gruda na parede), balão (cai para cima).
 - **Regras de rotação:** giros limitados por sala, giro de 180°, setores que giram separados, zonas que bloqueiam o giro, momento preservado após o giro.
-- **Cenário:** água que escorre com a gravidade, botões de peso, segunda cor de caixa, zonas onde o giro é proibido, inimigos que também caem. (Plataformas por orientação e comportas já entraram no piloto.)
+- **Cenário:** botões de peso, segunda cor de caixa, zonas onde o giro é proibido, inimigos que também caem. (Plataformas por orientação e comportas já entraram no piloto; corda e água entraram depois dele.)
 - **Rejogabilidade:** cronômetro de speedrun, cenouras colecionáveis em rotas arriscadas, versões difíceis das salas.
 - **Narrativa:** coelho de laboratório fugindo de câmaras de teste, o que justifica o visual estéril e as salas que giram.
 

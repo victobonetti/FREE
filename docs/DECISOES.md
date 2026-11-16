@@ -304,6 +304,101 @@ Quando uma decisão for revertida, não apague a entrada: marque como substituí
 
 ---
 
+## Corda, água e ralo (15/11/2026)
+
+### D47 — Corda como pêndulo
+- **Autor:** Victor (a mecânica e o esboço `componente-corda.jpeg`); Claude propôs a forma de implementar e os detalhes, que Victor não contestou.
+- **Decisão:** a corda só é ativa pendendo do teto; fora disso é desenho. Pendurado, o coelho é um pêndulo de raio fixo em torno da âncora. O giro da sala gira âncora e coelho, a corda fica horizontal e a gravidade faz o arco: a "propulsão" não é um impulso inventado, é a energia da queda.
+- **Detalhes (padrões de Claude):** agarrar é automático no ar; pulo solta em qualquer ponto do arco; bater em parede solta; pendurado antes do giro o coelho fica parado; o giro pendurado é livre e respeita a recarga; espinhos matam no arco; cada corda tem seu comprimento, desenhado na sala.
+- **Descartado:** impulso fixo ao girar (previsível, mas sem balanço nem controle pelo momento de soltar); corda de segmentos com física (instável para puzzles e bots).
+- **Consequência física a lembrar ao desenhar salas:** o coelho nunca sobe acima da altura em que o arco começou. Uma âncora numa parede lisa faz o arco terminar batendo nessa mesma parede; para o coelho passar do ponto mais baixo e subir do outro lado, a âncora precisa estar na ponta de uma saliência.
+
+### D48 — Água em grade de células, com nivelamento por corpo d'água
+- **Autor:** Victor (a mecânica e o esboço `water-mechanics.png`); Claude escolheu a implementação.
+- **Decisão:** células de 4 px que caem e escorrem, mais um passo de nivelamento por corpo d'água ligado.
+- **Motivo do nivelamento:** só com a regra de cair e escorrer, a água formava um monte inclinado como areia e alimentava o ralo a menos de 10 células por segundo. O nivelamento a deixa plana em menos de um segundo e ainda dá vasos comunicantes.
+- **Descartado:** calcular só o nível final de cada poça (a água "teleportaria" depois do giro).
+- **Respostas do Victor:** o ralo fica sempre ligado e a água chega nele depois do giro (um jeito de ativá-lo pode vir depois); a água engolida volta ao reiniciar; o coelho boia e pula a partir da superfície; a água nunca mata; a caixa afunda mais devagar; a porta alagada soma-se à regra dos compartimentos; espinhos submersos matam.
+- **Limite conhecido:** coelho e caixas não deslocam a água.
+
+### D49 — A porta alagada demora meio segundo para destravar
+- **Autor:** Claude, ao testar a sala Água.
+- **Problema:** parado dentro da porta alagada, bastava girar a sala. A água caía, a porta abria no quadro seguinte e o coelho, que ainda estava em cima dela, vencia sem usar o ralo.
+- **Decisão:** a porta só destrava depois de 30 quadros com menos de 30% de água.
+
+### D51 — Água por colunas, com ondas; corda com física; subir e descer *(substitui a implementação de D48 e ajusta D47)*
+- **Autor:** Victor, depois de jogar: a água em células de 4 px ficava irregular e, com pouca água, viam-se bloquinhos andando sozinhos; a corda "se transportava" de uma posição para outra depois do giro; o coelho devia poder subir e descer.
+- **Água:** modelo de colunas de 1 px com altura fracionária, nivelamento por trocas entre colunas em várias distâncias, e uma camada de ondas só de desenho (ver ARQUITETURA).
+- **Tentado e descartado:** vazão com inércia entre colunas (o modelo clássico de "canos"). Com um paredão de água ao lado de colunas secas, que é o que acontece depois de cada giro, a conta ficava caótica; limitada para ficar estável, a água escorria como mel.
+- **Corda:** a forma passa a ser simulada (Verlet). Como ela agora balança depois do giro, só agarra quem **pulou**: sem isso, o coelho caindo depois do giro era fisgado pela corda no meio do caminho.
+- **Subir e descer:** W/S ou setas. Por isso, na corda, W e a seta para cima deixam de ser pulo; quem solta é Espaço, K ou A.
+- **Limite:** presa no chão, a corda desaba num montinho pequeno, pouco visível.
+
+### D52 — Na corda só se desce; dá para agarrar a corda durante um giro no ar
+- **Autor:** Victor.
+- **Decisão:** não dá para subir pela corda, só descer (S ou seta para baixo). A tecla de cima continua sendo pulo, e o pulo solta a corda. Isso desfaz a parte de D51 que trocava W e seta para cima por "subir" e criava uma ação separada para soltar.
+- **Agarrar durante o giro:** quem pula e gira a sala no ar pode agarrar a corda que o giro acabou de pôr no teto. Quem gira do chão continua passando pela corda ao cair (interpretação de Claude: o agarrão vem de um pulo, como em D51; falta o Victor confirmar).
+
+### D53 — Ato introdutório de 20 fases; sem texto por cima das fases
+- **Autor:** Victor pediu a proposta e aprovou; disse que as 20 fases são só o ato introdutório do jogo, pediu mais capricho nas partes de plataforma, e que não haja texto por cima das fases além das instruções necessárias. Claude desenhou as fases.
+- **Texto:** o título no canto ("11 · Corda") foi removido. As dicas restantes foram reduzidas depois, em D54.
+- **Fluxo:** cinco blocos (o básico; girar com intenção; corda; água; tudo junto). Cada bloco apresenta um elemento numa fase curta e depois o usa. O giro subiu da fase 5 para a 3; o giro no ar ganhou uma fase própria e sem perigo (Salto no vazio) antes de Espinhos.
+- **Estado:** 19 das 20 estão feitas, cada uma com bot. Fases novas: Salto no vazio, Prumo, Laço, Maré, Represa, Naufrágio, Mergulho; Toca foi refeita como fase de plataforma. **Faltam:** a fase 20 (Livre), refazer Vertigem com uma corda e ajustar Fuga com corda e água; as duas últimas continuam como eram.
+- **Decisões de desenho que valem lembrar:**
+  - *Salto no vazio:* a diferença entre girar do chão e no ar é a distância até a parede que vira lateral; um vão de 2 tiles junto a ela separa os dois casos.
+  - *Prumo e Laço:* a porta fica onde o arco de raio máximo passa, então "descer até a ponta" é a regra, sem precisar de marcação.
+  - *Represa:* o ralo fica na câmara seca, senão esvaziaria o reservatório antes de a comporta abrir; um degrau no canto impede a caixa de ficar presa contra a parede.
+  - *Mergulho:* quase todo arco termina na parede oposta, então o poço fundo fica ao pé dela.
+- **Ajuste na água:** as trocas a distância passaram a alcançar 128 px, com 3 subpassos. Em salas largas com ralo (Represa), a superfície ficava inclinada uns 20 px em direção a ele.
+
+### D54 — Só há texto para os controles básicos
+- **Autor:** Victor: "quero que o player descubra as mecânicas".
+- **Decisão:** as dicas de tela só ensinam andar, pular e girar (fases 1, 3 e a sala de início). Foram removidas as dicas da corda, de descer pela corda, da água e do giro no ar, e as frases que explicavam as regras (empurrar a caixa, "tudo o que está solto cai").
+
+### D55 — Número do nível no canto, só em desenvolvimento
+- **Autor:** Victor, para saber em que nível está ao testar.
+- **Decisão:** o número do nível (só o número) aparece no canto superior esquerdo quando `OS.is_debug_build()` é verdadeiro (rodando pelo editor ou por `run.ps1`). Nas versões exportadas, que são de release, não aparece. A sala de início não tem número.
+
+### D56 — A recarga do giro passa a ser de 5 s
+- **Autor:** Victor ("aumente o tempo do flip para 5s"), para todas as fases.
+- **Decisão:** `ROT_COOLDOWN` de 36 para 284 quadros; com a animação, 300 (5 s). Substitui os 0,87 s de D09. A barra e o som de carga acompanham sozinhos.
+- **Consequência:** as fases com dois giros pedem pelo menos 5 s entre eles, e o coelho tem de esperar ou fazer outra coisa nesse tempo. Os testes esperam até 400 quadros pela recarga.
+
+### D57 — Limitador
+- **Autor:** Victor, nome e regra; Claude, os detalhes.
+- **Regra:** em salas com `limiter: true`, o giro feito pelo jogador é desfeito sozinho quando a recarga de 5 s termina. Uma barra vermelha paralela à branca mostra o tempo que falta. Ao desfazer, toca um som distorcido.
+- **Detalhes de Claude:** o saldo de giros é contado a partir do estado inicial da sala (o `start_rot` não conta); o giro desfeito reinicia a recarga; um giro pedido nos últimos quadros é descartado.
+- **Uso:** só na Maré (fase 13).
+
+### D58 — Ajustes de fases pedidos por Victor (15/11/2026)
+- **Comporta (4) e Toca (6):** passam a permitir o giro, com espinhos no teto e logo acima da porta: girar do chão é cair neles.
+- **Salto no vazio (8):** a plataforma ao lado da porta foi retirada, a porta virou 1:1 (2×2 tiles) e flutua, e há espinhos nas paredes da esquerda, da direita e no teto. Só se acerta a porta girando no ar perto do ápice do pulo.
+- **Corda e Laço (10 e 12):** removidas. O Prumo (agora 10) é a primeira fase da corda.
+- **Prumo:** espinhos também em cima e à direita, plataforma flutuante retirada, e o coelho começa em pé na parede que era a da esquerda (`start_rot` −1). A corda está deitada; é preciso pular, girar no ar e agarrá-la enquanto cai.
+- **Maré (13):** ganha o limitador; metade das plataformas sai (as de baixo); a água sobe até a primeira que sobrou. A solução cabe em 2,8 s dos 5.
+- **Mergulho (16):** a porta ganha um compartimento e o coelho começa num palco com a caixa, antes da corda.
+
+### D59 — Represa e Naufrágio refeitas
+- **Autor:** Victor: não havia desafio, só esperar a água escoar; manter o giro. Claude redesenhou.
+- **Princípio:** nada de ralo para esperar. A água é movida pelo giro: quem a derrama é o coelho.
+- **Represa (14):** a porta está no fundo de uma cuia alagada. Girar no sentido horário derrama a água, que corre para a parede da direita; voltar a faz cair na cuia da direita, e a porta fica seca. O fundo da cuia da porta tem espinhos.
+- **Naufrágio (15):** duas caixas têm de ir para compartimentos do outro lado de um poço de espinhos cheio d'água. Empurrá-las é perdê-las. Girando no sentido horário, o coelho e as caixas caem rente à parede, passam do poço e se empilham; ao voltar, as caixas caem nos compartimentos. A porta fica do lado de lá, e a volta é a nado.
+- **Detalhe que custou caro:** a água que cai nos compartimentos fica lá, então o poço perde uns 10% e quem cai nele afunda uns 20 px abaixo da superfície; por isso o fundo do poço é fundo e há um degrau para sair.
+
+### D60 — Recarga e limitador de 2,5 s; sem Salto no vazio; limitador na Fuga; espinhos sobre plataforma
+- **Autor:** Victor.
+- **Tempo:** `ROT_COOLDOWN` de 284 para 134 quadros; com a animação, 150 (2,5 s). Vale para a recarga e para o limitador (substitui D56 e o tempo de D57).
+- **Salto no vazio:** removida. As fases passam a ser 16 (a Fuga é a 16).
+- **Maré:** a água sobe em 1,1 s, então só cabem duas plataformas e a sala é mais baixa (25 linhas, porta no alto, à esquerda, sobre a segunda plataforma). O bot resolve em 1,7 s dos 2,5.
+- **Fuga:** ganha o limitador, e a etapa de cima foi refeita porque um giro de 180° (a caixa jogada no teto) é impossível com o giro desfeito sozinho a cada 2,5 s. Agora a porta está na parede da direita, alta demais; o coelho vai até o pé dela e gira no sentido horário: a parede vira chão por 2,5 s e ele sobe por ela, pulando espinhos, até a porta (0,9 s no bot). A segunda caixa e o compartimento do teto saíram. As etapas de baixo continuam, e o limitador faz o papel do giro de volta: a caixa cai no buraco "a" quando o giro é desfeito.
+- **Espinhos acima das portas:** estavam como `v` soltos no ar, apontando para a porta. Agora são uma plataforma pequena e suspensa exatamente acima da porta, com espinhos para cima (Comporta, Toca e Fuga). Os espinhos presos ao teto continuam apontando para baixo.
+
+### D50 — As salas Corda e Água
+- **Autor:** Claude, a partir dos dois esboços.
+- **Corda:** segue o esboço (porta no meio, espinhos dos dois lados dela, duas cordas, sala começando com as cordas no chão). A sala é larga (36×22) porque só assim uma corda presa perto do canto, agarrada pela ponta, faz um arco que passa pela porta central; em sala quadrada não fecha. O arco chega pela lateral da porta, que é o lado sem espinhos. Sem compartimento (`door_open`).
+- **Água:** segue os três quadros do esboço, com uma diferença: o ralo fica num nicho cavado na parede, que vira um poço no chão depois do giro, em vez de numa prateleira com mureta. Com a mureta do esboço, a água parava de escoar ao chegar na altura dela e sobrava demais para destravar a porta. Sem compartimento (`door_open`).
+- **Ainda não validado por quem joga:** a sensação do arco, a velocidade da água e do ralo (a sala seca em 12 s; bastam uns 5 s para a porta destravar), e a posição dos dois níveis depois da "Fuga".
+
 ## Redesenho das salas (decidido em 15/11/2026, ainda não implementado)
 
 Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa vazia de 20×20, cada uma se resolve com um ou dois giros, e o coelho quase não usa o pulo.

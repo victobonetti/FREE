@@ -235,6 +235,97 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 
 ---
 
+## Rodada 17 — Volume, bug da tela de início, música do título (15/11/2026)
+
+**Entrada do Victor:** música mais alta e efeitos mais baixos (principalmente o portal); o coelho aparecia fora da janela na tela de início (`bug-start-screen.png`); `free-title.mp3` para a tela de título, em loop, parando ao apertar Enter; um script para rodar o jogo.
+
+**Feito:**
+- Música de −9 para −4 dB; portal de −11 para −19 dB; carga, "plim", pulo, morte e comportas 3 dB mais baixos.
+- `intro.gd`: o coelho que cai no buraco é recortado na borda de baixo da janela.
+- `music/free-title.mp3` toca em loop na tela de início e é cortada na hora do Enter (`_stop_music`).
+- `run.ps1` na raiz: roda o jogo (`-Console` mostra o console, `-Editor` abre o editor).
+
+**Ainda não validado por quem joga:** o novo equilíbrio de volumes.
+
+---
+
+## Rodada 18 — Corda, água e ralo (15/11/2026)
+
+**Entrada do Victor:** as duas mecânicas, os esboços `componente-corda.jpeg` e `water-mechanics.png`, e as respostas às perguntas sobre a água. As perguntas sobre a corda ficaram sem resposta; valeram os padrões propostos (D47).
+
+**Feito (D47 a D50):**
+- Corda: pêndulo em `rabbit.gd`, leitura e desenho em `room.gd`, símbolos `|` e `-`.
+- Água: grade de células com nivelamento, empuxo no coelho, caixa mais lenta, porta alagada, ralo; símbolos `~` e `o`.
+- Níveis 11 (Corda) e 12 (Água), com dica de texto. Sons novos: agarrar a corda e cair na água.
+- Conferência de porta e espinhos a cada pixel quando o coelho está rápido.
+- A dica de texto some depois de 8 s nas salas altas, onde ficava por cima do chão.
+- Testes de mecânica para corda e água, e um bot para cada sala nova. Capturas de tela conferidas.
+
+**Achado no caminho:** a água sem nivelamento se comportava como areia (D48); o atalho de girar de dentro da porta alagada (D49).
+
+**Ainda não validado por quem joga:** tudo desta rodada.
+
+**Atenção:** as versões em `build/` são anteriores a esta rodada.
+
+---
+
+## Rodada 19 — Água fluida, corda com física, subir e descer (15/11/2026)
+
+**Entrada do Victor, depois de jogar:** o coelho deve subir e descer na corda; a água estava irregular e em bloquinhos, ele a quer fluida e pixel a pixel; a corda não devia "se transportar" depois do giro; como pular direto para os últimos níveis; os níveis 11 e 12 ficam onde estão por enquanto.
+
+**Feito (D51):**
+- Água reescrita: colunas de 1 px, nivelamento estável, ondas na superfície, cascatas.
+- Corda com física (Verlet); só agarra quem pulou; subir e descer com W/S ou setas; Espaço solta.
+- `.\run.ps1 -Level 11` abre direto num nível (argumento `--level=N` do jogo).
+- Testes novos para subir e descer, corda caindo, e superfície da água plana. Capturas conferidas.
+
+**Ainda não validado por quem joga:** a nova água, a queda da corda e a subida.
+
+---
+
+## Rodada 20 — Ato introdutório: 19 de 20 fases; música da queda (15/11/2026)
+
+**Entrada do Victor:** só descer na corda e a tecla de cima continua pulando; agarrar a corda durante o giro; proposta de 20 fases, depois aprovada com o pedido de mais plataforma e nenhum texto por cima das fases; `fallinggg.mp3` no momento em que o coelho cai, na abertura.
+
+**Feito (D52, D53):**
+- Corda: só desce; pulo solta; quem pula e gira no ar agarra a corda que o giro pôs no teto.
+- Título das fases removido; nova ordem das fases.
+- Fases novas: Salto no vazio (8), Prumo (11), Laço (12), Maré (15), Represa (16), Naufrágio (17), Mergulho (18). Toca (6) refeita.
+- Música da queda na abertura.
+- Um bot por fase nova, e a água nivelando mais depressa em salas largas.
+
+**Falta:** fase 20 (Livre); Vertigem com corda; Fuga com corda e água.
+
+**Ainda não validado por quem joga:** todas as fases novas e a nova ordem.
+
+---
+
+## Rodada 21 — Recarga de 5 s, limitador e fases revistas (15/11/2026)
+
+**Entrada do Victor:** recarga do giro de 5 s em todo o jogo; Comporta e Toca com giro e espinhos; Salto no vazio sem a plataforma, porta 1:1 e espinhos em três paredes; remover Corda e Laço; Prumo com espinhos, sem a plataforma e começando na parede da esquerda; a mecânica nova "limitador" na Maré, com metade das plataformas e uma barra vermelha; Represa e Naufrágio sem a espera do ralo; Mergulho mais complexo.
+
+**Feito (D56 a D59):**
+- Recarga de 5 s; limitador (barra vermelha, som distorcido).
+- Fases 4, 6, 8, 10 (Prumo) e 13 (Maré) ajustadas; Corda e Laço removidas; numeração: 17 fases.
+- Represa e Naufrágio redesenhadas em torno de despejar a água e carregar caixas pela gravidade; Mergulho ganha caixa e compartimento.
+- Um bot por fase, com os caminhos errados também testados (283 verificações).
+
+**Ainda não validado por quem joga:** o ritmo com 5 s de recarga, a Maré em 5 s, e a leitura da Represa (despejar a água) e do Naufrágio (carregar caixas girando).
+
+**Falta (da proposta de 20 fases):** fase 20 (Livre), Vertigem com corda, Fuga com corda e água.
+
+---
+
+## Rodada 22 — 2,5 s, Fuga com limitador, espinhos acima das portas (15/11/2026)
+
+**Entrada do Victor:** recarga e limitador de 5 s para 2,5 s; limitador também na última fase; remover a fase 8; os espinhos acima das portas estavam soltos no ar, apontando para a porta: pôr uma plataforma pequena suspensa com espinhos para cima.
+
+**Feito (D60):** 2,5 s; Salto no vazio removida (16 fases); Maré e Fuga refeitas para caber no tempo; plataformas de espinhos acima das portas da Comporta, da Toca e da Fuga. Todos os bots passam.
+
+**Ainda não validado por quem joga:** tudo isto, em especial a Maré e a subida da Fuga em 2,5 s.
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |
@@ -248,6 +339,7 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 | Exportar para amigos testarem | versões geradas (rodada 15); falta publicar no itch.io |
 | Tema e narrativa (laboratório?) | em aberto |
 | Nome do jogo | "Free" (D46) |
-| Música da abertura | Victor vai compor; hoje a abertura só tem efeitos |
+| Música da abertura | feita (rodada 17): `free-title.mp3` na tela de início |
+| Corda e água | feitas (rodada 18); aguardando teste. Em aberto: respostas do Victor sobre a corda (D47) e um jeito de ativar o ralo |
 | Exportar de novo para `build/` | pendente desde a rodada 16 |
 | Controle de versão (git) | a pasta não é um repositório |

@@ -10,8 +10,12 @@ const IntroScript := preload("res://scripts/intro.gd")
 const BAR_SIZE := Vector2(40, 3)
 const BAR_POS := Vector2(320 - 40 - 6, 180 - 3 - 6)
 const MIX_RATE := 22050
-const MUSIC_DB := -9.0       # volume da música; abaixo dos efeitos para eles continuarem audíveis
+const MUSIC_DB := -4.0       # volume da música
 const MUSIC_OFF_DB := -40.0
+const HINT_FREE_HEIGHT := 150   # salas mais altas que isto (px) ficam por baixo do texto de dica
+const HINT_SECONDS := 8.0       # nelas, a dica some depois deste tempo
+const TITLE_MUSIC := "res://music/free-title.mp3"
+const FALL_MUSIC := "res://music/fallinggg.mp3"   # toca enquanto o coelho cai, na abertura
 
 var room: Node2D
 var intro: Node2D   # tela de início / cutscene, quando ativa
@@ -21,9 +25,13 @@ var finished := false
 var fade_rect: ColorRect
 var title: Label
 var hint: Label
+var hint_tween: Tween
 var end_label: Label
 var bar_bg: ColorRect
 var bar_fill: ColorRect
+var limit_bg: ColorRect      # barra vermelha do limitador, paralela à do giro
+var limit_fill: ColorRect
+var limiter_player: AudioStreamPlayer
 var charge_player: AudioStreamPlayer
 var ready_player: AudioStreamPlayer
 var jump_player: AudioStreamPlayer
@@ -39,6 +47,8 @@ var gate_close_player: AudioStreamPlayer
 var platform_player: AudioStreamPlayer
 var sensor_on_player: AudioStreamPlayer
 var sensor_off_player: AudioStreamPlayer
+var splash_player: AudioStreamPlayer
+var rope_player: AudioStreamPlayer
 var prev_lock := 0
 
 
@@ -47,6 +57,10 @@ func _ready() -> void:
 	_make_ui()
 	_make_audio()
 	_show_intro()
+	# atalho de desenvolvimento: "-- --level=11" na linha de comando abre direto no nível 11
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--level="):
+			_load_room(int(a.trim_prefix("--level=")) - 1)
 
 
 func _make_ui() -> void:
@@ -76,6 +90,16 @@ func _make_ui() -> void:
 	bar_fill.position = BAR_POS
 	bar_fill.size = BAR_SIZE
 	layer.add_child(bar_fill)
+	limit_bg = ColorRect.new()
+	limit_bg.color = Color(1, 0.2, 0.2, 0.18)
+	limit_bg.position = BAR_POS + Vector2(0, -5)
+	limit_bg.size = BAR_SIZE
+	layer.add_child(limit_bg)
+	limit_fill = ColorRect.new()
+	limit_fill.color = Color("e8403c")
+	limit_fill.position = BAR_POS + Vector2(0, -5)
+	limit_fill.size = BAR_SIZE
+	layer.add_child(limit_fill)
 	end_label = Label.new()
 	end_label.text = "fim do piloto\n\npressione pular para voltar ao início"
 	end_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -97,26 +121,26 @@ func _make_ui() -> void:
 func _make_audio() -> void:
 	charge_player = AudioStreamPlayer.new()
 	charge_player.stream = _make_charge_tone()
-	charge_player.volume_db = -22.0
+	charge_player.volume_db = -25.0
 	add_child(charge_player)
 	ready_player = AudioStreamPlayer.new()
 	ready_player.stream = _make_ready_blip()
-	ready_player.volume_db = -14.0
+	ready_player.volume_db = -17.0
 	add_child(ready_player)
 	music = AudioStreamPlayer.new()
 	music.volume_db = MUSIC_OFF_DB
 	add_child(music)
 	jump_player = AudioStreamPlayer.new()
 	jump_player.stream = _make_jump_sound()
-	jump_player.volume_db = -16.0
+	jump_player.volume_db = -19.0
 	add_child(jump_player)
 	death_player = AudioStreamPlayer.new()
 	death_player.stream = _make_death_sound()
-	death_player.volume_db = -12.0
+	death_player.volume_db = -15.0
 	add_child(death_player)
 	win_player = AudioStreamPlayer.new()
 	win_player.stream = _make_win_sound()
-	win_player.volume_db = -11.0
+	win_player.volume_db = -19.0
 	add_child(win_player)
 	thud_player = AudioStreamPlayer.new()
 	thud_player.stream = _make_thud_sound()
@@ -127,11 +151,11 @@ func _make_audio() -> void:
 	add_child(thud2_player)
 	gate_open_player = AudioStreamPlayer.new()
 	gate_open_player.stream = _make_gate_sound(true)
-	gate_open_player.volume_db = -13.0
+	gate_open_player.volume_db = -16.0
 	add_child(gate_open_player)
 	gate_close_player = AudioStreamPlayer.new()
 	gate_close_player.stream = _make_gate_sound(false)
-	gate_close_player.volume_db = -13.0
+	gate_close_player.volume_db = -16.0
 	add_child(gate_close_player)
 	platform_player = AudioStreamPlayer.new()
 	platform_player.stream = _make_platform_sound()
@@ -145,6 +169,18 @@ func _make_audio() -> void:
 	sensor_off_player.stream = _make_sensor_sound(false)
 	sensor_off_player.volume_db = -19.0
 	add_child(sensor_off_player)
+	limiter_player = AudioStreamPlayer.new()
+	limiter_player.stream = _make_limiter_sound()
+	limiter_player.volume_db = -13.0
+	add_child(limiter_player)
+	splash_player = AudioStreamPlayer.new()
+	splash_player.stream = _make_splash_sound()
+	splash_player.volume_db = -17.0
+	add_child(splash_player)
+	rope_player = AudioStreamPlayer.new()
+	rope_player.stream = _make_rope_sound()
+	rope_player.volume_db = -18.0
+	add_child(rope_player)
 
 
 ## Portal: sem melodia. Uma varredura grave que sobe com modulação de frequência, ruído
@@ -216,6 +252,63 @@ func _make_platform_sound() -> AudioStreamWAV:
 		var t := float(i) / float(MIX_RATE)
 		var env := exp(-t * 45.0)
 		var v := env * (0.5 * sin(TAU * 1760.0 * t) + 0.3 * sin(TAU * 2637.0 * t) + 0.2 * sin(TAU * 3520.0 * t))
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 30000.0))
+	return _wav(data)
+
+
+## Limitador desfazendo o giro: uma varredura grave que despenca, quebrada em degraus de
+## amostragem e saturada, com rajadas de ruído: um som deliberadamente estragado.
+func _make_limiter_sound() -> AudioStreamWAV:
+	var n := int(MIX_RATE * 0.55)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var phase := 0.0
+	var held := 0.0
+	for i in n:
+		var t := float(i) / float(n)
+		var f := lerpf(520.0, 38.0, pow(t, 0.55)) * (1.0 + 0.25 * sin(t * 90.0))
+		phase += TAU * f / float(MIX_RATE)
+		if i % 5 == 0:  # "sample and hold": reduz a taxa de amostragem
+			var saw := fmod(phase / TAU, 1.0) * 2.0 - 1.0
+			var burst := 1.0 if fmod(t * 14.0, 1.0) < 0.3 else 0.0
+			held = tanh(3.5 * saw + 1.2 * rng.randf_range(-1.0, 1.0) * burst)
+			held = roundf(held * 4.0) / 4.0  # só 9 níveis
+		var env := minf(t * 60.0, 1.0) * (1.0 - smoothstep(0.7, 1.0, t))
+		data.encode_s16(i * 2, int(clampf(held * env, -1.0, 1.0) * 30000.0))
+	return _wav(data)
+
+
+## Cair na água: ruído que começa aberto e fecha rápido, com uma gota grave por baixo.
+func _make_splash_sound() -> AudioStreamWAV:
+	var n := int(MIX_RATE * 0.3)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var lp := 0.0
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / float(n)
+		lp += (rng.randf_range(-1.0, 1.0) - lp) * lerpf(0.5, 0.04, sqrt(t))
+		phase += TAU * lerpf(260.0, 90.0, sqrt(t)) / float(MIX_RATE)
+		var v := lp * 1.6 * exp(-t * 6.0) + 0.5 * sin(phase) * exp(-t * 14.0)
+		data.encode_s16(i * 2, int(clampf(v * minf(t * 80.0, 1.0), -1.0, 1.0) * 30000.0))
+	return _wav(data)
+
+
+## Agarrar a corda: um estalo curto de fibra esticando, grave, com um leve tremor.
+func _make_rope_sound() -> AudioStreamWAV:
+	var n := int(MIX_RATE * 0.16)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / float(n)
+		phase += TAU * (lerpf(210.0, 150.0, t) + 14.0 * sin(TAU * 38.0 * t * 0.16)) / float(MIX_RATE)
+		var env := minf(t * 40.0, 1.0) * exp(-t * 7.0)
+		var v := env * (0.7 * sin(phase) + 0.3 * sin(3.0 * phase))
 		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 30000.0))
 	return _wav(data)
 
@@ -294,7 +387,35 @@ func _play_music(path: String) -> void:
 		music_tween.tween_property(music, "volume_db", MUSIC_DB, 1.5)
 
 
+## Interrompe a música na hora, sem fade.
+func _stop_music() -> void:
+	if music_tween != null:
+		music_tween.kill()
+	music_path = ""
+	music.stop()
+	music.volume_db = MUSIC_OFF_DB
+
+
+## Começa uma faixa na hora, já no volume cheio (sem o fade de _play_music).
+func _start_music_now(path: String) -> void:
+	if not ResourceLoader.exists(path):
+		return
+	if music_tween != null:
+		music_tween.kill()
+	var s = load(path)
+	if "loop" in s:
+		s.loop = true
+	music_path = path
+	music.stop()
+	music.stream = s
+	music.volume_db = MUSIC_DB
+	music.play()
+
+
 func _play_sfx(sfx_name: String) -> void:
+	if sfx_name == "falling":
+		_start_music_now(FALL_MUSIC)
+		return
 	if sfx_name == "gate_open":
 		gate_open_player.play()
 		return
@@ -313,6 +434,17 @@ func _play_sfx(sfx_name: String) -> void:
 		return
 	if sfx_name == "win":
 		win_player.play()
+		return
+	if sfx_name == "limiter":
+		limiter_player.play()
+		return
+	if sfx_name == "splash":
+		splash_player.pitch_scale = randf_range(0.92, 1.08)
+		splash_player.play()
+		return
+	if sfx_name == "rope":
+		rope_player.pitch_scale = randf_range(0.95, 1.05)
+		rope_player.play()
 		return
 	if sfx_name == "jump":
 		jump_player.pitch_scale = randf_range(0.94, 1.08)  # varia um pouco a cada pulo
@@ -404,6 +536,11 @@ func _make_ready_blip() -> AudioStreamWAV:
 
 
 func _update_rotation_hud() -> void:
+	var limited: bool = room != null and room.def.get("limiter", false) and room.limit_t > 0 and not finished
+	limit_bg.visible = limited
+	limit_fill.visible = limited
+	if limited:
+		limit_fill.size.x = maxf(roundf(BAR_SIZE.x * room.limiter_ratio()), 0.0)
 	var active: bool = room != null and room.allow_rotate and not finished
 	bar_bg.visible = active
 	bar_fill.visible = active
@@ -430,7 +567,7 @@ func _update_rotation_hud() -> void:
 
 # ---------------------------------------------------------------- salas
 
-## Tela de início e cutscene de abertura. Só efeitos sonoros; sem música.
+## Tela de início e cutscene de abertura. A música do título toca em loop até apertarem Enter.
 func _show_intro() -> void:
 	_clear_scene()
 	index = -1
@@ -438,9 +575,11 @@ func _show_intro() -> void:
 	title.text = ""
 	hint.text = ""
 	end_label.visible = false
-	_play_music("")
+	_stop_music()
+	_play_music(TITLE_MUSIC)
 	intro = IntroScript.new()
 	add_child(intro)
+	intro.started.connect(_stop_music)
 	intro.sfx.connect(_play_sfx)
 	intro.impact.connect(_on_impact)
 	intro.finished.connect(_load_start_room)
@@ -477,12 +616,20 @@ func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
 	r.impact.connect(_on_impact)
 	room = r
 	prev_lock = 0
-	title.text = title_text
+	# Só em desenvolvimento (build de depuração: editor, run.ps1): o número do nível no canto.
+	# Nas versões exportadas não há texto nenhum além das dicas de controle.
+	title.text = str(i + 1) if OS.is_debug_build() and i >= 0 else ""
 	hint.text = def.get("hint", "")
 	_play_music(def.get("music", Levels.DEFAULT_MUSIC))
 	hint.modulate.a = 0.0
+	if hint_tween != null:
+		hint_tween.kill()
 	if hint.text != "":
-		create_tween().tween_property(hint, "modulate:a", 1.0, 0.6).set_delay(0.3)
+		hint_tween = create_tween()
+		hint_tween.tween_property(hint, "modulate:a", 1.0, 0.6).set_delay(0.3)
+		if r.ph > HINT_FREE_HEIGHT:
+			# sala alta: a dica fica por cima do chão; some depois de dar tempo de ler
+			hint_tween.tween_property(hint, "modulate:a", 0.0, 1.2).set_delay(HINT_SECONDS)
 	end_label.visible = false
 	finished = false
 
@@ -547,5 +694,6 @@ func _tick() -> void:
 		"move": Input.get_axis("move_left", "move_right"),
 		"jump_pressed": Input.is_action_just_pressed("jump"),
 		"jump_held": Input.is_action_pressed("jump"),
+		"climb": Input.get_action_strength("climb_down"),
 		"rotate": rot,
 	})

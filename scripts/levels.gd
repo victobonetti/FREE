@@ -12,41 +12,22 @@ extends RefCounted
 ##   = } _ {  plataforma por orientação, com a seta para cima, direita, baixo, esquerda;
 ##            só é sólida quando a seta aponta para cima na tela
 ##   ^ > v <  espinhos (a ponta aponta para a direção do símbolo)
+##   | -  corda: uma sequência reta de "|" (ou de "-") é uma corda esticada; a ponta encostada
+##        numa parede é a âncora. Só dá para agarrar a corda que pende do teto.
+##   ~  água (o tile começa cheio; ao carregar, a água escorre até assentar)
+##   o  ralo: engole aos poucos a água que encosta nele
 ##
 ## "start_rot": quantos giros de 90° (horário > 0) aplicar ao desenho ao carregar.
 ## Permite desenhar a sala na orientação em que ela é resolvida e começar girada.
 ## Atenção: o que está solto precisa estar apoiado na orientação inicial.
 ## "rotate": false desliga o giro.
-## "hint" (opcional): texto de ajuda mostrado embaixo da tela durante a sala.
+## "limiter": true: o giro é desfeito sozinho quando a recarga (2,5 s) termina.
+## "hint" (opcional): só os controles básicos (andar, pular, girar). As mecânicas o jogador descobre.
 ## "door_open" (opcional): true deixa a porta sempre aberta, sem compartimento.
 ## "music" (opcional): faixa da sala; sem o campo, toca DEFAULT_MUSIC. Se duas salas
 ## seguidas usam a mesma faixa, ela continua sem reiniciar.
 
 const DEFAULT_MUSIC := "res://music/first-levels-theme.mp3"
-
-const TOCA := {
-		# Corredor sem giro. Pular o bloco; caixa no buraco "a" abre a comporta; pulos curtos
-		# entre pilares sobre espinhos; segunda caixa no buraco "S" abre a porta.
-		"name": "Toca",
-		"rotate": false,
-		"start_rot": 0,
-		"rows": [
-			"##############################################",
-			"#....................1.......................#",
-			"#....................1.......................#",
-			"#....................1.......................#",
-			"#....................1.......................#",
-			"#....................1.......................#",
-			"#....................1.......................#",
-			"#....................1.....................DD#",
-			"#.....###............1.....................DD#",
-			"#.PP..###...BB.......1...##..##......BB....DD#",
-			"#.PP..###...BB.......1.^^##^^##^^....BB....DD#",
-			"#################aa######################SS###",
-			"#################aa######################SS###",
-			"##############################################",
-		],
-}
 
 const VERTIGEM := {
 		# Desenhada na orientação em que a 1ª etapa se resolve; começa girada (alta), como o
@@ -140,59 +121,62 @@ const ESPINHOS := {
 }
 
 const FUGA := {
-		# Sala alta, em duas etapas. Embaixo: pular e girar no ar para cruzar os espinhos;
-		# a caixa escorrega até o buraco "a" e abre a comporta do teto. Volta pelo ar, e a
-		# escadaria de plataformas (só sólidas nesta orientação, atravessáveis durante os
-		# voos) sobe até a comporta. Em cima: a segunda caixa está presa entre dois tocos;
-		# virar a sala de cabeça para baixo a joga no compartimento do teto, e o coelho
-		# atravessa o teto (agora chão) com espinhos até a porta.
-		"name": "Fuga",
-		"rotate": true,
-		"start_rot": 0,
-		"rows": [
-			"################################",
-			"#............#SS#...vvv.DD.....#",
-			"#............#SS#.......DD.....#",
-			"#.......................DD.....#",
-			"#.......................DD.....#",
-			"#..............................#",
-			"#..............................#",
-			"#..............................#",
-			"#..............................#",
-			"#..............................#",
-			"#..............................#",
-			"#..............................#",
-			"#..............................#",
-			"#..............................#",
-			"#............#BB#..............#",
-			"#............#BB#..............#",
-			"#111############################",
-			"#..............................#",
-			"#..............................#",
-			"#===...........................#",
-			"#..............................#",
-			"#...===........................#",
-			"#..............................#",
-			"#..............................#",
-			"#......===...................{<#",
-			"#............................{<#",
-			"#............................{<#",
-			"#...===......................{<#",
-			"#............................{<#",
-			"#............................{<#",
-			"#===...PPBB...................<#",
-			"#......PPBB.^^^^^^^^^^^^^^^...<#",
-			"#############################aa#",
-			"#############################aa#",
-			"################################",
-			"################################",
-		],
+	# Sala alta, com o limitador: cada giro dura 2,5 s e é desfeito sozinho. Embaixo: pular e
+	# girar no ar para cruzar os espinhos; ao voltar, a caixa cai no buraco "a" e abre a
+	# comporta do teto. Volta pelo ar, e a escadaria de plataformas (só sólidas sem giro)
+	# sobe até a comporta. Em cima: a porta está na parede da direita, alta demais. Dá para
+	# chegar ao pé da parede e girar no sentido horário: a parede vira chão por 2,5 s, tempo
+	# de subir por ela, pulando os espinhos, até a porta; o teto é de espinhos e há uma
+	# plataforma de espinhos suspensa acima da porta.
+	"name": "Fuga",
+	"door_open": true,
+	"rotate": true,
+	"limiter": true,
+	"start_rot": 0,
+	"rows": [
+		"################################",
+		"#vvvvvvvvvvvvvvvvvvvvvvvvvvvvvv#",
+		"#..............................#",
+		"#..............................#",
+		"#..............................#",
+		"#..........................^^^^#",
+		"#..........................#####",
+		"#..........................DDDD#",
+		"#..........................DDDD#",
+		"#..............................#",
+		"#..............................#",
+		"#.............................<#",
+		"#.............................<#",
+		"#..............................#",
+		"#..............................#",
+		"#..............................#",
+		"#111############################",
+		"#..............................#",
+		"#..............................#",
+		"#===...........................#",
+		"#..............................#",
+		"#...===........................#",
+		"#..............................#",
+		"#..............................#",
+		"#......===...................{<#",
+		"#............................{<#",
+		"#............................{<#",
+		"#...===......................{<#",
+		"#............................{<#",
+		"#............................{<#",
+		"#===...PPBB...................<#",
+		"#......PPBB.^^^^^^^^^^^^^^^...<#",
+		"#############################aa#",
+		"#############################aa#",
+		"################################",
+		"################################",
+	],
 }
 
 const PASSOS := {
 	# A primeira sala: andar, empurrar a caixa para o buraco, entrar na porta.
 	"name": "Primeiros passos",
-	"hint": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço\nEmpurre a caixa até o buraco para abrir a porta",
+	"hint": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço",
 	"rotate": false,
 	"start_rot": 0,
 	"rows": [
@@ -234,16 +218,17 @@ const DEGRAUS := {
 
 const COMPORTA := {
 	# Apresenta a comporta: a caixa no buraco "a" abre a passagem. Depois, um par de
-	# espinhos para pular e a segunda caixa no buraco da porta.
+	# espinhos para pular e a segunda caixa no buraco da porta. Dá para girar, mas o teto e o
+	# vão acima da porta são de espinhos: girar do chão é cair neles.
 	"name": "Comporta",
-	"rotate": false,
+	"rotate": true,
 	"start_rot": 0,
 	"rows": [
 		"##############################",
+		"#vvvvvvvvvvvv1vvvvvvvvvvvvvvv#",
 		"#............1...............#",
-		"#............1...............#",
-		"#............1...............#",
-		"#............1...............#",
+		"#............1.............^^#",
+		"#............1.............###",
 		"#............1.............DD#",
 		"#............1.............DD#",
 		"#PP..BB......1.......BB....DD#",
@@ -258,7 +243,7 @@ const GIRO := {
 	# O primeiro giro. A caixa vai fácil para o buraco, mas a porta está deitada na parede
 	# da direita, alta demais. Girando no sentido horário, essa parede vira chão.
 	"name": "Giro",
-	"hint": "Q e E giram a sala (no controle, LB e RB)\nTudo o que está solto cai para o novo chão",
+	"hint": "Q e E giram a sala (no controle, LB e RB)",
 	"rotate": true,
 	"start_rot": 0,
 	"rows": [
@@ -307,11 +292,255 @@ const SETAS := {
 	],
 }
 
+const AGUA := {
+	# Apresenta a água e o ralo (esboço water-mechanics.png). A água cobre boa parte da porta e
+	# a bloqueia. O ralo fica num nicho alto da parede esquerda, seco. Girando no sentido
+	# anti-horário essa parede vira chão, o nicho vira um poço e a água escorre para o ralo.
+	# Depois de escoar o bastante, girar de volta: a porta fica livre.
+	"name": "Água",
+	"door_open": true,
+	"rotate": true,
+	"start_rot": 0,
+	"rows": [
+		"########################",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"#......................#",
+		"#o.....................#",
+		"#......................#",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"###....................#",
+		"###.................DD.#",
+		"###~~~~~~~~~~~~~~~~~DD~#",
+		"###~~PP~~~~~~~~~~~~~DD~#",
+		"###~~PP~~~~~~~~~~~~~DD~#",
+		"########################",
+	],
+}
+
+const TOCA := {
+	# Respiro de plataforma: pilares de alturas diferentes sobre espinhos; no fim, a caixa no
+	# buraco abre a porta. Dá para girar, mas o teto é de espinhos e há uma plataforma de espinhos suspensa acima da porta.
+	"name": "Toca",
+	"rotate": true,
+	"start_rot": 0,
+	"rows": [
+		"######################################",
+		"#vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv#",
+		"#....................................#",
+		"#....................................#",
+		"#....................................#",
+		"#..................................^^#",
+		"#..................................###",
+		"#..................................DD#",
+		"#..........##.........###..........DD#",
+		"#.PP..##...##....##...###...BB.....DD#",
+		"#.PP..##^^^##^^^^##^^^###...BB.....DD#",
+		"################################SS####",
+		"################################SS####",
+		"######################################",
+	],
+}
+
+const PRUMO := {
+	# Descer pela corda escolhe o arco. Só a parede da esquerda é segura (o resto tem
+	# espinhos), e o coelho começa em pé nela, com a sala girada: a corda, presa no teto
+	# desenhado, está deitada. Pular, girar a sala no ar e agarrar a corda que cai; descer
+	# até a ponta e girar de novo: o arco passa pela porta.
+	"name": "Prumo",
+	"door_open": true,
+	"rotate": true,
+	"start_rot": -1,
+	"rows": [
+		"####################################",
+		"#vvv|vvvvvvvvvvvvvvvvvvvvvvvvvvvvv<#",
+		"#...|.............................<#",
+		"#PP.|.............................<#",
+		"#PP.|.............................<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#...|..............DD.............<#",
+		"#...|..............DD.............<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#...|.............................<#",
+		"#.................................<#",
+		"#.................................<#",
+		"#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#",
+		"####################################",
+	],
+}
+
+const MARE := {
+	# A água como elevador, com o limitador: o giro é desfeito sozinho quando a recarga
+	# termina (barra vermelha). Desenhada em pé; começa deitada, com a água espalhada pelo
+	# chão. Girando, a sala vira um poço estreito e a água sobe; só as duas últimas
+	# plataformas ficaram, então é a água que leva o coelho até a primeira delas. Quando o
+	# limitador desfaz o giro, a água se espalha de novo e tudo cai.
+	"name": "Maré",
+	"door_open": true,
+	"rotate": true,
+	"limiter": true,
+	"start_rot": -1,
+	"rows": [
+		"############",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#DD........#",
+		"#DD........#",
+		"#DD........#",
+		"#DD........#",
+		"#####......#",
+		"#..........#",
+		"#..........#",
+		"#~~~~~~#####",
+		"#~~~~~~~~~~#",
+		"#~~~~~~~~~~#",
+		"#~~~~~~~~~~#",
+		"#~~~~~~~~~~#",
+		"#PP~~~~~~~~#",
+		"#PP~~~~~~~~#",
+		"#~~~~~~~~~~#",
+		"############",
+	],
+}
+
+const REPRESA := {
+	# A água alaga a porta, que está no fundo de uma cuia. Girando no sentido horário a cuia
+	# derrama e a água corre para a parede da direita; voltando, ela cai na cuia da direita,
+	# separada por uma plataforma, e a porta fica seca. O coelho cai junto, nas duas vezes.
+	# O fundo da cuia da porta tem espinhos: é preciso pular para cair em cima da porta.
+	"name": "Represa",
+	"door_open": true,
+	"rotate": true,
+	"start_rot": 0,
+	"rows": [
+		"########################################",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#..............PP......................#",
+		"#..............PP......................#",
+		"##~~~~~~~DD~##############.............#",
+		"##~~~~~~~DD~##############.............#",
+		"##~~~~~~~DD~##############.............#",
+		"##^^^^^^^DD^##############.............#",
+		"########################################",
+	],
+}
+
+const NAUFRAGIO := {
+	# As duas caixas precisam ir para os compartimentos do outro lado de um poço de espinhos
+	# cheio de água; empurrá-las para dentro é perdê-las (afundam). Girando no sentido
+	# horário, o coelho e as caixas caem rente à parede, passam do poço e se empilham na
+	# parede da direita; ao voltar, as caixas caem nos compartimentos. A porta está do lado
+	# de lá: a volta é a nado, por cima dos espinhos, e um espinho solitário guarda a porta.
+	"name": "Naufrágio",
+	"rotate": true,
+	"start_rot": 0,
+	"rows": [
+		"########################################",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#......................................#",
+		"#DD....................................#",
+		"#DD....................................#",
+		"#DD.PPBBBB.............................#",
+		"#DD^PPBBBB.............................#",
+		"###########....................####SSSS#",
+		"#############~~~~~~~~~~~~~~~~~~####SSSS#",
+		"#############~~~~~~~~~~~~~~~~~~#########",
+		"#############~~~~~~~~~~~~~~~~~~#########",
+		"#############~~~~~~~~~~~~~~~~~~#########",
+		"#############~~^^^^^^^^^^^^~~~~#########",
+		"########################################",
+	],
+}
+
+const MERGULHO := {
+	# Corda sobre a água, com a porta trancada por uma caixa: no palco do começo, empurrar a caixa para o compartimento. Depois, a corda. Desenhada depois do giro; começa com a corda no teto e a água rasa
+	# no chão. Girando pendurado, o arco leva o coelho até a parede oposta, e a água escorre
+	# para o poço fundo ao pé dela: cair ali é seguro, apesar dos espinhos do fundo. Quem gira
+	# sem a corda cai na parte rasa. Do poço, um pulo alcança a porta na borda.
+	"name": "Mergulho",
+	"rotate": true,
+	"start_rot": -1,
+	"rows": [
+		"######################",
+		"###..................#",
+		"###PP................#",
+		"###PP................#",
+		"###.-----------------#",
+		"###BB................#",
+		"###BB................#",
+		"###..................#",
+		"#SS..................#",
+		"#SS..................#",
+		"###..................#",
+		"###..................#",
+		"###..................#",
+		"###..................#",
+		"###..................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#..........DD........#",
+		"#..........DD........#",
+		"#..........DD........#",
+		"#^^^^^^^^^^DD~~~~....#",
+		"#############~~~~~~~~#",
+		"#############~~~~~~~~#",
+		"#############~~~~~~~~#",
+		"#############~~~~~~~~#",
+		"#############^^^^^^^^#",
+		"######################",
+	],
+}
+
 ## Sala de início: o quadrado em que a cutscene de abertura termina (scripts/intro.gd desenha
 ## o mesmo quadrado, no mesmo lugar). Só o coelho e a porta, já aberta. Não é um nível.
 const START := {
 	"name": "",
-	"hint": "Ande com A/D ou as setas até a porta",
+	"hint": "Ande com A/D ou as setas",
 	"music": "",
 	"door_open": true,
 	"rotate": false,
@@ -334,16 +563,28 @@ const START := {
 	],
 }
 
-## A ordem dos níveis: uma ideia nova por vez, e a dificuldade sobe aos poucos.
+## A ordem dos níveis: cada bloco apresenta um elemento numa fase curta, usa-o em puzzles e
+## fecha com uma combinação.
 const ROOMS := [
+	# o básico
 	PASSOS,     # 1  empurrar a caixa no buraco abre a porta
 	DEGRAUS,    # 2  pular degraus e um vão
-	COMPORTA,   # 3  comporta; espinhos baixos
-	TOCA,       # 4  tudo isso junto, sem girar
-	GIRO,       # 5  o primeiro giro: a parede vira chão
-	DERRAME,    # 6  nichos, o sentido do giro, virar a sala de cabeça para baixo
+	GIRO,       # 3  o primeiro giro: a parede vira chão
+	COMPORTA,   # 4  comporta; espinhos baixos; girar do chão é cair nos espinhos do teto
+	# girar com intenção
+	DERRAME,    # 5  nichos, o sentido do giro, virar a sala de cabeça para baixo
+	TOCA,       # 6  respiro de plataforma: pilares sobre espinhos; teto de espinhos
 	SETAS,      # 7  plataformas por orientação
-	VERTIGEM,   # 8  o esboço; a ponte que aparece ao girar
-	ESPINHOS,   # 9  giro no ar
-	FUGA,       # 10 síntese
+	ESPINHOS,   # 8  o giro no ar valendo a vida
+	# corda
+	PRUMO,      # 9  agarrar a corda no giro e descer até a ponta
+	VERTIGEM,   # 10 combinação
+	# água
+	AGUA,       # 11 a água tranca a porta; o ralo
+	MARE,       # 12 a água como elevador, com o limitador
+	REPRESA,    # 13 despejar a água na cuia certa
+	NAUFRAGIO,  # 14 carregar as caixas pela gravidade; a volta a nado
+	# tudo junto
+	MERGULHO,   # 15 caixa, corda e água
+	FUGA,       # 16 giro limitado até a porta, na parede
 ]

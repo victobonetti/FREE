@@ -6,6 +6,8 @@ static func setup() -> void:
 	_add("move_left", [_key(KEY_A), _key(KEY_LEFT), _pad(JOY_BUTTON_DPAD_LEFT), _axis(JOY_AXIS_LEFT_X, -1.0)])
 	_add("move_right", [_key(KEY_D), _key(KEY_RIGHT), _pad(JOY_BUTTON_DPAD_RIGHT), _axis(JOY_AXIS_LEFT_X, 1.0)])
 	_add("jump", [_key(KEY_SPACE), _key(KEY_W), _key(KEY_UP), _key(KEY_K), _pad(JOY_BUTTON_A)])
+	# Na corda só dá para descer; as teclas de pulo (inclusive W e seta para cima) soltam.
+	_add("climb_down", [_key(KEY_S), _key(KEY_DOWN), _pad(JOY_BUTTON_DPAD_DOWN), _axis(JOY_AXIS_LEFT_Y, 1.0)])
 	_add("rotate_ccw", [_key(KEY_Q), _pad(JOY_BUTTON_LEFT_SHOULDER)])
 	_add("rotate_cw", [_key(KEY_E), _pad(JOY_BUTTON_RIGHT_SHOULDER)])
 	_add("restart", [_key(KEY_R), _pad(JOY_BUTTON_Y)])

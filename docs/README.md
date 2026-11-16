@@ -15,11 +15,13 @@ Jogo de plataforma e puzzle em que um coelho foge por salas que podem ser girada
 - Etapas M0 a M4 prontas: 5 salas jogáveis em graybox.
 - Primeira rodada de retorno de jogo aplicada: sprite do coelho, pulo, porta, recarga do giro.
 - 10 níveis com dificuldade crescente (D42), de tamanhos variados, com câmera seguindo o coelho, comportas e plataformas por orientação. Resolvidos por bots; aguardando teste de quem joga.
-- Pendente: ajustes das salas depois do teste; arte e áudio finais (M5).
+- Depois do piloto: corda, água e ralo, com um nível de apresentação para cada (níveis 11 e 12, D47 a D50); aguardando teste.
+- Ato introdutório em andamento (D53, D58): 16 fases feitas, cada uma resolvida por bot; recarga do giro de 2,5 s e o limitador na Maré e na Fuga.
+- Pendente: fase 20, Vertigem e Fuga revistas; ajustes depois do teste; arte e áudio finais (M5).
 
 ## Como rodar
 
-- Jogar: abrir a pasta do projeto no Godot 4.7 e apertar F5. O executável está em `Desktop\GODOT`.
+- Jogar: `.\run.ps1` na raiz do projeto (ou abrir a pasta no Godot 4.7 e apertar F5). O executável está em `Desktop\GODOT`.
 - Testes: `Godot_v4.7.2-stable_win64_console.exe --headless --path . -s tests/run_tests.gd`
 - Capturas de tela: `Godot_v4.7.2-stable_win64_console.exe --path . -s tests/shot.gd -- <pasta>`
 
@@ -29,6 +31,10 @@ Jogo de plataforma e puzzle em que um coelho foge por salas que podem ser girada
 |---|---|---|
 | Andar | A/D ou setas | Analógico ou direcional |
 | Pular | Espaço, W, ↑ ou K | A |
+| Na corda: descer | S ou ↓ | Analógico ou direcional para baixo |
+| Na corda: soltar | as teclas de pulo | A |
 | Girar anti-horário / horário | Q / E | LB / RB |
 | Reiniciar sala | R | Y |
 | Sala seguinte / anterior (desenvolvimento) | PageDown / PageUp | — |
+
+Para abrir direto num nível: `.\run.ps1 -Level 11`.

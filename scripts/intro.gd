@@ -138,6 +138,8 @@ func step(pressed: bool) -> void:
 func _go(p: int) -> void:
 	phase = p
 	t = 0
+	if p == DROP:
+		sfx.emit("falling")  # o coelho começa a cair: main.gd toca a música da queda
 
 
 func _land() -> void:
@@ -336,7 +338,12 @@ func _draw_title_rabbit() -> void:
 		var k := _k()
 		feet.y += k * k * 34.0
 		tex = art._rabbit_tex("fall", "air", false)
-	draw_texture(tex, feet + Vector2(-6, -16), Color(1, 1, 1, alpha))
+	# recorta na borda de baixo da janela: o coelho que cai no buraco não pode aparecer fora dela
+	var pos := feet + Vector2(-6, -16)
+	var vis_h := minf(tex.get_size().y, WIN.size.y - pos.y)
+	if vis_h > 0.0:
+		draw_texture_rect_region(tex, Rect2(pos, Vector2(tex.get_size().x, vis_h)),
+			Rect2(Vector2.ZERO, Vector2(tex.get_size().x, vis_h)), Color(1, 1, 1, alpha))
 
 
 ## O ponto de exclamação do susto.
