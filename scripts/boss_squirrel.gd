@@ -2,6 +2,8 @@ extends Node2D
 ## Boss 1: Jeffrey, o esquilo (GDD 8b, D63). Ator da sala (campo "actors"): a sala chama
 ## step(room) a cada quadro de jogo e on_reset(room) quando reinicia (morte do coelho ou R).
 ##
+## O esquilo não machuca ao encostar: só as nozes matam o coelho.
+##
 ## A regra que importa: o esquilo nunca salta numa face com espinhos. Ele escolhe uma face
 ## vizinha à dos espinhos (um giro sempre basta), avisa, e salta em linha reta; depois que o
 ## salto começa, não muda. Girar cedo faz ele trocar de alvo; girar tarde, ele já ricocheteou.
@@ -282,7 +284,6 @@ func step(r) -> void:
 					_defeat()
 				else:
 					_start_walk()
-	_check_rabbit()
 
 
 func _fly() -> void:
@@ -365,13 +366,6 @@ func _defeat() -> void:
 			"life": randi_range(20, 40), "col": C_FUR if i % 3 else C_BELLY, "grav": 90.0,
 		})
 	state = "gone"
-
-
-func _check_rabbit() -> void:
-	if state in ["stunned", "dead", "gone", "enter"]:
-		return
-	if room.overlaps(rect(), room.rabbit.rect):
-		room.kill()
 
 
 # ---------------------------------------------------------------- nozes

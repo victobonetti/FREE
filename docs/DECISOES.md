@@ -468,3 +468,11 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Motor:** dois campos de sala, genéricos para os próximos bosses: `spin_block` e `actors`. Um ator recebe `step(room)` e `on_reset(room)` e pode abrir a porta (`door_unlocked`).
 - **Garantia de que o esquilo não se mata:** as rotas só usam trechos que passam longe do bloco; o único trecho perto dele é o salto de ataque, que só sai para uma face vizinha à dos espinhos (contando um giro em andamento). Teste: girando à toa fora do salto, em 6000 quadros, o esquilo nunca se fere. Outro teste: um bot que gira no último instante vence e chega à porta.
 - **Escolha de Claude, aberta a revisão:** os corações perdidos continuam perdidos quando o coelho morre.
+
+### D65 — O esquilo não machuca ao encostar
+- **Autor:** Victor, depois do primeiro teste no celular.
+- **O quê:** só as nozes matam o coelho. O esquilo pode passar por ele no chão e nos saltos sem dano.
+
+### D66 — Música do boss
+- **Autor:** Victor (faixa); Claude (ligação).
+- **O quê:** `Boss Rush Groove.mp3`, que estava na raiz, foi para `music/boss-rush-groove.mp3`, importada em loop, e toca na sala do Jeffrey (campo `"music"`).

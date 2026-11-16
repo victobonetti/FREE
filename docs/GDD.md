@@ -243,7 +243,7 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 
 **A sala:** o coelho cai numa sala que não gira. Q/E giram só um **bloco quadrado com espinhos numa das faces**, no centro da sala. Por ser quadrado, girar não muda a colisão, só qual face tem espinhos. A gravidade e o resto da sala não mudam.
 
-**O esquilo:** entra girando, de fora da borda da tela. Anda no chão e ataca saltando algumas vezes entre as paredes, girando no ar e jogando nozes. Encostar no esquilo andando ou numa noz mata o coelho. As nozes caem com a gravidade e quebram depois de 3 toques.
+**O esquilo:** entra girando, de fora da borda da tela. Anda no chão e ataca saltando algumas vezes entre as paredes, girando no ar e jogando nozes. Só as nozes matam o coelho; encostar no esquilo não machuca (pedido do Victor depois do primeiro teste). As nozes caem com a gravidade e quebram depois de 3 toques.
 
 **Como vencer:** o esquilo **nunca salta numa face com espinhos**, e depois que um salto começa ele não muda. Ele só mira faces **vizinhas** à dos espinhos, então um giro sempre basta. Girar cedo não adianta (ele escolhe outro alvo), girar tarde também não (ele já ricocheteou): o acerto vem de girar no último instante, no meio do salto dele.
 
@@ -267,14 +267,13 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 - Se o jogador gira durante o aviso e a face mirada ganha espinhos, ele troca de alvo.
 - Atingido, perde um coração, é arremessado e fica tonto no chão (1,25 s, sem machucar). Sem corações, some e a porta abre.
 - As nozes (7 px, lentas: arco de ~1,15 s) saem no meio dos saltos, em direção ao coelho; quicam e quebram no terceiro toque ou ao encostar nos espinhos do bloco.
-- Esquilo com 12 px, como o coelho: dá para pular por cima.
 - **Decidido por Claude, aberto a revisão:** ao morrer, o coelho volta ao início da sala, mas os corações que o esquilo perdeu continuam perdidos.
 
 **Em aberto:**
 - Tudo isto precisa ser sentido jogando: janelas, velocidade no chão, quantidade de nozes.
 - Noz parada no chão: hoje ela quica até quebrar; não fica parada servindo de apoio.
 - A entrada: o coelho ainda começa no chão; a queda na sala e a entrada do esquilo podem virar uma pequena cena.
-- Arte e sons próprios (hoje: desenho em código e sons reaproveitados).
+- Arte e efeitos sonoros próprios (hoje: desenho em código e efeitos reaproveitados). A música é a do Victor: `music/boss-rush-groove.mp3`, em loop.
 - Opcional, para trazer de volta o "tudo que está solto cai": nozes presas nas faces do bloco caem quando ele gira.
 
 **Implementação:** a grade é uma sala comum em `levels.gd` (`JEFFREY`) com dois campos novos: `spin_block` (o giro mira o bloco, não a sala) e `actors` (scripts que a sala cria e chama a cada quadro). O esquilo, as nozes e os corações ficam em `scripts/boss_squirrel.gd`; a sala só oferece o bloco, `kill()` e `door_unlocked`.
