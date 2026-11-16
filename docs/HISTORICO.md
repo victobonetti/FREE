@@ -326,6 +326,16 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 
 ---
 
+## Rodada 23 — Celular e GitHub Pages (16/11/2026)
+
+**Entrada do Victor:** publicar na web e jogar no celular, com um joystick e dois botões para girar.
+
+**Feito (D61, D62):** controles de toque (joystick, pulo, dois giros, reiniciar) nas faixas laterais da tela; dicas de controle e "TAP TO START" próprios para toque; tela cheia e aviso para deitar o celular; workflow que publica no GitHub Pages. Conferido em navegador com celular emulado: andar, empurrar, pular andando (dois dedos) e girar. Os testes continuam passando.
+
+**Ainda não validado por quem joga:** tudo isto num celular de verdade, em especial o tamanho dos botões e o joystick.
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |
@@ -336,7 +346,7 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 | Arte final (sprites, tiles) | não iniciado; hoje tudo é desenhado em código |
 | Áudio | efeitos gerados em código; primeira faixa de música do Victor ligada a todos os níveis (D44); faltam faixas para os níveis seguintes |
 | Dicas de controle | feitas nos níveis 1 e 5 (rodada 13) |
-| Exportar para amigos testarem | versões geradas (rodada 15); falta publicar no itch.io |
+| Exportar para amigos testarem | versões geradas (rodada 15); web publicada pelo GitHub Pages (rodada 23, D62) |
 | Tema e narrativa (laboratório?) | em aberto |
 | Nome do jogo | "Free" (D46) |
 | Música da abertura | feita (rodada 17): `free-title.mp3` na tela de início |

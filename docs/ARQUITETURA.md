@@ -20,6 +20,7 @@ scripts/
   box.gd                 dados de uma caixa
   levels.gd              as salas em texto
   input_setup.gd         teclas e botões
+  touch_controls.gd      joystick e botões de toque (D61)
 tests/
   run_tests.gd           testes sem janela
   shot.gd                capturas de tela

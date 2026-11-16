@@ -91,12 +91,13 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 
 ### 3.5 Controles
 
-| Ação | Teclado | Controle |
-|---|---|---|
-| Andar | A/D ou setas | Analógico ou direcional |
-| Pular | Espaço | A |
-| Girar anti-horário / horário | Q / E | LB / RB |
-| Reiniciar sala | R | Y |
+| Ação | Teclado | Controle | Toque (D61) |
+|---|---|---|---|
+| Andar | A/D ou setas | Analógico ou direcional | Joystick à esquerda |
+| Pular | Espaço | A | Botão grande, embaixo à direita |
+| Descer a corda | S ou seta para baixo | Analógico ou direcional para baixo | Joystick para baixo |
+| Girar anti-horário / horário | Q / E | LB / RB | Os dois botões de seta acima do pulo |
+| Reiniciar sala | R | Y | Botão pequeno no canto de cima |
 
 ### 3.6 Estética
 
@@ -152,6 +153,7 @@ scripts/
   box.gd
   levels.gd            # as salas, desenhadas em texto (qualquer tamanho)
   input_setup.gd       # teclas e controle registrados em código
+  touch_controls.gd    # controles de toque (celular), apertam as mesmas ações
 tests/
   run_tests.gd         # formato das salas, pulo e bots que resolvem cada sala
   shot.gd              # capturas de tela de cada sala
