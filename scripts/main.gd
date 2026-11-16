@@ -61,10 +61,18 @@ func _ready() -> void:
 	_make_ui()
 	_make_audio()
 	_show_intro()
-	# atalho de desenvolvimento: "-- --level=11" na linha de comando abre direto no nível 11
+	# atalho de teste: "-- --level=11" na linha de comando, ou "?level=11" no link da versão web,
+	# abre direto no nível 11 (pula a abertura)
+	var lv := 0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--level="):
-			_load_room(int(a.trim_prefix("--level=")) - 1)
+			lv = int(a.trim_prefix("--level="))
+	if OS.has_feature("web"):
+		var q = JavaScriptBridge.eval("new URLSearchParams(location.search).get('level') || ''")
+		if q is String and q.is_valid_int():
+			lv = int(q)
+	if lv > 0:
+		_load_room(lv - 1)
 
 
 func _make_ui() -> void:

@@ -227,6 +227,8 @@ A sensação de controle é ajustada em M1 e M2, antes de qualquer fase ou arte.
 
 PageDown e PageUp pulam entre salas. R reinicia a sala.
 
+Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?level=17` no link da versão web (`https://victobonetti.github.io/FREE/?level=17`), que também serve no celular.
+
 ## 8. Expansões (fora do piloto)
 
 - **Tipos de caixa:** pesada (esmaga espinhos), de vidro (quebra na queda), magnética (gruda na parede), balão (cai para cima).
