@@ -60,6 +60,7 @@ var t := 0          # quadros dentro da fase
 var frame := 0      # quadros desde o início
 var art             # uma Room fora da árvore, só para gerar os quadros do coelho
 var press_label: Label
+var menu_label: Label
 var particles: Array = []
 var jolt := 0.0
 var jolt_phase := 0.0
@@ -79,6 +80,15 @@ func _ready() -> void:
 	press_label.add_theme_font_size_override("font_size", 8)
 	press_label.add_theme_color_override("font_color", C_WHITE)
 	add_child(press_label)
+	menu_label = Label.new()
+	menu_label.text = "E  EDITOR      L  MINHAS FASES"
+	menu_label.position = Vector2(0, 72)
+	menu_label.size = Vector2(320, 12)
+	menu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	menu_label.add_theme_font_size_override("font_size", 6)
+	menu_label.add_theme_color_override("font_color", C_WHITE)
+	menu_label.modulate.a = 0.55
+	add_child(menu_label)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	for i in 16:
@@ -115,6 +125,7 @@ func step(pressed: bool) -> void:
 		return
 	if phase == SURPRISE:
 		press_label.modulate.a = maxf(press_label.modulate.a - 0.08, 0.0)
+		menu_label.modulate.a = maxf(menu_label.modulate.a - 0.08, 0.0)
 		if t == 2:
 			impact.emit(0.5)   # o chão cede
 		if t == 12:

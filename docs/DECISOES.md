@@ -393,6 +393,37 @@ Quando uma decisão for revertida, não apague a entrada: marque como substituí
 - **Fuga:** ganha o limitador, e a etapa de cima foi refeita porque um giro de 180° (a caixa jogada no teto) é impossível com o giro desfeito sozinho a cada 2,5 s. Agora a porta está na parede da direita, alta demais; o coelho vai até o pé dela e gira no sentido horário: a parede vira chão por 2,5 s e ele sobe por ela, pulando espinhos, até a porta (0,9 s no bot). A segunda caixa e o compartimento do teto saíram. As etapas de baixo continuam, e o limitador faz o papel do giro de volta: a caixa cai no buraco "a" quando o giro é desfeito.
 - **Espinhos acima das portas:** estavam como `v` soltos no ar, apontando para a porta. Agora são uma plataforma pequena e suspensa exatamente acima da porta, com espinhos para cima (Comporta, Toca e Fuga). Os espinhos presos ao teto continuam apontando para baixo.
 
+### D61 — Editor de fases dentro do jogo
+- **Autor:** Victor ("crie um editor de fases; ele será o core do jogo"). Plano aprovado em 16/11/2026.
+- **Decisões:** o editor é parte do jogo, não plugin do Godot; fases em JSON e em código de texto; uma fase só é compartilhável depois de o autor vencê-la; primeira versão já com desfazer, copiar/colar e girar a sala.
+- **Escolha de Claude:** a fase do editor é o mesmo dicionário de `levels.gd` (grade de texto + campos), então o editor não tem formato próprio: `room.setup()` lê as duas igual.
+
+### D62 — O editor desenha esquemático e não roda a simulação
+- A grade usa ícones simples com as cores do jogo, em vez de instanciar `Room` a cada traço. Motivo: a sala assenta a água e a corda ao carregar (centenas de passos), o que seria lento a cada clique. Para ver de verdade, há o botão Jogar.
+
+### D63 — Verificação por hash
+- "Vencer uma vez" guarda o hash do que muda a jogabilidade. Mudar o nome ou a dica não tira a marca; mudar a grade, o giro, o limitador, a rotação inicial ou a porta aberta tira. Desfazer até o estado vencido devolve a marca, porque o hash volta a bater.
+- **Limite:** vencer prova que há solução, não que a fase é boa nem que o caminho é o pretendido (pode haver atalho).
+
+### D64 — A janela do editor é 960×540 e a do jogo continua 320×180
+- O jogo é pixel art em 320×180 com escala inteira; o editor precisa de texto legível e de mais espaço. Por isso a janela troca o modo de escala ao entrar e ao sair do editor (`canvas_items` e fracionária lá, `viewport` e inteira cá).
+- **Campanha editável:** só em build de depuração o editor grava por cima das fases da campanha (`res://levels/campaign/NN.json`); `levels.gd` continua sendo a origem e o que os bots testam. Num build de lançamento, `res://` é só leitura, então as fases do jogador vão para `user://levels`.
+
+### D65 — Comporta inversa
+- **Autor:** Victor ("componentes que funcionam ao contrário das comportas: só são ativos quando determinada comporta é ativada; usam a mesma comporta do já presente"). Entra também no editor.
+- **Decisão:** a inversa de número N reage ao mesmo compartimento que abre a comporta N e faz o contrário: está aberta com o compartimento vazio e fecha quando ele enche. Não tem compartimento próprio.
+- **Símbolo:** `¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹` (um para cada número). Escolhi os algarismos sobrescritos porque lembram a comporta comum e não colidem com nenhum outro caractere do formato; custa digitar à mão, mas o editor desenha e insere.
+- **Aparência:** âmbar com hachura em X (a comum é verde-água com barras), para ninguém confundir as duas.
+- **Regras iguais às da comum:** não fecha sobre o coelho nem sobre caixa; sólida só enquanto fechada; segura a água; gira com a sala.
+- **No editor:** nove botões na paleta; a validação trata a inversa como uma comporta (erro se o compartimento do número não existe).
+- **Ainda sem fase da campanha que a use.**
+
+### D66 — Recarga do giro e tempo do limitador por fase
+- **Autor:** Victor ("parametrizar o limite e o timeout do flip no editor").
+- **Interpretação de Claude:** "timeout do flip" é a recarga do giro; "limite" é o tempo do limitador (depois do qual o giro é desfeito). Cada um passa a ser um campo da fase (`reload_time`, `limiter_time`, em segundos, de 0,5 a 30), com 2,5 s como padrão, então nada muda nas fases existentes. No editor são dois campos numéricos no painel da fase; o do limitador só vale com o limitador ligado.
+- **Valores diferentes:** com o limitador mais curto que a recarga, o giro é desfeito e a recarga cheia recomeça. Com o limitador mais longo, dá para girar de novo antes de ele desfazer (o saldo de giros continua sendo desfeito um por vez); a validação só avisa.
+- **Não feito:** um limite de **quantidade** de giros por fase. Se era isso que "limite" queria dizer, é um campo a mais e um contador na tela; me diga.
+
 ### D50 — As salas Corda e Água
 - **Autor:** Claude, a partir dos dois esboços.
 - **Corda:** segue o esboço (porta no meio, espinhos dos dois lados dela, duas cordas, sala começando com as cordas no chão). A sala é larga (36×22) porque só assim uma corda presa perto do canto, agarrada pela ponta, faz um arco que passa pela porta central; em sala quadrada não fecha. O arco chega pela lateral da porta, que é o lado sem espinhos. Sem compartimento (`door_open`).

@@ -89,6 +89,12 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 - **Porta com 30% ou mais coberta de água fica bloqueada**, somando-se à regra dos compartimentos. Ela só destrava depois de meio segundo seca.
 - **Ralo:** engole aos poucos a água que chega até ele. Está sempre ligado. A água engolida só volta ao reiniciar a sala.
 
+### 3.4f Comporta inversa
+
+- Trecho de parede âmbar com hachura em X, que faz o **contrário** da comporta comum de mesmo número: usa o mesmo compartimento, mas fica **aberta enquanto ele está vazio e fecha quando a caixa chega**. Com a caixa no compartimento "a", a comporta `1` abre e a inversa `1` fecha.
+- Aberta, aparece só um contorno tênue. Nunca fecha em cima do coelho ou de uma caixa.
+- Serve para fases em que encaixar a caixa liberta um caminho e tranca outro.
+
 ### 3.5 Controles
 
 | Ação | Teclado | Controle |

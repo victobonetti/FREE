@@ -29,6 +29,31 @@ docs/                    esta documentação
 
 Nenhum script usa `class_name`; tudo é carregado com `preload`. A árvore de nós é montada em código: `Main` cria a `Room` (um `Node2D`) e uma `CanvasLayer` com título, barra do giro, tela final e fade.
 
+## Editor de fases
+
+Fica dentro do jogo (funciona no `.exe`). Abre com **E** na tela de início (`--editor` na linha de comando também). Plano e motivos em D61 a D64.
+
+```
+scripts/level_data.gd        a fase como dado: grade + campos, validação, JSON, código "FREE1:..."
+scripts/level_store.gd       user://levels/*.json: salvar, listar, apagar, importar código, área de transferência
+scripts/editor/edit_model.gd operações sobre a grade, todas desfazíveis (histórico de traços)
+scripts/editor/edit_tools.gd gestos do mouse -> operações (lápis, retângulo, linha, balde, porta, corda, seleção, colar)
+scripts/editor/glyph_draw.gd desenho esquemático de cada peça (usa as cores de room.gd)
+scripts/editor/editor_canvas.gd  a grade: zoom, rolagem, fantasmas, problemas
+scripts/editor/editor.gd     a tela: barra, ferramentas, peças, propriedades, problemas, arquivos, atalhos
+tests/editor_tests.gd        testes do editor, sem janela
+```
+
+- **Dado:** `LevelData` guarda `rows` (strings, um caractere por tile, a legenda de `levels.gd`) e os campos `name`, `hint`, `music`, `door_open`, `rotate`, `limiter`, `start_rot`. `to_def()` devolve o dicionário que `room.setup()` já consome; ou seja, uma fase do editor e uma fase de `levels.gd` são a mesma coisa. Tamanho de 6×6 a 64×48.
+- **Validação (`validate()`):** erros (impedem jogar): grade retangular e cercada de parede, peças conhecidas, peças de 2×2 inteiras, um e só um coelho, porta retangular, comporta sem compartimento, compartimentos sem caixa suficiente, porta sem compartimento e sem "porta aberta", corda sem ponta numa parede. Avisos: compartimento que não abre nada, mais caixas que compartimentos, limitador sem giro, "porta aberta" com compartimento `S`. As 16 fases da campanha passam sem erros (teste).
+- **Verificação:** `mark_verified()` guarda o hash do que muda a jogabilidade (grade, giro, limitador, rotação inicial, porta aberta; nome e dica não contam). `is_verified()` só vale enquanto o hash bate: qualquer edição tira a marca. Só fases verificadas aparecem em "Minhas fases" e geram código de compartilhamento.
+- **Código de texto:** `FREE1:<tamanho>:<base64 do JSON comprimido>`; uma fase pequena tem uns 230 caracteres. A marca de verificada vai junto.
+- **Modelo (`EditModel`):** a borda nunca muda; peças de 2×2 e a porta são donas das suas células (pintar ou apagar uma célula limpa a peça inteira); coelho e porta são únicos; um traço (arrastar do lápis, um retângulo, uma colagem) é uma entrada de desfazer. Girar a sala, espelhar e redimensionar guardam a grade inteira. `rotate_room` é exatamente a rotação do jogo (teste: a sala girada no editor e a girada por `room._rotate_logic` têm as mesmas paredes, espinhos, porta e coelho). Redimensionar mantém o canto inferior esquerdo (o chão).
+- **Ferramentas (`EditTools`):** lápis (arrasta sem pular tiles), borracha, retângulo, moldura, linha (Bresenham), balde, seleção com copiar/recortar/colar (o vazio do recorte não apaga; R gira e F espelha o recorte antes de colar), porta (arrastar um retângulo), corda (arrastar uma reta; para antes das paredes). Botão direito apaga.
+- **Janela:** ao abrir o editor, `main.gd` troca a janela para 960×540 em modo `canvas_items` (a resolução do jogo, 320×180, é pequena demais para editar); ao sair ou jogar, volta a 320×180 em modo `viewport`, escala inteira. O editor fica vivo e escondido enquanto se testa a fase.
+- **Teste e tela de início:** `main.gd` tem `custom` ("editor" ou "list"): uma fase avulsa usa o mesmo `_spawn_room`, e `_end_custom(won)` volta ao editor (que marca a fase como verificada se venceu) ou à lista. Esc sai da fase avulsa. Na tela de início, E abre o editor e L abre "Minhas fases" (só verificadas; Enter joga, E edita).
+- **Campanha:** `Levels.campaign_def(i)` devolve o ajuste `res://levels/campaign/NN.json` se existir e for jogável, senão a fase de `levels.gd`. Em build de depuração o editor tem "→ Campanha" (grava por cima da fase aberta) e "Restaurar original". Os testes e os bots continuam usando `levels.gd`. Os JSON entram no pacote exportado pelo `include_filter` do preset.
+
 ## Fluxo do jogo
 
 `main.gd` começa em `_show_intro()` → cutscene (`intro.gd`) → `_load_start_room()` (sala `Levels.START`, `index = -1`) → níveis `Levels.ROOMS[0..9]` → tela final → de volta à abertura.
@@ -74,11 +99,11 @@ Exceção: quando o coelho está rápido (na corda, ou arremessado acima de `MAX
 - `_begin_rotate` faz a rotação lógica na hora e põe `view_angle = ∓90°`. O desenho usa esse ângulo e o leva até 0 em 16 quadros, com easing cúbico. Na tela parece que a sala girou; nos dados ela já estava girada desde o primeiro quadro.
 - O sprite do coelho é desenhado com a rotação contrária, para ficar sempre em pé.
 - Um giro é aceito se `rot_lock == 0`, a sala permite (`rotate` na definição) e o coelho está no chão ou ainda tem o giro do ar.
-- `rot_lock` começa em 150 (16 de animação + 134 de espera, 2,5 s; D60) e desce 1 por quadro. `rot_ratio()` devolve de 0 a 1 para a barra. Morrer reinicia a sala e zera a recarga.
+- `rot_lock` começa em `reload_frames` (padrão 150: 16 de animação + 134 de espera, 2,5 s; D60). Cada fase pode mudar isso com `reload_time` (segundos); ver D66 e desce 1 por quadro. `rot_ratio()` devolve de 0 a 1 para a barra. Morrer reinicia a sala e zera a recarga.
 
 ### Limitador
 
-- Campo `limiter: true` da sala (D57). Cada giro soma em `limit_net`; quando o saldo não é zero, `limit_t` conta 150 quadros, os mesmos da recarga. Ao zerar, `room.step` chama `_begin_rotate(-sinal(limit_net), forced=true)` e emite `sfx("limiter")`. O giro desfeito reinicia a recarga, e o saldo volta a zero.
+- Campo `limiter: true` da sala (D57). Cada giro soma em `limit_net`; quando o saldo não é zero, `limit_t` conta `limiter_frames` quadros (padrão 150, os mesmos da recarga; campo `limiter_time` em segundos). Ao zerar, `room.step` chama `_begin_rotate(-sinal(limit_net), forced=true)` e emite `sfx("limiter")`. O giro desfeito reinicia a recarga, e o saldo volta a zero.
 - Como a recarga e o limitador têm o mesmo tamanho, o jogador nunca consegue fazer um segundo giro antes do desfeito.
 - `main.gd` desenha uma barra vermelha (`limit_fill`) logo acima da barra branca, que esvazia durante os 2,5 s. O som `_make_limiter_sound` é uma varredura que despenca, com amostragem reduzida e saturação.
 
@@ -165,6 +190,7 @@ Medido pelos testes: pulo longo 30 px, pulo curto 8 px. Degraus de até 3 tiles 
 - Plataforma por orientação: dicionário com `rect`, `facing`, `solid` e `fx`. Quer ser sólida quando `facing == 0`; só fica sólida se o tile estiver livre. Sólida, entra em `solid_static`.
 - `solid_static(r)`: paredes, comportas fechadas e plataformas sólidas.
 - Espinho: um tile com direção. A área que mata é a metade do lado da base.
+- **Comporta inversa** (D65): entrada de `gates` com `inverse: true`, lida dos caracteres `¹²³⁴⁵⁶⁷⁸⁹`. Usa o mesmo grupo de compartimentos da comporta comum de mesmo número (`g["id"]`), mas quer fechar quando o grupo está **cheio** e abrir quando está vazio. Começa aberta. Nunca fecha em cima do coelho ou de uma caixa (mesma regra da comum), bloqueia a água quando fechada e gira com a sala. Quando a comum e a inversa mudam juntas, os dois sons tocam.
 - Estados da sala: `play`, `dead` (20 quadros, depois reinicia), `won` (44 quadros de animação), `done` (emite `completed`).
 
 ## Formato das salas (`levels.gd`)
@@ -181,13 +207,14 @@ Grade de tiles de 8 px, de qualquer tamanho: todas as linhas com o mesmo comprim
 | `D` | porta; todas as células `D` formam um retângulo |
 | `1`–`9` | comporta |
 | `a`–`i` | compartimento de comporta, em bloco 2×2 (`a` abre `1`, `b` abre `2`...) |
+| `¹²³⁴⁵⁶⁷⁸⁹` | comporta inversa 1 a 9: usa o mesmo compartimento da comporta de mesmo número e faz o contrário |
 | `=` `}` `_` `{` | plataforma por orientação, seta para cima, direita, baixo, esquerda |
 | `^` `>` `v` `<` | espinho apontando para esse lado |
 | `\|` `-` | corda: uma sequência reta é uma corda esticada; a ponta encostada numa parede é a âncora |
 | `~` | água (o tile começa cheio; ao carregar, ela escorre até assentar) |
 | `o` | ralo |
 
-Campos por sala: `name`, `rotate` (permite girar), `start_rot` (giros de 90° aplicados ao carregar; positivo é horário), `rows`, `door_open` (opcional: porta sem compartimento, sempre aberta, a não ser que esteja alagada), e `hint` (opcional: texto de ajuda que `main.gd` mostra embaixo da tela durante a sala; em salas com mais de 150 px de altura ele some depois de 8 s, porque fica por cima do chão).
+Campos por sala: `reload_time` e `limiter_time` (opcionais, segundos, 0,5 a 30; padrão 2,5; D66), `name`, `rotate` (permite girar), `start_rot` (giros de 90° aplicados ao carregar; positivo é horário), `rows`, `door_open` (opcional: porta sem compartimento, sempre aberta, a não ser que esteja alagada), e `hint` (opcional: texto de ajuda que `main.gd` mostra embaixo da tela durante a sala; em salas com mais de 150 px de altura ele some depois de 8 s, porque fica por cima do chão).
 
 Cada sala é uma constante com nome (`PASSOS`, `TOCA`...), e `ROOMS` é a lista na ordem dos níveis. Para mudar a ordem, basta reordenar `ROOMS`; os bots procuram as salas pelo nome (`load_named`).
 

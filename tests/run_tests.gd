@@ -28,6 +28,7 @@ func _init() -> void:
 	test_platforms()
 	test_rot_cooldown()
 	test_limiter()
+	test_reload_params()
 	test_rope()
 	test_water()
 	test_start_is_stable()
@@ -46,6 +47,7 @@ func _init() -> void:
 	test_prumo()
 	test_agua()
 	test_mare()
+	test_inverse_gate()
 	test_represa()
 	test_naufragio()
 	test_mergulho()
@@ -625,6 +627,35 @@ func test_limiter() -> void:
 	tick({"rotate": 1})
 	idle(300)
 	check(room.orientation == 1, "sem o campo limiter, o giro fica")
+
+
+func test_reload_params() -> void:
+	print("recarga e limitador parametrizados")
+	load_def(FLAT)
+	tick({"rotate": 1})
+	check(room.rot_lock == 150 and room.reload_frames == 150 and room.limiter_frames == 150, "sem campos, valem 2,5 s (150 quadros)")
+	var d: Dictionary = FLAT.duplicate()
+	d["reload_time"] = 1.0
+	d["limiter"] = true
+	d["limiter_time"] = 0.5
+	load_def(d)
+	check(room.reload_frames == 60 and room.limiter_frames == 30, "reload_time e limiter_time viram quadros")
+	tick({"rotate": 1})
+	check(room.rot_lock == 60 and room.limit_t == 30 and room.orientation == 1, "o giro dura 1 s de recarga e 0,5 s de limitador")
+	idle(15)
+	check(absf(room.rot_ratio() - 0.25) < 0.05 and absf(room.limiter_ratio() - 0.5) < 0.05, "as barras usam o tempo de cada um")
+	idle(20)
+	check(room.orientation == 0 and room.rot_lock > 0 and room.rot_lock <= 60, "o limitador desfaz aos 0,5 s e a recarga recomeça de 1 s")
+	d["reload_time"] = 0.1
+	d["limiter_time"] = 100.0
+	load_def(d)
+	check(room.reload_frames == room.ROT_FRAMES + 1 and room.limiter_frames == 1800, "os valores extremos são limitados")
+	d["reload_time"] = 4.0
+	d["limiter_time"] = 2.0
+	load_def(d)
+	tick({"rotate": 1})
+	idle(125)
+	check(room.orientation == 0 and room.rot_lock > 100, "limitador menor que a recarga: desfaz e a recarga cheia recomeça")
 
 
 func test_start_is_stable() -> void:
@@ -1464,3 +1495,69 @@ func test_naufragio() -> void:
 		if b.pos.x > 96 and b.pos.x < 248 and b.pos.y > 112:
 			lost = true
 	check(lost, "caixa empurrada para o poço afunda e fica perdida (%s)" % where())
+
+
+## Sala de teste: comporta "1" e a inversa do mesmo número, ligadas ao compartimento "a".
+const INVERSE_ROOM := {
+	"name": "teste inversa", "rotate": true, "start_rot": 0, "door_open": true,
+	"rows": [
+		"######################",
+		"#....................#",
+		"#....................#",
+		"#.........1...¹......#",
+		"#.........1...¹......#",
+		"#PP.BB....1...¹....DD#",
+		"#PP.BB....1...¹....DD#",
+		"######aa##############",
+		"######aa##############",
+		"######################",
+	],
+}
+
+
+func test_inverse_gate() -> void:
+	print("comporta inversa")
+	load_def(INVERSE_ROOM)
+	idle(10)
+	var normal: Dictionary = {}
+	var inv: Dictionary = {}
+	for g in room.gates:
+		if g["inverse"]:
+			inv = g
+		else:
+			normal = g
+	check(room.gates.size() == 2 and normal["id"] == 1 and inv["id"] == 1, "duas comportas com o mesmo número: a comum e a inversa")
+	check(normal["closed"] and not inv["closed"], "com o compartimento vazio, a comum fecha e a inversa abre")
+	check(room.solid_static(normal["rects"][0]) and not room.solid_static(inv["rects"][0]), "e só a comum é sólida")
+	var got: Array = []
+	room.sfx.connect(func(n): got.append(n))
+	check(walk_until(1.0, func(): return room.group_filled(1), 600), "empurra a caixa para o compartimento (%s)" % where())
+	idle(30)
+	check(not normal["closed"] and inv["closed"], "com a caixa lá, a comum abre e a inversa fecha")
+	check(room.solid_static(inv["rects"][0]) and not room.solid_static(normal["rects"][0]), "agora é a inversa que é sólida")
+	check(got.has("gate_open") and got.has("gate_close"), "as duas mudanças fazem som")
+	for i in 200:
+		tick({"move": 1.0})
+	check(room.rabbit.pos.x + 12 <= inv["rects"][0].position.x and not won(), "o coelho passa pela comum e para na inversa (%s)" % where())
+	# tirar a caixa desfaz tudo
+	room.boxes[0].pos = Vector2i(32, 40)
+	idle(60)
+	check(normal["closed"] and not inv["closed"], "sem a caixa, voltam ao estado original")
+	# nunca fecha em cima do coelho
+	load_def(INVERSE_ROOM)
+	idle(10)
+	room.rabbit.pos = Vector2i(14 * 8 + 2, 40)
+	room.boxes[0].pos = Vector2i(6 * 8, 40)
+	idle(40)
+	check(room.group_filled(1) and room.state == "play", "a inversa espera o coelho sair antes de fechar (não esmaga)")
+	# quatro giros devolvem as comportas inversas ao lugar
+	load_def(INVERSE_ROOM)
+	var before: Array = []
+	for g in room.gates:
+		before.append([g["inverse"], g["rects"].duplicate()])
+	for i in 4:
+		room._rotate_logic(1)
+	var after: Array = []
+	for g in room.gates:
+		after.append([g["inverse"], g["rects"].duplicate()])
+	check(before == after, "quatro giros devolvem as comportas ao lugar")
