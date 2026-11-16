@@ -39,6 +39,7 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 - Giro de 90° para cada lado, em torno do centro da sala.
 - Salas sempre quadradas, para qualquer orientação caber na tela.
 - Animação de ~0,25 s com easing. A simulação pausa durante o giro.
+- O coelho "faz" o giro: dá uma cambalhota encolhida no mesmo sentido (0,4 s, terminando já na queda) e solta faíscas azuis com um anel. O giro desfeito pelo limitador não tem esse efeito.
 - Ao fim do giro, a velocidade do coelho e das caixas zera, e tudo cai a partir do repouso.
 - **Giro no ar:** um por pulo, recarrega ao tocar o chão.
 - **Recarga do giro:** depois de cada giro, um novo giro fica bloqueado por 2,5 s (animação incluída; D60). Uma barra branca no canto inferior direito enche durante a recarga, com um som que fica mais agudo; um "plim" avisa quando está pronto.
@@ -98,6 +99,7 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 | Descer a corda | S ou seta para baixo | Analógico ou direcional para baixo | Joystick para baixo |
 | Girar anti-horário / horário | Q / E | LB / RB | Os dois botões de seta acima do pulo |
 | Reiniciar sala | R | Y | Botão pequeno no canto de cima |
+| Olhar a sala (salas maiores que a tela) | — | — | Arrastar o dedo pela tela; ao soltar, a câmera volta para o coelho |
 
 ### 3.6 Estética
 

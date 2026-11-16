@@ -6,9 +6,14 @@ extends Node2D
 ## Celular deitado é mais largo que 16:9: main alarga a tela para o formato do aparelho e os
 ## controles vão para as faixas laterais (set_layout), sem cobrir a sala. Em telas quase 16:9
 ## (tablets) as faixas não cabem os botões, e eles ficam por cima do jogo, translúcidos.
+##
+## Fora do joystick e dos botões, arrastar o dedo pela tela move a vista (salas maiores que a
+## tela); ao soltar, a câmera volta para o coelho. Quem move a câmera é a sala (room.pan).
 ## Coordenadas em pixels da tela do jogo (altura 180).
 
 signal touch_detected
+signal panned(delta: Vector2)   # dedo arrastando a vista (px da tela)
+signal pan_ended
 
 const C_LINE := Color(0.93, 0.91, 0.85, 0.35)
 const C_FILL := Color(0.93, 0.91, 0.85, 0.10)
@@ -24,7 +29,7 @@ var screen_w := 320
 var gutter := 0                # largura de cada faixa lateral (0 = sem faixas)
 var stick_home := Vector2(42, 140)   # o joystick nasce onde o dedo encosta; em repouso, aqui
 var stick_radius := 18.0       # deslocamento máximo do miolo
-var left_zone_x := 150.0       # toques à esquerda daqui são do joystick
+var left_zone_x := 120.0       # toques à esquerda daqui são do joystick; à direita, arrastam a vista
 var buttons := {}
 
 var active := false            # já houve toque (ou é celular): desenha e responde
@@ -34,6 +39,8 @@ var stick_origin := Vector2(42, 140)
 var stick_vec := Vector2.ZERO  # -1..1
 var button_finger := {}        # nome do botão -> dedo
 var fingers := {}              # dedos encostados agora
+var pan_finger := -1           # dedo arrastando a vista
+var pan_last := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -47,8 +54,8 @@ func _ready() -> void:
 func set_layout(w: int, g: int) -> void:
 	screen_w = w
 	gutter = g if g >= MIN_GUTTER else 0
-	left_zone_x = w / 2.0
 	if gutter > 0:
+		left_zone_x = gutter + 90.0
 		var lx := gutter / 2.0
 		var rx := w - gutter / 2.0
 		var r := minf(gutter / 2.0 - 2.0, 15.0)
@@ -61,6 +68,7 @@ func set_layout(w: int, g: int) -> void:
 			"restart": {"pos": Vector2(rx, 14), "r": 7.0, "hit": 13.0},
 		}
 	else:
+		left_zone_x = 120.0
 		stick_radius = 18.0
 		stick_home = Vector2(42, 140)
 		buttons = {
@@ -91,6 +99,9 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventScreenDrag:
 		if event.index == stick_finger:
 			_move_stick(event.position)
+		elif event.index == pan_finger:
+			panned.emit(event.position - pan_last)
+			pan_last = event.position
 		get_viewport().set_input_as_handled()
 
 
@@ -105,10 +116,14 @@ func _on_down(finger: int, p: Vector2) -> void:
 			_press(b)
 		queue_redraw()
 		return
-	if p.x < left_zone_x and stick_finger == -1:
-		stick_finger = finger
-		stick_origin = p
-		_move_stick(p)
+	if p.x < left_zone_x:
+		if stick_finger == -1:
+			stick_finger = finger
+			stick_origin = p
+			_move_stick(p)
+	elif pan_finger == -1:
+		pan_finger = finger
+		pan_last = p
 
 
 func _on_up(finger: int) -> void:
@@ -120,6 +135,9 @@ func _on_up(finger: int) -> void:
 		stick_origin = stick_home
 		stick_vec = Vector2.ZERO
 		_apply_stick()
+	if finger == pan_finger:
+		pan_finger = -1
+		pan_ended.emit()
 	for b in button_finger.keys():
 		if button_finger[b] == finger:
 			button_finger.erase(b)

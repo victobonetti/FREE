@@ -125,6 +125,12 @@ func _make_ui() -> void:
 	touch = TouchControls.new()
 	touch_layer.add_child(touch)
 	touch.touch_detected.connect(_on_touch_detected)
+	touch.panned.connect(func(d: Vector2) -> void:
+		if room != null and not transitioning:
+			room.pan(d))
+	touch.pan_ended.connect(func() -> void:
+		if room != null:
+			room.end_pan())
 	get_window().size_changed.connect(_apply_layout)
 	_apply_layout()
 

@@ -493,6 +493,27 @@ func test_camera() -> void:
 	check(c2.x >= 90.0 - 0.01 and c2.x <= 240.0 - 90.0 + 0.01, "depois de girar, a câmera respeita as novas bordas")
 	load_def(FLAT)
 	check(room.cam == Vector2(80, 80), "sala que cabe na tela fica centralizada")
+	room.pan(Vector2(-50, -50))
+	idle(1)
+	check(room.cam == Vector2(80, 80), "arrastar a vista não mexe numa sala que cabe na tela")
+	room.end_pan()
+	# arrastar a vista (celular) numa sala maior que a tela
+	load_def({"name": "câmera", "rotate": true, "start_rot": 0, "rows": rows})
+	idle(5)
+	var c0: Vector2 = room.cam
+	room.pan(Vector2(-100, 0))
+	idle(1)
+	check(absf(room.cam.x - (c0.x + 100.0)) < 1.0, "arrastar o dedo para a esquerda mostra o que está à direita, sem atraso")
+	room.pan(Vector2(-5000, -5000))
+	idle(1)
+	check(absf(room.cam.x - 320.0) < 0.01 and absf(room.cam.y - 150.0) < 0.01, "a vista arrastada para nas bordas da sala")
+	room.end_pan()
+	idle(90)
+	check(room.cam.distance_to(c0) < 2.0, "ao soltar, a câmera volta para o coelho")
+	room.pan(Vector2(-60, 0))
+	room.end_pan()
+	rot(1)
+	check(room.look == Vector2.ZERO, "girar a sala zera a vista arrastada")
 
 
 const GATE_ROOM := {
