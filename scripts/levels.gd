@@ -9,6 +9,8 @@ extends RefCounted
 ##   D  porta (retângulo)
 ##   1..9  comporta: parede que some enquanto os compartimentos dela têm caixa
 ##   a..i  compartimento de comporta (bloco 2x2): "a" abre a comporta "1", "b" a "2"...
+##   ¹²³⁴⁵⁶⁷⁸⁹  comporta inversa, com o mesmo número: abre e fecha ao contrário da comporta comum.
+##        Usa o mesmo compartimento: com a caixa lá, a comporta "1" abre e a inversa fecha.
 ##   = } _ {  plataforma por orientação, com a seta para cima, direita, baixo, esquerda;
 ##            só é sólida quando a seta aponta para cima na tela
 ##   ^ > v <  espinhos (a ponta aponta para a direção do símbolo)
@@ -32,6 +34,31 @@ extends RefCounted
 ## seguidas usam a mesma faixa, ela continua sem reiniciar.
 
 const DEFAULT_MUSIC := "res://music/first-levels-theme.mp3"
+
+## Pasta dos ajustes da campanha feitos no editor (um arquivo por fase: 01.json, 02.json...).
+## Quando existe, vale no lugar da fase escrita neste arquivo. Os testes trocam a pasta.
+static var campaign_dir := "res://levels/campaign"
+
+
+static func campaign_path(i: int) -> String:
+	return "%s/%02d.json" % [campaign_dir, i + 1]
+
+
+## A fase `i` da campanha: o ajuste do editor, se houver e for jogável; senão a daqui.
+static func campaign_def(i: int) -> Dictionary:
+	var p := campaign_path(i)
+	if FileAccess.file_exists(p):
+		var f := FileAccess.open(p, FileAccess.READ)
+		if f != null:
+			var d = load("res://scripts/level_data.gd").from_json(f.get_as_text())
+			f.close()
+			if d != null and d.is_playable():
+				return d.to_def()
+	return ROOMS[i]
+
+
+static func has_campaign_override(i: int) -> bool:
+	return FileAccess.file_exists(campaign_path(i))
 
 const VERTIGEM := {
 		# Desenhada na orientação em que a 1ª etapa se resolve; começa girada (alta), como o
@@ -549,7 +576,8 @@ const JEFFREY := {
 	# O esquilo nunca salta numa face com espinhos; o acerto é girar no último instante,
 	# no meio do salto de ataque dele. 3 corações; depois do último, a porta abre.
 	"name": "Jeffrey",
-	"music": "res://music/boss-rush-groove.mp3",
+	# a música do boss só começa quando o esquilo entra (antes, toca a música normal dos níveis)
+	"boss_music": "res://music/boss-rush-groove.mp3",
 	"spin_block": [17, 8, 6],
 	"spin_cooldown": 45,
 	"actors": ["res://scripts/boss_squirrel.gd"],

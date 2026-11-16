@@ -90,6 +90,12 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 - **Porta com 30% ou mais coberta de água fica bloqueada**, somando-se à regra dos compartimentos. Ela só destrava depois de meio segundo seca.
 - **Ralo:** engole aos poucos a água que chega até ele. Está sempre ligado. A água engolida só volta ao reiniciar a sala.
 
+### 3.4f Comporta inversa
+
+- Trecho de parede âmbar com hachura em X, que faz o **contrário** da comporta comum de mesmo número: usa o mesmo compartimento, mas fica **aberta enquanto ele está vazio e fecha quando a caixa chega**. Com a caixa no compartimento "a", a comporta `1` abre e a inversa `1` fecha.
+- Aberta, aparece só um contorno tênue. Nunca fecha em cima do coelho ou de uma caixa.
+- Serve para fases em que encaixar a caixa liberta um caminho e tranca outro.
+
 ### 3.5 Controles
 
 | Ação | Teclado | Controle | Toque (D61) |
@@ -243,12 +249,15 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 
 **A sala:** o coelho cai numa sala que não gira. Q/E giram só um **bloco quadrado com espinhos numa das faces**, no centro da sala. Por ser quadrado, girar não muda a colisão, só qual face tem espinhos. A gravidade e o resto da sala não mudam.
 
-**O esquilo:** entra girando, de fora da borda da tela. Anda no chão e ataca saltando algumas vezes entre as paredes, girando no ar e jogando nozes. Só as nozes matam o coelho; encostar no esquilo não machuca (pedido do Victor depois do primeiro teste). As nozes caem com a gravidade e quebram depois de 3 toques.
+**Abertura (D69):** na primeira vez, a sala está vazia; depois de 3 giros do bloco, o esquilo cai do céu girando. Não se repete ao morrer.
+
+**O esquilo:** entra girando, caindo de cima. Anda no chão e ataca saltando algumas vezes entre as paredes, girando no ar e jogando nozes. Só as nozes matam o coelho; encostar no esquilo não machuca (pedido do Victor depois do primeiro teste). As nozes caem com a gravidade e quebram depois de 3 toques.
 
 **Como vencer:** o esquilo **nunca salta numa face com espinhos**, e depois que um salto começa ele não muda. Ele só mira faces **vizinhas** à dos espinhos, então um giro sempre basta. Girar cedo não adianta (ele escolhe outro alvo), girar tarde também não (ele já ricocheteou): o acerto vem de girar no último instante, no meio do salto dele.
 
 **Regras decididas:**
-- O coelho morre num toque, como no resto do jogo. O esquilo tem 3 corações. Depois do terceiro acerto, abre-se a porta.
+- **Só nesta sala o coelho tem 3 vidas** (D68). Levar dano (noz, bomba, espinhos do bloco) tira uma vida e ele pisca, imune, por 0,67 s, sem sair do lugar. Na terceira, morre e a luta recomeça inteira, os dois com 3. O esquilo tem 3 corações. Depois do terceiro acerto, abre-se a porta.
+- No alto da tela: retrato do coelho com as vidas dele, e as do Jeffrey com o retrato dele.
 - O jogo **não pausa** durante o giro do bloco: tudo continua se movendo. É uma prova de reflexo.
 
 - O giro do bloco é mais curto que o da sala: 0,15 s (9 quadros). Os espinhos passam para a face nova no fim dele. Recarga de 0,75 s.
@@ -259,15 +268,21 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 |---|---|---|---|
 | Andando no chão | 1,7 s, devagar | 1,25 s | 0,9 s, mais rápido |
 | Saltos de zigue-zague antes do ataque | 1 | 2 | 3 |
-| Aviso antes do salto (a face mirada ganha uma linha amarela) | 0,67 s | 0,5 s | 0,4 s |
-| Salto de ataque (janela de reação) | 1,0 s | 0,7 s | 0,5 s |
-| Nozes na tela, no máximo | 0 | 2 | 3 |
+| Aviso antes do salto (a face mirada ganha uma linha amarela) | 0,67 s | 0,57 s | 0,47 s |
+| Salto de ataque (janela para girar = salto menos 0,15 s do giro) | 1,1 s | 0,9 s | 0,75 s |
+| Nozes na tela, no máximo | 1 | 1 | 2 |
+| Bombas na tela, no máximo | 0 | 1 | 1 |
 
 - O esquilo pula entre apoios (chão, paredes, teto) e só usa trechos que passam longe do bloco. O ataque sai do apoio em frente à face, em linha reta: cai do teto na face de cima, sai das paredes para as laterais, sobe do chão para a de baixo.
 - Se o jogador gira durante o aviso e a face mirada ganha espinhos, ele troca de alvo.
 - Atingido, perde um coração, é arremessado e fica tonto no chão (1,25 s, sem machucar). Sem corações, some e a porta abre.
-- As nozes (7 px, lentas: arco de ~1,15 s) saem no meio dos saltos, em direção ao coelho; quicam e quebram no terceiro toque ou ao encostar nos espinhos do bloco.
-- **Decidido por Claude, aberto a revisão:** ao morrer, o coelho volta ao início da sala, mas os corações que o esquilo perdeu continuam perdidos.
+- As nozes (10 px, lentas: arco de ~1,5 s) saem no meio dos saltos, em direção ao coelho; quicam e quebram no terceiro toque ou ao encostar nos espinhos do bloco.
+
+**Rodada 28 (D67): vida e balanceamento.**
+- **Noz ("3 hits"):** gira no ar; a cada batida perde força e giro e muda de cara (calma, irritada, rachada e furiosa); quebra na terceira.
+- **Bomba ("1 hit blow"):** a partir do segundo coração, alterna com a noz. Vai em linha reta (85 px/s) até onde o coelho estava e explode no primeiro contato; fere num raio de 14 px. Tem óculos escuros e sorriso, como o Jeffrey. Ele não joga bomba a menos de 50 px do coelho.
+- **Arremessos:** só nos saltos de zigue-zague, nunca a caminho do ataque.
+- **Jeffrey:** desenhado com ~20 px (colisão de 12), óculos escuros e sorriso de dentes. Rabo que segue o corpo com atraso; corridinha de esquilo (dispara e para); vira bola girando no ar, com rastro; amassa ao pousar; pés viram para a parede ou o teto; treme, agacha e arrepia o rabo ao mirar; tonto com óculos tortos e estrelinhas; ri quando o coelho morre; mais descabelado a cada coração perdido.
 
 **Em aberto:**
 - Tudo isto precisa ser sentido jogando: janelas, velocidade no chão, quantidade de nozes.

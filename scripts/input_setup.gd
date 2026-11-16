@@ -12,6 +12,10 @@ static func setup() -> void:
 	_add("rotate_cw", [_key(KEY_E), _pad(JOY_BUTTON_RIGHT_SHOULDER)])
 	_add("restart", [_key(KEY_R), _pad(JOY_BUTTON_Y)])
 	_add("start", [_key(KEY_ENTER), _key(KEY_KP_ENTER), _key(KEY_SPACE), _pad(JOY_BUTTON_START), _pad(JOY_BUTTON_A)])
+	# Menu da tela de início e saída das fases avulsas
+	_add("open_editor", [_key(KEY_E)])
+	_add("my_levels", [_key(KEY_L)])
+	_add("back", [_key(KEY_ESCAPE), _pad(JOY_BUTTON_B)])
 	# Atalhos de desenvolvimento
 	_add("next_room", [_key(KEY_PAGEDOWN)])
 	_add("prev_room", [_key(KEY_PAGEUP)])

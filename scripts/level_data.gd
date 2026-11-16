@@ -1,0 +1,355 @@
+extends RefCounted
+## Uma fase como dado: a grade de texto de `levels.gd` mais os campos, com validação, JSON e
+## código de texto para compartilhar. É o que o editor edita e o que `room.setup()` consome
+## (`to_def()`).
+##
+## Legenda das peças (a mesma de levels.gd):
+##   #  parede   .  vazio   P  coelho (2x2)   B  caixa (2x2)   S  compartimento da porta (2x2)
+##   D  porta (retângulo)   1..9  comporta   a..i  compartimento de comporta (2x2)
+##   ¹²³⁴⁵⁶⁷⁸⁹  comporta inversa 1..9: fecha quando a comporta de mesmo número abre
+##   = } _ {  plataforma por orientação (seta para cima, direita, baixo, esquerda)
+##   ^ > v <  espinho   ~  água   o  ralo   |  -  corda (sequência reta)
+
+const CODE_PREFIX := "FREE1:"
+const MAX_W := 64
+const MAX_H := 48
+const MIN_TIME := 0.5   # s, recarga e limitador
+const MAX_TIME := 30.0
+const MIN_W := 6
+const MIN_H := 6
+const INVERSE_GATES := "¹²³⁴⁵⁶⁷⁸⁹"   # comporta inversa 1..9
+const GLYPHS := "#.PBSD123456789abcdefghi=}_{^>v<~o|-¹²³⁴⁵⁶⁷⁸⁹"
+const BLOCK_GLYPHS := "PBSabcdefghi"   # peças de 2x2
+const GATE_SOCKETS := "abcdefghi"
+
+var name := ""
+var hint := ""
+var music := ""
+var door_open := false
+var rotate := true
+var limiter := false
+var reload_time := 2.5      # s: recarga do giro
+var limiter_time := 2.5     # s: tempo até o limitador desfazer o giro
+var start_rot := 0
+var rows: Array = []        # Array[String]
+var verified := false       # o autor venceu esta versão da fase
+var verified_hash := ""     # hash da versão vencida; vale só se for igual ao hash atual
+
+
+# ---------------------------------------------------------------- construção
+
+static func blank(w: int, h: int) -> RefCounted:
+	var d: RefCounted = load("res://scripts/level_data.gd").new()
+	w = clampi(w, MIN_W, MAX_W)
+	h = clampi(h, MIN_H, MAX_H)
+	for r in h:
+		d.rows.append("#".repeat(w) if (r == 0 or r == h - 1) else "#" + ".".repeat(w - 2) + "#")
+	# um coelho e uma porta aberta, para a fase nova já ser jogável
+	d.name = "Nova fase"
+	d.door_open = true
+	d.set_block(2, h - 3, "P")
+	for r in range(h - 6, h - 2):
+		for c in range(w - 3, w - 1):
+			d.set_cell(c, r, "D")
+	return d
+
+
+static func from_def(def: Dictionary) -> RefCounted:
+	var d: RefCounted = load("res://scripts/level_data.gd").new()
+	d.name = str(def.get("name", ""))
+	d.hint = str(def.get("hint", ""))
+	d.music = str(def.get("music", ""))
+	d.door_open = bool(def.get("door_open", false))
+	d.rotate = bool(def.get("rotate", true))
+	d.limiter = bool(def.get("limiter", false))
+	d.reload_time = float(def.get("reload_time", 2.5))
+	d.limiter_time = float(def.get("limiter_time", 2.5))
+	d.start_rot = int(def.get("start_rot", 0))
+	d.rows = []
+	for r in def.get("rows", []):
+		d.rows.append(str(r))
+	d.verified = bool(def.get("verified", false))
+	d.verified_hash = str(def.get("verified_hash", ""))
+	return d
+
+
+## O dicionário que `room.setup()` e o resto do jogo entendem.
+func to_def() -> Dictionary:
+	var def := {
+		"name": name, "rotate": rotate, "start_rot": start_rot,
+		"rows": rows.duplicate(),
+	}
+	if hint != "":
+		def["hint"] = hint
+	if music != "":
+		def["music"] = music
+	if door_open:
+		def["door_open"] = true
+	if limiter:
+		def["limiter"] = true
+	if not is_equal_approx(reload_time, 2.5):
+		def["reload_time"] = reload_time
+	if not is_equal_approx(limiter_time, 2.5):
+		def["limiter_time"] = limiter_time
+	return def
+
+
+func duplicate_data() -> RefCounted:
+	var d: RefCounted = from_def(to_def())
+	d.verified = verified
+	d.verified_hash = verified_hash
+	return d
+
+
+# ---------------------------------------------------------------- grade
+
+func width() -> int:
+	return String(rows[0]).length() if not rows.is_empty() else 0
+
+
+func height() -> int:
+	return rows.size()
+
+
+func in_bounds(c: int, r: int) -> bool:
+	return r >= 0 and r < rows.size() and c >= 0 and c < String(rows[r]).length()
+
+
+func cell(c: int, r: int) -> String:
+	if not in_bounds(c, r):
+		return "#"
+	return String(rows[r])[c]
+
+
+func set_cell(c: int, r: int, ch: String) -> void:
+	if not in_bounds(c, r):
+		return
+	var line: String = rows[r]
+	rows[r] = line.substr(0, c) + ch + line.substr(c + 1)
+
+
+## Põe uma peça de 2x2 com o canto superior esquerdo em (c, r).
+func set_block(c: int, r: int, ch: String) -> void:
+	for dy in 2:
+		for dx in 2:
+			set_cell(c + dx, r + dy, ch)
+
+
+# ---------------------------------------------------------------- hash e verificação
+
+## Hash do que muda a jogabilidade (não conta nome nem dica de texto).
+func content_hash() -> String:
+	var parts: Array = [rotate, limiter, start_rot, door_open, rows, snappedf(reload_time, 0.01), snappedf(limiter_time, 0.01)]
+	return JSON.stringify(parts).sha256_text()
+
+
+func is_verified() -> bool:
+	return verified and verified_hash == content_hash()
+
+
+func mark_verified() -> void:
+	verified = true
+	verified_hash = content_hash()
+
+
+# ---------------------------------------------------------------- JSON e código
+
+func to_json() -> String:
+	var def := to_def()
+	def["verified"] = is_verified()
+	def["verified_hash"] = verified_hash if is_verified() else ""
+	def["version"] = 1
+	return JSON.stringify(def, "\t")
+
+
+static func from_json(text: String) -> RefCounted:
+	var parsed = JSON.parse_string(text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return null
+	if not parsed.has("rows") or typeof(parsed["rows"]) != TYPE_ARRAY:
+		return null
+	return from_def(parsed)
+
+
+## Texto curto para colar e mandar a amigos: "FREE1:<tamanho>:<base64 do JSON comprimido>".
+func to_code() -> String:
+	var def := to_def()
+	def["verified"] = is_verified()
+	def["verified_hash"] = verified_hash if is_verified() else ""
+	var raw := JSON.stringify(def).to_utf8_buffer()
+	var packed := raw.compress(FileAccess.COMPRESSION_DEFLATE)
+	return "%s%d:%s" % [CODE_PREFIX, raw.size(), Marshalls.raw_to_base64(packed)]
+
+
+static func from_code(code: String) -> RefCounted:
+	code = code.strip_edges()
+	if not code.begins_with(CODE_PREFIX):
+		return null
+	var rest := code.substr(CODE_PREFIX.length())
+	var sep := rest.find(":")
+	if sep <= 0:
+		return null
+	var size := int(rest.substr(0, sep))
+	if size <= 0 or size > 200000:
+		return null
+	var b64 := rest.substr(sep + 1)
+	var re := RegEx.new()
+	re.compile("^[A-Za-z0-9+/=]+$")
+	if re.search(b64) == null:
+		return null
+	var packed := Marshalls.base64_to_raw(b64)
+	if packed.is_empty():
+		return null
+	var raw := packed.decompress(size, FileAccess.COMPRESSION_DEFLATE)
+	if raw.size() != size:
+		return null
+	return from_json(raw.get_string_from_utf8())
+
+
+# ---------------------------------------------------------------- validação
+
+## Lista de problemas: cada um é {"erro": bool, "msg": String, "pos": Vector2i (ou (-1,-1))}.
+## Erro impede de jogar; aviso só informa.
+func validate() -> Array:
+	var out: Array = []
+	var no_pos := Vector2i(-1, -1)
+	var w := width()
+	var h := height()
+	if h == 0 or w == 0:
+		out.append({"erro": true, "msg": "A fase está vazia.", "pos": no_pos})
+		return out
+	if w < MIN_W or h < MIN_H or w > MAX_W or h > MAX_H:
+		out.append({"erro": true, "msg": "Tamanho %dx%d fora do limite (%dx%d a %dx%d)." % [w, h, MIN_W, MIN_H, MAX_W, MAX_H], "pos": no_pos})
+	for r in h:
+		if String(rows[r]).length() != w:
+			out.append({"erro": true, "msg": "A linha %d tem tamanho diferente das outras." % (r + 1), "pos": Vector2i(0, r)})
+			return out
+	for r in h:
+		for c in w:
+			var ch := cell(c, r)
+			if not GLYPHS.contains(ch):
+				out.append({"erro": true, "msg": "Peça desconhecida '%s'." % ch, "pos": Vector2i(c, r)})
+				return out
+			var edge := r == 0 or r == h - 1 or c == 0 or c == w - 1
+			if edge and ch != "#":
+				out.append({"erro": true, "msg": "A borda da sala tem de ser parede.", "pos": Vector2i(c, r)})
+				return out
+
+	# peças de 2x2: mesma leitura de room.gd (canto superior esquerdo, marcando o bloco)
+	var visited := {}
+	var rabbits := 0
+	var boxes := 0
+	var door_sockets := 0
+	var gate_sockets := {}
+	for r in h:
+		for c in w:
+			var ch := cell(c, r)
+			if not BLOCK_GLYPHS.contains(ch) or visited.has(Vector2i(c, r)):
+				continue
+			var ok := true
+			for dy in 2:
+				for dx in 2:
+					visited[Vector2i(c + dx, r + dy)] = true
+					if cell(c + dx, r + dy) != ch or c + dx >= w or r + dy >= h:
+						ok = false
+			if not ok:
+				out.append({"erro": true, "msg": "A peça '%s' precisa ocupar um quadrado de 2x2." % ch, "pos": Vector2i(c, r)})
+				continue
+			match ch:
+				"P":
+					rabbits += 1
+				"B":
+					boxes += 1
+				"S":
+					door_sockets += 1
+				_:
+					gate_sockets[GATE_SOCKETS.find(ch) + 1] = true
+	if rabbits == 0:
+		out.append({"erro": true, "msg": "Falta o coelho.", "pos": no_pos})
+	elif rabbits > 1:
+		out.append({"erro": true, "msg": "Só pode haver um coelho (há %d)." % rabbits, "pos": no_pos})
+
+	# porta: todas as células D formam um retângulo cheio
+	var lo := Vector2i(w, h)
+	var hi := Vector2i(-1, -1)
+	var dcount := 0
+	for r in h:
+		for c in w:
+			if cell(c, r) == "D":
+				dcount += 1
+				lo = Vector2i(mini(lo.x, c), mini(lo.y, r))
+				hi = Vector2i(maxi(hi.x, c), maxi(hi.y, r))
+	if dcount == 0:
+		out.append({"erro": true, "msg": "Falta a porta.", "pos": no_pos})
+	elif dcount != (hi.x - lo.x + 1) * (hi.y - lo.y + 1):
+		out.append({"erro": true, "msg": "A porta tem de ser um retângulo inteiro.", "pos": lo})
+
+	# comportas, compartimentos e caixas
+	var gates := {}
+	for r in h:
+		for c in w:
+			var ch := cell(c, r)
+			if ch >= "1" and ch <= "9":
+				gates[int(ch)] = Vector2i(c, r)
+			elif INVERSE_GATES.contains(ch):
+				gates[INVERSE_GATES.find(ch) + 1] = Vector2i(c, r)
+	for id in gates:
+		if not gate_sockets.has(id):
+			out.append({"erro": true, "msg": "A comporta %d não tem compartimento '%s'." % [id, GATE_SOCKETS[id - 1]], "pos": gates[id]})
+	for id in gate_sockets:
+		if not gates.has(id):
+			out.append({"erro": false, "msg": "O compartimento '%s' não abre nenhuma comporta." % GATE_SOCKETS[id - 1], "pos": no_pos})
+	var sockets := door_sockets + gate_sockets.size()
+	if boxes < sockets:
+		out.append({"erro": true, "msg": "Há %d compartimentos e só %d caixas." % [sockets, boxes], "pos": no_pos})
+	if door_sockets == 0 and not door_open and dcount > 0:
+		out.append({"erro": true, "msg": "A porta não tem compartimento 'S': marque 'porta aberta' ou ponha um.", "pos": no_pos})
+	if door_sockets > 0 and door_open:
+		out.append({"erro": false, "msg": "'Porta aberta' está ligado: o compartimento 'S' não será usado.", "pos": no_pos})
+	if boxes > sockets and sockets > 0:
+		out.append({"erro": false, "msg": "Há mais caixas do que compartimentos.", "pos": no_pos})
+
+	# cordas: cada sequência reta precisa tocar uma parede numa das pontas
+	var seen := {}
+	for r in h:
+		for c in w:
+			var ch := cell(c, r)
+			if (ch != "|" and ch != "-") or seen.has(Vector2i(c, r)):
+				continue
+			var vertical := ch == "|"
+			var st := Vector2i(0, 1) if vertical else Vector2i(1, 0)
+			var last := Vector2i(c, r)
+			while cell(last.x + st.x, last.y + st.y) == ch:
+				last += st
+			var n := 0
+			var p := Vector2i(c, r)
+			while p != last + st:
+				seen[p] = true
+				p += st
+				n += 1
+			var before := Vector2i(c, r) - st
+			var after := last + st
+			if cell(before.x, before.y) != "#" and cell(after.x, after.y) != "#":
+				out.append({"erro": true, "msg": "A corda precisa ter uma ponta encostada numa parede.", "pos": Vector2i(c, r)})
+			elif n < 2:
+				out.append({"erro": false, "msg": "Corda muito curta (%d tile)." % n, "pos": Vector2i(c, r)})
+
+	if absi(start_rot) > 3:
+		out.append({"erro": true, "msg": "Rotação inicial inválida.", "pos": no_pos})
+	if reload_time < MIN_TIME or reload_time > MAX_TIME:
+		out.append({"erro": true, "msg": "A recarga do giro tem de ficar entre %.1f e %.0f s." % [MIN_TIME, MAX_TIME], "pos": no_pos})
+	if limiter and (limiter_time < MIN_TIME or limiter_time > MAX_TIME):
+		out.append({"erro": true, "msg": "O tempo do limitador tem de ficar entre %.1f e %.0f s." % [MIN_TIME, MAX_TIME], "pos": no_pos})
+	if limiter and rotate and limiter_time > reload_time + 0.05:
+		out.append({"erro": false, "msg": "O limitador dura mais que a recarga: dá para girar de novo antes de ele desfazer.", "pos": no_pos})
+	if limiter and not rotate:
+		out.append({"erro": false, "msg": "O limitador não faz nada sem giro.", "pos": no_pos})
+	return out
+
+
+func errors() -> Array:
+	return validate().filter(func(p): return p["erro"])
+
+
+func is_playable() -> bool:
+	return errors().is_empty()

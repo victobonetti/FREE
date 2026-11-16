@@ -6,6 +6,12 @@ const Levels := preload("res://scripts/levels.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const InputSetup := preload("res://scripts/input_setup.gd")
 const IntroScript := preload("res://scripts/intro.gd")
+const LevelEditor := preload("res://scripts/editor/editor.gd")
+const LevelData := preload("res://scripts/level_data.gd")
+const LevelStore := preload("res://scripts/level_store.gd")
+
+const EDITOR_SIZE := Vector2i(960, 540)
+const GAME_SIZE := Vector2i(320, 180)
 const TouchControls := preload("res://scripts/touch_controls.gd")
 
 const BAR_SIZE := Vector2(40, 3)
@@ -52,6 +58,14 @@ var splash_player: AudioStreamPlayer
 var rope_player: AudioStreamPlayer
 var prev_lock := 0
 var ui_layer: CanvasLayer
+var editor_layer: CanvasLayer
+var in_editor_window := false   # janela na escala do editor: o layout de toque não mexe nela
+var editor: Control
+var custom := ""            # "", "editor" (teste a partir do editor) ou "list" (fase da lista)
+var list_label: Label       # tela "Minhas fases"
+var list_items: Array = []
+var list_sel := 0
+var in_list := false
 var touch: Node2D           # controles de toque (aparecem no primeiro toque na tela)
 var hint_def := {}          # definição da sala atual, para trocar a dica ao detectar toque
 
@@ -67,6 +81,8 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--level="):
 			lv = int(a.trim_prefix("--level="))
+		elif a == "--editor":
+			open_editor()
 	if OS.has_feature("web"):
 		var q = JavaScriptBridge.eval("new URLSearchParams(location.search).get('level') || ''")
 		if q is String and q.is_valid_int():
@@ -80,6 +96,7 @@ func _make_ui() -> void:
 	ui_layer = layer
 	layer.layer = 10
 	add_child(layer)
+	ui_layer = layer
 	title = Label.new()
 	title.position = Vector2(4, 1)
 	title.add_theme_font_size_override("font_size", 8)
@@ -155,6 +172,8 @@ func _on_touch_detected() -> void:
 ## No modo toque, alarga a tela do jogo para o formato da janela (celular deitado é ~20:9).
 ## A área de jogo continua 320×180 no centro; as faixas laterais ficam para os controles.
 func _apply_layout() -> void:
+	if in_editor_window:
+		return   # o editor tem a própria escala (960x540)
 	var w := 320
 	if touch.active:
 		var win := get_window().size
@@ -654,7 +673,8 @@ func _load_start_room() -> void:
 
 func _load_room(i: int) -> void:
 	var n := clampi(i, 0, Levels.ROOMS.size() - 1)
-	_spawn_room(Levels.ROOMS[n], n, "%d · %s" % [n + 1, Levels.ROOMS[n]["name"]])
+	var def: Dictionary = Levels.campaign_def(n)
+	_spawn_room(def, n, "%d · %s" % [n + 1, def["name"]])
 
 
 func _clear_scene() -> void:
@@ -675,6 +695,7 @@ func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
 	r.setup(def)
 	r.completed.connect(_on_completed)
 	r.sfx.connect(_play_sfx)
+	r.music_request.connect(_play_music)
 	r.impact.connect(_on_impact)
 	room = r
 	prev_lock = 0
@@ -683,7 +704,7 @@ func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
 	title.text = str(i + 1) if OS.is_debug_build() and i >= 0 else ""
 	hint_def = def
 	hint.text = _hint_for(def)
-	_play_music(def.get("music", Levels.DEFAULT_MUSIC))
+	_play_music(r.music_override if r.music_override != "" else def.get("music", Levels.DEFAULT_MUSIC))
 	hint.modulate.a = 0.0
 	if hint_tween != null:
 		hint_tween.kill()
@@ -699,6 +720,14 @@ func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
 
 func _on_completed() -> void:
 	if transitioning:
+		return
+	if custom != "":
+		transitioning = true
+		var tw0 := create_tween()
+		tw0.tween_property(fade_rect, "modulate:a", 1.0, 0.25)
+		tw0.tween_callback(func(): _end_custom(true))
+		tw0.tween_property(fade_rect, "modulate:a", 0.0, 0.3)
+		tw0.tween_callback(func(): transitioning = false)
 		return
 	transitioning = true
 	var tw := create_tween()
@@ -728,6 +757,21 @@ func _physics_process(_delta: float) -> void:
 
 
 func _tick() -> void:
+	if in_list:
+		_tick_list()
+		return
+	if editor_layer != null and editor_layer.visible:
+		return
+	if custom != "" and Input.is_action_just_pressed("back") and not transitioning:
+		_end_custom(false)
+		return
+	if intro != null and intro.phase == intro.TITLE:
+		if Input.is_action_just_pressed("open_editor"):
+			open_editor()
+			return
+		if Input.is_action_just_pressed("my_levels"):
+			show_list()
+			return
 	if finished:
 		if Input.is_action_just_pressed("jump") and not transitioning:
 			_show_intro()
@@ -761,3 +805,146 @@ func _tick() -> void:
 		"climb": Input.get_action_strength("climb_down"),
 		"rotate": rot,
 	})
+
+
+# ---------------------------------------------------------------- editor e fases do jogador
+
+func _set_window_for_editor(on: bool) -> void:
+	var w := get_window()
+	in_editor_window = on
+	if on:
+		w.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+		w.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
+		w.content_scale_size = EDITOR_SIZE
+	else:
+		w.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+		w.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
+		w.content_scale_size = GAME_SIZE
+		if touch != null:
+			_apply_layout()
+
+
+## Abre o editor. Com `level` (um LevelData) abre essa fase; sem, continua de onde estava.
+func open_editor(level: RefCounted = null, id := "") -> void:
+	_stop_music()
+	_clear_scene()
+	_hide_list()
+	custom = ""
+	ui_layer.visible = false
+	_set_window_for_editor(true)
+	if editor_layer == null:
+		editor_layer = CanvasLayer.new()
+		editor_layer.layer = 30
+		add_child(editor_layer)
+		editor = LevelEditor.new()
+		editor.exit_requested.connect(_close_editor)
+		editor.play_requested.connect(_play_from_editor)
+		editor_layer.add_child(editor)
+	editor_layer.visible = true
+	if level != null:
+		editor.load_level(level, id)
+
+
+func _close_editor() -> void:
+	editor_layer.visible = false
+	_set_window_for_editor(false)
+	ui_layer.visible = true
+	_show_intro()
+
+
+func _play_from_editor(def: Dictionary) -> void:
+	editor_layer.visible = false
+	_set_window_for_editor(false)
+	ui_layer.visible = true
+	custom = "editor"
+	transitioning = false
+	_spawn_room(def, -1, "")
+
+
+## Termina uma fase avulsa (venceu ou saiu) e volta de onde veio.
+func _end_custom(won: bool) -> void:
+	var from := custom
+	custom = ""
+	_clear_scene()
+	hint.text = ""
+	title.text = ""
+	if from == "editor":
+		ui_layer.visible = false
+		_set_window_for_editor(true)
+		editor_layer.visible = true
+		editor.play_finished(won)
+	else:
+		show_list()
+
+
+func show_list() -> void:
+	_stop_music()
+	_clear_scene()
+	finished = false
+	hint.text = ""
+	title.text = ""
+	end_label.visible = false
+	list_items = []
+	for e in LevelStore.list():
+		if e["data"].is_verified() and e["data"].is_playable():
+			list_items.append(e)
+	list_sel = clampi(list_sel, 0, maxi(list_items.size() - 1, 0))
+	in_list = true
+	if list_label == null:
+		list_label = Label.new()
+		list_label.position = Vector2(20, 14)
+		list_label.size = Vector2(280, 150)
+		list_label.add_theme_font_size_override("font_size", 8)
+		list_label.add_theme_constant_override("line_spacing", 2)
+		ui_layer.add_child(list_label)
+	list_label.visible = true
+	_refresh_list()
+
+
+func _refresh_list() -> void:
+	var t := "MINHAS FASES\n\n"
+	if list_items.is_empty():
+		t += "Nenhuma fase verificada ainda.\nCrie uma no editor (E na tela de início)\ne vença-a uma vez para ela aparecer aqui.\n\nEsc volta."
+	else:
+		var first := clampi(list_sel - 5, 0, maxi(list_items.size() - 10, 0))
+		for i in range(first, mini(first + 10, list_items.size())):
+			var d = list_items[i]["data"]
+			t += "%s %s   %dx%d\n" % [">" if i == list_sel else " ", d.name if d.name != "" else list_items[i]["id"], d.width(), d.height()]
+		t += "\nCima/baixo escolhe  ·  Enter joga  ·  E edita  ·  Esc volta"
+	list_label.text = t
+
+
+func _hide_list() -> void:
+	in_list = false
+	if list_label != null:
+		list_label.visible = false
+
+
+func _tick_list() -> void:
+	if Input.is_action_just_pressed("back"):
+		_hide_list()
+		_show_intro()
+		return
+	if list_items.is_empty():
+		return
+	if Input.is_action_just_pressed("ui_down"):
+		list_sel = mini(list_sel + 1, list_items.size() - 1)
+		_refresh_list()
+	elif Input.is_action_just_pressed("ui_up"):
+		list_sel = maxi(list_sel - 1, 0)
+		_refresh_list()
+	elif Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("start"):
+		_play_list_item()
+	elif Input.is_action_just_pressed("open_editor"):
+		var e2: Dictionary = list_items[list_sel]
+		open_editor(e2["data"], e2["id"])
+
+
+func _play_list_item() -> void:
+	if list_items.is_empty():
+		return
+	var e: Dictionary = list_items[list_sel]
+	_hide_list()
+	custom = "list"
+	transitioning = false
+	_spawn_room(e["data"].to_def(), -1, "")

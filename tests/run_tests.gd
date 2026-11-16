@@ -28,6 +28,7 @@ func _init() -> void:
 	test_platforms()
 	test_rot_cooldown()
 	test_limiter()
+	test_reload_params()
 	test_rope()
 	test_water()
 	test_start_is_stable()
@@ -46,12 +47,15 @@ func _init() -> void:
 	test_prumo()
 	test_agua()
 	test_mare()
+	test_inverse_gate()
 	test_represa()
 	test_naufragio()
 	test_mergulho()
 	test_spin_block()
 	test_jeffrey_no_suicide()
 	test_jeffrey_bot()
+	test_jeffrey_lives()
+	test_jeffrey_intro()
 	print("")
 	if failures == 0:
 		print("TODOS OS TESTES PASSARAM")
@@ -651,6 +655,35 @@ func test_limiter() -> void:
 	tick({"rotate": 1})
 	idle(300)
 	check(room.orientation == 1, "sem o campo limiter, o giro fica")
+
+
+func test_reload_params() -> void:
+	print("recarga e limitador parametrizados")
+	load_def(FLAT)
+	tick({"rotate": 1})
+	check(room.rot_lock == 150 and room.reload_frames == 150 and room.limiter_frames == 150, "sem campos, valem 2,5 s (150 quadros)")
+	var d: Dictionary = FLAT.duplicate()
+	d["reload_time"] = 1.0
+	d["limiter"] = true
+	d["limiter_time"] = 0.5
+	load_def(d)
+	check(room.reload_frames == 60 and room.limiter_frames == 30, "reload_time e limiter_time viram quadros")
+	tick({"rotate": 1})
+	check(room.rot_lock == 60 and room.limit_t == 30 and room.orientation == 1, "o giro dura 1 s de recarga e 0,5 s de limitador")
+	idle(15)
+	check(absf(room.rot_ratio() - 0.25) < 0.05 and absf(room.limiter_ratio() - 0.5) < 0.05, "as barras usam o tempo de cada um")
+	idle(20)
+	check(room.orientation == 0 and room.rot_lock > 0 and room.rot_lock <= 60, "o limitador desfaz aos 0,5 s e a recarga recomeça de 1 s")
+	d["reload_time"] = 0.1
+	d["limiter_time"] = 100.0
+	load_def(d)
+	check(room.reload_frames == room.ROT_FRAMES + 1 and room.limiter_frames == 1800, "os valores extremos são limitados")
+	d["reload_time"] = 4.0
+	d["limiter_time"] = 2.0
+	load_def(d)
+	tick({"rotate": 1})
+	idle(125)
+	check(room.orientation == 0 and room.rot_lock > 100, "limitador menor que a recarga: desfaz e a recarga cheia recomeça")
 
 
 func test_start_is_stable() -> void:
@@ -1492,9 +1525,78 @@ func test_naufragio() -> void:
 	check(lost, "caixa empurrada para o poço afunda e fica perdida (%s)" % where())
 
 
+## Sala de teste: comporta "1" e a inversa do mesmo número, ligadas ao compartimento "a".
+const INVERSE_ROOM := {
+	"name": "teste inversa", "rotate": true, "start_rot": 0, "door_open": true,
+	"rows": [
+		"######################",
+		"#....................#",
+		"#....................#",
+		"#.........1...¹......#",
+		"#.........1...¹......#",
+		"#PP.BB....1...¹....DD#",
+		"#PP.BB....1...¹....DD#",
+		"######aa##############",
+		"######aa##############",
+		"######################",
+	],
+}
+
+
+func test_inverse_gate() -> void:
+	print("comporta inversa")
+	load_def(INVERSE_ROOM)
+	idle(10)
+	var normal: Dictionary = {}
+	var inv: Dictionary = {}
+	for g in room.gates:
+		if g["inverse"]:
+			inv = g
+		else:
+			normal = g
+	check(room.gates.size() == 2 and normal["id"] == 1 and inv["id"] == 1, "duas comportas com o mesmo número: a comum e a inversa")
+	check(normal["closed"] and not inv["closed"], "com o compartimento vazio, a comum fecha e a inversa abre")
+	check(room.solid_static(normal["rects"][0]) and not room.solid_static(inv["rects"][0]), "e só a comum é sólida")
+	var got: Array = []
+	room.sfx.connect(func(n): got.append(n))
+	check(walk_until(1.0, func(): return room.group_filled(1), 600), "empurra a caixa para o compartimento (%s)" % where())
+	idle(30)
+	check(not normal["closed"] and inv["closed"], "com a caixa lá, a comum abre e a inversa fecha")
+	check(room.solid_static(inv["rects"][0]) and not room.solid_static(normal["rects"][0]), "agora é a inversa que é sólida")
+	check(got.has("gate_open") and got.has("gate_close"), "as duas mudanças fazem som")
+	for i in 200:
+		tick({"move": 1.0})
+	check(room.rabbit.pos.x + 12 <= inv["rects"][0].position.x and not won(), "o coelho passa pela comum e para na inversa (%s)" % where())
+	# tirar a caixa desfaz tudo
+	room.boxes[0].pos = Vector2i(32, 40)
+	idle(60)
+	check(normal["closed"] and not inv["closed"], "sem a caixa, voltam ao estado original")
+	# nunca fecha em cima do coelho
+	load_def(INVERSE_ROOM)
+	idle(10)
+	room.rabbit.pos = Vector2i(14 * 8 + 2, 40)
+	room.boxes[0].pos = Vector2i(6 * 8, 40)
+	idle(40)
+	check(room.group_filled(1) and room.state == "play", "a inversa espera o coelho sair antes de fechar (não esmaga)")
+	# quatro giros devolvem as comportas inversas ao lugar
+	load_def(INVERSE_ROOM)
+	var before: Array = []
+	for g in room.gates:
+		before.append([g["inverse"], g["rects"].duplicate()])
+	for i in 4:
+		room._rotate_logic(1)
+	var after: Array = []
+	for g in room.gates:
+		after.append([g["inverse"], g["rects"].duplicate()])
+	check(before == after, "quatro giros devolvem as comportas ao lugar")
+
+
 # ------------------------------------------------------------ boss 1: Jeffrey
 
+const BossSquirrel := preload("res://scripts/boss_squirrel.gd")
+
 func _jeffrey() -> void:
+	BossSquirrel.intro_seen = true   # os testes da luta pulam a abertura
 	load_def(Levels.JEFFREY)
 	seed(7)
 
@@ -1563,6 +1665,7 @@ func test_jeffrey_bot() -> void:
 		var r := 0
 		if boss.state == "attack" and boss.t == boss.leg_frames - room.SPIN_FRAMES - 4:
 			r = 1 if boss.target_face == (room.spin_face + 1) % 4 else -1
+		boss.lives = boss.LIVES   # o bot não desvia de nada: aqui só interessa o acerto do giro
 		tick({"rotate": r})
 		if room.state == "dead" and not was_dead:
 			deaths += 1
@@ -1579,3 +1682,71 @@ func test_jeffrey_bot() -> void:
 			won = true
 			break
 	check(won, "o coelho chega à porta depois da luta")
+
+
+## Na primeira vez, o esquilo só aparece depois de 3 giros do bloco; depois, nunca mais espera.
+func test_jeffrey_intro() -> void:
+	print("Jeffrey: abertura com 3 giros")
+	BossSquirrel.intro_seen = false
+	load_def(Levels.JEFFREY)
+	var boss = room.actors[0]
+	idle(300)
+	check(boss.state == "wait" and boss.nuts.is_empty(), "sem girar, o esquilo não aparece")
+	check(room.music_override == "", "e a música do boss ainda não toca")
+	for n in 2:
+		wait_rot_ready()
+		tick({"rotate": 1})
+		idle(60)
+	check(boss.state == "wait", "dois giros ainda não bastam")
+	wait_rot_ready()
+	tick({"rotate": -1})
+	idle(20)
+	check(boss.state == "wait", "depois do terceiro, uma pausa curta")
+	idle(15)
+	check(room.music_override == "res://music/boss-rush-groove.mp3", "a música do boss é pedida quando ele aparece")
+	check(boss.state == "enter" and boss.pos.y < room.ph / 2.0, "e ele cai do céu, girando (%s em y=%d)" % [boss.state, boss.pos.y])
+	idle(60)
+	check(boss.state != "enter" and boss.state != "wait", "e a luta começa")
+	room.rabbit.pos = Vector2i(24, 100)
+	boss.lives = 1
+	room.kill()
+	var guard := 0
+	while room.state != "play" and guard < 600:
+		tick()
+		guard += 1
+	check(boss.state == "enter", "depois de morrer, ele entra direto, sem esperar os giros")
+	load_def(Levels.JEFFREY)
+	check(room.actors[0].state == "enter", "voltando à sala, também")
+
+
+## Só nesta sala o coelho tem 3 vidas: cada morte custa uma; na terceira, a luta recomeça.
+func test_jeffrey_lives() -> void:
+	print("Jeffrey: 3 vidas do coelho")
+	_jeffrey()
+	var boss = room.actors[0]
+	idle(70)
+	boss.hearts = 1
+	check(boss.lives == 3, "o coelho começa com 3 vidas")
+	var p0: Vector2i = room.rabbit.pos
+	room.kill()
+	check(room.state == "play" and boss.lives == 2 and room.invuln > 0, "o primeiro dano tira uma vida e o coelho pisca, sem morrer")
+	check(room.rabbit.pos == p0, "e continua onde estava")
+	room.kill()
+	check(boss.lives == 2, "piscando, é imune")
+	idle(boss.INVULN + 2)
+	check(room.invuln == 0, "a imunidade é curta (%d quadros)" % boss.INVULN)
+	room.kill()
+	check(room.state == "play" and boss.lives == 1 and boss.hearts == 1, "segundo dano: sobra 1 vida e o esquilo continua ferido")
+	idle(boss.INVULN + 2)
+	room.kill()
+	check(room.state == "dead", "terceiro dano: o coelho morre")
+	var guard := 0
+	while room.state != "play" and guard < 600:
+		tick()
+		guard += 1
+	check(boss.lives == 3 and boss.hearts == 3 and room.invuln == 0, "e a luta recomeça, os dois com 3")
+	boss.hearts = 2
+	boss.lives = 2
+	room.reset()
+	check(boss.lives == 3 and boss.hearts == 3, "reiniciar com R também recomeça a luta")
+	check(boss.blast_hits(Vector2(50, 50), Rect2(60, 44, 12, 12)) and not boss.blast_hits(Vector2(50, 50), Rect2(70, 44, 12, 12)), "a explosão fere só dentro do raio")

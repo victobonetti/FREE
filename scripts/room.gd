@@ -10,6 +10,7 @@ signal completed
 ## "jump" | "death" | "win" | "sensor_on" | "sensor_off" | "gate_open" | "gate_close" | "platform"
 ## | "rope" (agarrou a corda) | "splash" (caiu na água)
 signal sfx(name: String)
+signal music_request(path: String)   # um ator pede outra faixa (o boss, ao entrar)
 signal impact(strength: float)  # pouso de caixa; 0 a 2,5 (mais altura e mais caixas = mais forte)
 
 const TILE := 8
@@ -21,6 +22,7 @@ const SPIN_FRAMES := 9       # giro do bloco (sala de boss): mais curto que o da
 const FLIP_FRAMES := 24      # cambalhota do coelho ao girar (passa um pouco do giro, já caindo)
 const C_FLIP := Color("8fd0ff")       # faíscas azuis do giro
 const ROT_COOLDOWN := 134    # espera extra depois do giro: com a animação, 2,5 s (150 quadros)
+const DEFAULT_RELOAD := 2.5   # s: recarga do giro e tempo do limitador, se a fase não disser outro
 const ROT_BUFFER := 6        # apertar até 6 quadros antes do fim da recarga ainda vale
 const DT := 1.0 / 60.0
 const BOX_GRAVITY := 900.0
@@ -33,6 +35,7 @@ const SENSOR_FRAMES := 16
 const SWITCH_FRAMES := 12      # efeito de comporta/plataforma mudando de estado
 const WIN_FRAMES := 44
 const DEATH_FRAMES := 20
+const INVERSE_GATES := "¹²³⁴⁵⁶⁷⁸⁹"   # comporta inversa: fecha quando a comporta de mesmo número abre
 const GATE_SOCKETS := "abcdefghi"  # compartimento "a" abre a comporta "1", e assim por diante
 const PLATFORM_CHARS := "=}_{"     # seta para cima, direita, baixo, esquerda
 const WATER_REACH := [1, 2, 4, 8, 16, 32, 64, 128]  # distâncias (px) em que duas colunas trocam água
@@ -79,6 +82,8 @@ const C_SPIKE := Color("e0657c")
 const C_DUST := Color("bdb8ab")
 const C_GATE := Color("6fd3b8")
 const C_GATE_DARK := Color("1d3a35")
+const C_IGATE := Color("f0a05a")
+const C_IGATE_DARK := Color("3d2a16")
 const C_PLAT := Color("b9a3f0")
 const C_PLAT_DARK := Color("3a3158")
 const C_ROPE := Color("e39a4c")
@@ -165,7 +170,7 @@ var has_door := false
 var door_open := false
 var door_flash := 0
 var spikes: Array = []
-var gates: Array = []      # {"id", "rects": Array[Rect2i], "closed", "anim", "fx"}
+var gates: Array = []      # {"id", "inverse", "rects": Array[Rect2i], "closed", "anim", "fx"}
 var platforms: Array = []  # {"rect": Rect2i, "facing", "solid", "fx"}
 # cordas: {"anchor": Vector2, "facing", "len", "pts", "old"}. facing 2 = presa no teto (ativa).
 # pts/old são os pontos da corda (Verlet): a forma dela é simulada, cai e balança de verdade.
@@ -219,6 +224,8 @@ var rot_lock_max := ROT_FRAMES + ROT_COOLDOWN
 # Atores (campo "actors": scripts com step(room) e on_reset(room)), como o boss da sala.
 var actors: Array = []
 var door_unlocked := false   # um ator (o boss derrotado) abriu a porta
+var music_override := ""        # faixa pedida por um ator; vale também para quem conecta depois
+var invuln := 0              # quadros em que o coelho pisca e nada o mata (dano com vidas, no boss)
 var flip_dir := 1        # sentido da cambalhota (o mesmo do giro)
 var rot_frame := 0
 var rot_from := 0.0
@@ -228,6 +235,8 @@ var rot_lock := 0  # quadros até poder girar de novo (animação + recarga)
 # Limitador (campo "limiter" da sala): o giro é desfeito sozinho quando a recarga termina.
 var limit_net := 0   # giros acumulados desde o estado inicial da sala
 var limit_t := 0     # quadros até o giro ser desfeito (0 = nada a desfazer)
+var reload_frames := ROT_FRAMES + ROT_COOLDOWN    # recarga do giro, com a animação (campo "reload_time")
+var limiter_frames := ROT_FRAMES + ROT_COOLDOWN   # tempo até o limitador desfazer (campo "limiter_time")
 var orientation := 0  # giros acumulados (0..3), só informativo
 
 var cam := Vector2.ZERO  # ponto da sala (px) que fica no centro da tela
@@ -251,6 +260,9 @@ func _process(_delta: float) -> void:
 func setup(room_def: Dictionary) -> void:
 	def = room_def
 	allow_rotate = room_def.get("rotate", true)
+	reload_frames = seconds_to_frames(float(room_def.get("reload_time", DEFAULT_RELOAD)))
+	rot_lock_max = reload_frames
+	limiter_frames = seconds_to_frames(float(room_def.get("limiter_time", DEFAULT_RELOAD)))
 	for path in room_def.get("actors", []):
 		var a: Node = load(path).new()
 		add_child(a)
@@ -298,6 +310,7 @@ func reset() -> void:
 	spinning = false
 	spin_frame = 0
 	door_unlocked = false
+	invuln = 0
 	view_angle = 0.0
 	pending_rot = 0
 	rot_lock = 0
@@ -333,6 +346,11 @@ func reset() -> void:
 
 
 ## 0.0 logo após girar, 1.0 quando o giro está disponível de novo.
+## Segundos -> quadros (60 por segundo), de pouco mais que a animação do giro até 30 s.
+static func seconds_to_frames(s: float) -> int:
+	return clampi(roundi(s * 60.0), ROT_FRAMES + 1, 1800)
+
+
 func rot_ratio() -> float:
 	return 1.0 - float(rot_lock) / float(rot_lock_max)
 
@@ -406,7 +424,7 @@ func spin_hurt_rects() -> Array:
 func _parse(rows: Array, water_tiles: Array) -> void:
 	var visited := {}
 	var door_cells: Array = []
-	var gate_cells := {}  # id -> Array[Rect2i]
+	var gate_cells := {}  # id (negativo: comporta inversa) -> Array[Rect2i]
 	var rope_cells := {}  # Vector2i -> "|" ou "-"
 	for r in gh:
 		var line: String = rows[r]
@@ -437,6 +455,11 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 				if not gate_cells.has(gid):
 					gate_cells[gid] = []
 				gate_cells[gid].append(cell)
+			elif INVERSE_GATES.contains(ch):
+				var iid := -(INVERSE_GATES.find(ch) + 1)
+				if not gate_cells.has(iid):
+					gate_cells[iid] = []
+				gate_cells[iid].append(cell)
 			elif PLATFORM_CHARS.contains(ch):
 				platforms.append({"rect": cell, "facing": PLATFORM_CHARS.find(ch), "solid": false, "fx": 0})
 			elif (ch == "P" or ch == "B" or ch == "S" or GATE_SOCKETS.contains(ch)) and not visited.has(key):
@@ -463,7 +486,8 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 	var ids := gate_cells.keys()
 	ids.sort()
 	for gid in ids:
-		gates.append({"id": gid, "rects": gate_cells[gid], "closed": true, "anim": 0.0, "fx": 0})
+		var inv: bool = gid < 0
+		gates.append({"id": absi(gid), "inverse": inv, "rects": gate_cells[gid], "closed": not inv, "anim": 0.0 if not inv else 1.0, "fx": 0})
 
 
 ## Cada sequência reta de "|" ou "-" é uma corda esticada. A ponta encostada numa parede é a
@@ -602,7 +626,7 @@ func _rotate_logic(dir: int) -> void:
 
 ## Fração (0 a 1) do tempo que falta para o limitador desfazer o giro.
 func limiter_ratio() -> float:
-	return float(limit_t) / float(ROT_FRAMES + ROT_COOLDOWN)
+	return float(limit_t) / float(limiter_frames)
 
 
 func _begin_rotate(dir: int, forced := false) -> void:
@@ -610,7 +634,7 @@ func _begin_rotate(dir: int, forced := false) -> void:
 		rabbit.air_rot = false
 	if def.get("limiter", false):
 		limit_net += dir
-		limit_t = ROT_FRAMES + ROT_COOLDOWN if limit_net != 0 else 0
+		limit_t = limiter_frames if limit_net != 0 else 0
 	_rotate_logic(dir)
 	if not forced:
 		_flip_fx(dir)
@@ -618,7 +642,8 @@ func _begin_rotate(dir: int, forced := false) -> void:
 	rot_frame = 0
 	rot_from = -dir * PI / 2.0
 	view_angle = rot_from
-	rot_lock = ROT_FRAMES + ROT_COOLDOWN
+	rot_lock_max = reload_frames
+	rot_lock = rot_lock_max
 
 
 ## O coelho "faz" o giro: cambalhota encolhida e faíscas azuis saindo do corpo.
@@ -998,9 +1023,10 @@ func group_filled(group: int) -> bool:
 
 ## Comportas e plataformas mudam de estado; nenhuma fica sólida em cima de alguém.
 func _update_mechanisms(instant: bool) -> void:
-	var gate_changed := ""
+	var gate_sfx: Array = []   # sons das comportas que mudaram (a comum e a inversa podem mudar juntas)
 	for g in gates:
-		var want_closed := not group_filled(g["id"])
+		var filled := group_filled(g["id"])
+		var want_closed: bool = filled if g.get("inverse", false) else not filled
 		if want_closed != g["closed"]:
 			var can := true
 			if want_closed:
@@ -1012,7 +1038,9 @@ func _update_mechanisms(instant: bool) -> void:
 				water_dirty = true
 				g["closed"] = want_closed
 				g["fx"] = SWITCH_FRAMES
-				gate_changed = "gate_close" if want_closed else "gate_open"
+				var snd := "gate_close" if want_closed else "gate_open"
+				if not gate_sfx.has(snd):
+					gate_sfx.append(snd)
 		var target := 0.0 if g["closed"] else 1.0
 		g["anim"] = target if instant else move_toward(g["anim"], target, 0.12)
 		g["fx"] = maxi(g["fx"] - 1, 0)
@@ -1032,8 +1060,8 @@ func _update_mechanisms(instant: bool) -> void:
 		for p in platforms:
 			p["fx"] = 0
 		return
-	if gate_changed != "":
-		sfx.emit(gate_changed)
+	for snd in gate_sfx:
+		sfx.emit(snd)
 	if plat_changed:
 		sfx.emit("platform")
 
@@ -1597,8 +1625,12 @@ func _push_dust() -> void:
 
 
 func kill() -> void:
-	if state != "play":
+	if state != "play" or invuln > 0:
 		return
+	# um ator pode transformar a morte em dano (o boss dá vidas ao coelho)
+	for a in actors:
+		if a.has_method("absorb_kill") and a.absorb_kill(self):
+			return
 	state = "dead"
 	timer = DEATH_FRAMES
 	shake = 4.0
@@ -1855,6 +1887,10 @@ func _draw_gates() -> void:
 	for g in gates:
 		var k: float = g["anim"]  # 0 fechada, 1 aberta
 		var fx := float(g["fx"]) / float(SWITCH_FRAMES)
+		var inv: bool = g.get("inverse", false)
+		if inv:
+			_draw_inverse_gate(g, k, fx)
+			continue
 		if k >= 1.0 and fx <= 0.0:
 			continue
 		for gr in g["rects"]:
@@ -1868,6 +1904,25 @@ func _draw_gates() -> void:
 				draw_rect(Rect2(inner.position.x + inner.size.x * 0.7, inner.position.y, 1, inner.size.y), Color(C_GATE, 0.6 * (1.0 - k)))
 			if fx > 0.0:
 				draw_rect(r.grow(1.0 + 2.0 * (1.0 - fx)), Color(C_GATE, 0.5 * fx), false, 1.0)
+
+
+## Comporta inversa: âmbar, com hachura em X. Fica fechada quando o compartimento do mesmo
+## número está cheio e aberta quando está vazio (o contrário da comporta comum). Aberta, só
+## um contorno tênue.
+func _draw_inverse_gate(g: Dictionary, k: float, fx: float) -> void:
+	for gr in g["rects"]:
+		var r := Rect2(gr)
+		var solid := 1.0 - k
+		if solid > 0.0:
+			var inner := r.grow(-3.5 * k)
+			draw_rect(inner, Color(C_IGATE_DARK, solid))
+			draw_line(inner.position, inner.end, Color(C_IGATE, solid), 1.0)
+			draw_line(Vector2(inner.end.x, inner.position.y), Vector2(inner.position.x, inner.end.y), Color(C_IGATE, solid), 1.0)
+			draw_rect(inner, Color(C_IGATE, 0.7 * solid), false, 1.0)
+		if k > 0.0:
+			draw_rect(r.grow(-1.0), Color(C_IGATE, 0.22 * k), false, 1.0)
+		if fx > 0.0:
+			draw_rect(r.grow(1.0 + 2.0 * (1.0 - fx)), Color(C_IGATE, 0.5 * fx), false, 1.0)
 
 
 ## Plataforma por orientação: sólida (preenchida) só com a seta para cima; fora disso, contorno
@@ -1982,7 +2037,7 @@ func _draw_rabbit(base: Transform2D) -> void:
 		sc *= 1.0 - 0.85 * k
 		alpha = 1.0 - smoothstep(0.35, 0.55, t)
 		fr = [_rabbit_tex("back", "air", false), 0]
-	if alpha <= 0.0:
+	if alpha <= 0.0 or (invuln / 3) % 2 == 1:
 		return
 	var spin := 0.0
 	var off := Vector2(-6, -16 + fr[1])

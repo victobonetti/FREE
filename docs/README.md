@@ -19,10 +19,15 @@ Jogo de plataforma e puzzle em que um coelho foge por salas que podem ser girada
 - Ato introdutório em andamento (D53, D58): 16 fases feitas, cada uma resolvida por bot; recarga do giro de 2,5 s e o limitador na Maré e na Fuga.
 - Pendente: fase 20, Vertigem e Fuga revistas; ajustes depois do teste; arte e áudio finais (M5).
 
+## Editor de fases
+
+Na tela de início: **E** abre o editor; **L** abre "Minhas fases" (as que você venceu e salvou). No editor: pinte com o mouse (botão direito apaga), escolha a peça à esquerda, ajuste as propriedades à direita, **P** ou "▶ Jogar" testa. Vencer uma vez marca a fase como verificada; só então ela vira código de compartilhamento ("Exportar código") e entra em "Minhas fases". Atalhos: Ctrl+Z/Y desfaz/refaz, Ctrl+S salva, Ctrl+C/X/V copia/recorta/cola (R gira e F espelha a colagem), roda do mouse dá zoom, botão do meio ou Espaço+arrastar move, Home enquadra. Detalhes: [ARQUITETURA.md](ARQUITETURA.md).
+
 ## Como rodar
 
 - Jogar: `.\run.ps1` na raiz do projeto (ou abrir a pasta no Godot 4.7 e apertar F5). O executável está em `Desktop\GODOT`.
-- Testes: `Godot_v4.7.2-stable_win64_console.exe --headless --path . -s tests/run_tests.gd`
+- Testes: `Godot_v4.7.2-stable_win64_console.exe --headless --path . -s tests/run_tests.gd` (jogo) e `... -s tests/editor_tests.gd` (editor)
+- Abrir direto no editor: `.\run.ps1 -Editor`... não: `Godot --path . -- --editor`
 - Capturas de tela: `Godot_v4.7.2-stable_win64_console.exe --path . -s tests/shot.gd -- <pasta>`
 
 ## Controles

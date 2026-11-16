@@ -326,7 +326,39 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 
 ---
 
-## Rodada 23 — Celular e GitHub Pages (16/11/2026)
+## Rodada 23 — Editor de fases (16/11/2026)
+
+**Entrada do Victor:** "com os componentes que temos, crie um editor de fases. Ele será o core do jogo", por interface, para personalizar qualquer nível; planejamento primeiro.
+
+**Feito (D61 a D64):** plano aprovado e implementado inteiro: dados e validação (`level_data.gd`), armazenamento e código de compartilhamento (`level_store.gd`), modelo de edição com desfazer, ferramentas, grade e tela do editor (`scripts/editor/`), testar dentro do editor com verificação por vitória, "Minhas fases" na tela de início, e ajuste da campanha em JSON (só em desenvolvimento). Testes em `tests/editor_tests.gd` (sem janela, inclusive o fluxo editor → jogar → vencer → salvar → lista).
+
+**Ainda não validado por quem joga:** a usabilidade da interface com o mouse (testei por script e capturas, não com as mãos). Em especial: o tamanho da grade ao abrir, o zoom, e se as ferramentas se explicam sozinhas.
+
+**Não feito:** música por fase no painel (o campo existe, sem interface); gravação de solução; navegador de fases de outras pessoas (só importação por código).
+
+---
+
+## Rodada 24 — Comporta inversa (16/11/2026)
+
+**Entrada do Victor:** componentes que funcionam ao contrário das comportas, ativos só quando a comporta de mesmo número é ativada, usando a mesma comporta; também no editor.
+
+**Feito (D65):** comporta inversa em `room.gd` (leitura, estado, desenho, som), em `level_data.gd` (símbolo e validação) e no editor (paleta com nove botões, desenho próprio). Testes: estados opostos, sólida só uma de cada vez, sons das duas, não esmaga, giro, e ida e volta por JSON e código. Todos passam.
+
+**Falta:** usar a inversa em alguma fase da campanha; hoje ela só existe nas fases do editor.
+
+---
+
+## Rodada 25 — Recarga e limitador por fase (16/11/2026)
+
+**Entrada do Victor:** parametrizar o limite e o timeout do flip no editor.
+
+**Feito (D66):** `reload_time` e `limiter_time` na fase (`room.gd`, `level_data.gd`), com validação, hash de verificação e dois campos no painel do editor. Testes novos nos dois conjuntos; todos passam.
+
+**Dúvida aberta:** se "limite" era a quantidade máxima de giros (não feita).
+
+---
+
+## Rodada 26 — Celular e GitHub Pages (16/11/2026)
 
 **Entrada do Victor:** publicar na web e jogar no celular, com um joystick e dois botões para girar.
 
@@ -338,7 +370,7 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 
 ---
 
-## Rodada 24 — Boss 1, Jeffrey, o esquilo (16/11/2026)
+## Rodada 27 — Boss 1, Jeffrey, o esquilo (16/11/2026)
 
 **Entrada do Victor:** esboço do boss (D63); respostas: só faces vizinhas, coelho morre num toque, esquilo com 3 corações, sem pausa; encurtar o giro do bloco; começar a implementação.
 
@@ -365,3 +397,39 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 | Corda e água | feitas (rodada 18); aguardando teste. Em aberto: respostas do Victor sobre a corda (D47) e um jeito de ativar o ralo |
 | Exportar de novo para `build/` | pendente desde a rodada 16 |
 | Controle de versão (git) | a pasta não é um repositório |
+
+---
+
+## Rodada 28 — Jeffrey com mais vida (16/11/2026)
+
+**Entrada do Victor:** esboço `jeffrey-concept.jpeg`; Jeffrey "extremamente animado", movimentos mais naturais, maior; noz que gira e perde força a cada batida; bomba de um toque com óculos e sorriso; uma noz já no primeiro coração; balancear para chefe de capítulo 1.
+
+**Feito (D67):** tudo em `scripts/boss_squirrel.gd`. Os testes do boss continuam passando (o bot vence; girar à toa nunca fere o esquilo).
+
+**Ainda não validado por quem joga:** tudo. Conferido só por capturas: andando, na parede, mirando, bola no ar, explosão, noz nas três caras. Não vi em captura: a bomba em voo, o tonto e a risada.
+
+---
+
+## Rodada 29 — Vidas e retratos no boss (16/11/2026)
+
+**Entrada do Victor (depois de jogar):** retrato do Jeffrey e do coelho no alto, os dois com 3 vidas só nesta sala; nozes maiores e um pouco mais lentas; ao levar dano o coelho pisca imortal por um período curtíssimo; perder as 3 vidas reinicia o chefão.
+
+**Feito (D68):** `boss_squirrel.gd`, `room.gd` (`invuln`, `absorb_kill`) e teste novo das vidas. Todos os testes passam.
+
+**Ainda não validado por quem joga:** a duração da imunidade e o tamanho novo das nozes.
+
+---
+
+## Rodada 30 — Abertura do boss (16/11/2026)
+
+**Entrada do Victor:** na primeira vez, o jogador faz 3 giros antes de o Jeffrey aparecer, para entender a mecânica na prática; ele aparece rodando do céu; se o jogador morrer, a cena não se repete.
+
+**Feito (D69):** estado `wait` em `boss_squirrel.gd` e teste da abertura. Todos os testes passam.
+
+---
+
+## Rodada 31 — Música e barras só com o Jeffrey (16/11/2026)
+
+**Entrada do Victor:** o tema do boss só começa quando o Jeffrey aparece (até lá, o tema normal dos níveis); sem barra de vida do coelho até ele aparecer.
+
+**Feito (D70):** `boss_music` na sala, `music_request` em `room.gd`, barras escondidas durante a espera. Testes cobrem o pedido da faixa. Não conferido ouvindo.

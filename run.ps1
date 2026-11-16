@@ -5,6 +5,7 @@
 param(
     [switch]$Console,
     [switch]$Editor,
+    [switch]$Fases,
     [int]$Level = 0
 )
 
@@ -22,5 +23,6 @@ if (-not (Test-Path $godot)) {
 $args_ = @("--path", $PSScriptRoot)
 if ($Editor) { $args_ += "--editor" }
 if ($Level -gt 0) { $args_ += @("--", "--level=$Level") }
+if ($Fases) { $args_ += @("--", "--editor") }
 
 & $godot @args_

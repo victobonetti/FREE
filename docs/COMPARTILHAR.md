@@ -5,7 +5,7 @@ Há duas versões, geradas na pasta `build/` do projeto (ela não faz parte do c
 | Versão | Arquivo | Para quem |
 |---|---|---|
 | Web | `build/coelho-web.zip` | Qualquer pessoa com Chrome, Firefox ou Edge, pelo link do itch.io |
-| Windows | `build/coelho-windows.zip` | Quem prefere baixar e rodar; só Windows |
+| Windows | `build/free-windows.zip` | Quem prefere baixar e rodar; só Windows |
 
 ## Link fixo: GitHub Pages (versão web, também no celular)
 
@@ -29,6 +29,8 @@ Compress-Archive -Force build/web/* build/coelho-web.zip
 Compress-Archive -Force build/windows/* build/coelho-windows.zip
 ```
 
+Para o Windows há um atalho na raiz do projeto: `.uild.ps1` gera `build\windows\Free.exe`; com `-Zip` gera também `buildree-windows.zip`; `-Test` roda os testes antes; `-Run` abre o jogo no fim. O executável é de um arquivo só (o pacote de dados vai embutido).
+
 Ou peça ao Claude para exportar de novo.
 
 ## Publicar no itch.io (versão web)
@@ -47,8 +49,8 @@ Ao abrir, o jogo pede um clique para começar: o navegador só libera som depois
 
 ## Mandar o .exe (versão Windows)
 
-1. Mande `build/coelho-windows.zip` por Drive, Discord ou WeTransfer.
-2. Seu amigo extrai o zip e abre `Coelho.exe`.
+1. Mande `build/free-windows.zip` por Drive, Discord ou WeTransfer.
+2. Seu amigo extrai o zip e abre `Free.exe`.
 3. O Windows vai mostrar **"O Windows protegeu o computador"**, porque o executável não tem assinatura digital. Clique em **Mais informações → Executar assim mesmo**. É normal em jogos independentes não assinados.
 
 ## O que pedir para os amigos observarem
