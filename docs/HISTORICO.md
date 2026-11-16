@@ -397,3 +397,23 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 | Corda e água | feitas (rodada 18); aguardando teste. Em aberto: respostas do Victor sobre a corda (D47) e um jeito de ativar o ralo |
 | Exportar de novo para `build/` | pendente desde a rodada 16 |
 | Controle de versão (git) | a pasta não é um repositório |
+
+---
+
+## Rodada 28 — Jeffrey com mais vida (16/11/2026)
+
+**Entrada do Victor:** esboço `jeffrey-concept.jpeg`; Jeffrey "extremamente animado", movimentos mais naturais, maior; noz que gira e perde força a cada batida; bomba de um toque com óculos e sorriso; uma noz já no primeiro coração; balancear para chefe de capítulo 1.
+
+**Feito (D67):** tudo em `scripts/boss_squirrel.gd`. Os testes do boss continuam passando (o bot vence; girar à toa nunca fere o esquilo).
+
+**Ainda não validado por quem joga:** tudo. Conferido só por capturas: andando, na parede, mirando, bola no ar, explosão, noz nas três caras. Não vi em captura: a bomba em voo, o tonto e a risada.
+
+---
+
+## Rodada 29 — Vidas e retratos no boss (16/11/2026)
+
+**Entrada do Victor (depois de jogar):** retrato do Jeffrey e do coelho no alto, os dois com 3 vidas só nesta sala; nozes maiores e um pouco mais lentas; ao levar dano o coelho pisca imortal por um período curtíssimo; perder as 3 vidas reinicia o chefão.
+
+**Feito (D68):** `boss_squirrel.gd`, `room.gd` (`invuln`, `absorb_kill`) e teste novo das vidas. Todos os testes passam.
+
+**Ainda não validado por quem joga:** a duração da imunidade e o tamanho novo das nozes.

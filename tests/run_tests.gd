@@ -54,6 +54,7 @@ func _init() -> void:
 	test_spin_block()
 	test_jeffrey_no_suicide()
 	test_jeffrey_bot()
+	test_jeffrey_lives()
 	print("")
 	if failures == 0:
 		print("TODOS OS TESTES PASSARAM")
@@ -1660,6 +1661,7 @@ func test_jeffrey_bot() -> void:
 		var r := 0
 		if boss.state == "attack" and boss.t == boss.leg_frames - room.SPIN_FRAMES - 4:
 			r = 1 if boss.target_face == (room.spin_face + 1) % 4 else -1
+		boss.lives = boss.LIVES   # o bot não desvia de nada: aqui só interessa o acerto do giro
 		tick({"rotate": r})
 		if room.state == "dead" and not was_dead:
 			deaths += 1
@@ -1676,3 +1678,36 @@ func test_jeffrey_bot() -> void:
 			won = true
 			break
 	check(won, "o coelho chega à porta depois da luta")
+
+
+## Só nesta sala o coelho tem 3 vidas: cada morte custa uma; na terceira, a luta recomeça.
+func test_jeffrey_lives() -> void:
+	print("Jeffrey: 3 vidas do coelho")
+	_jeffrey()
+	var boss = room.actors[0]
+	idle(70)
+	boss.hearts = 1
+	check(boss.lives == 3, "o coelho começa com 3 vidas")
+	var p0: Vector2i = room.rabbit.pos
+	room.kill()
+	check(room.state == "play" and boss.lives == 2 and room.invuln > 0, "o primeiro dano tira uma vida e o coelho pisca, sem morrer")
+	check(room.rabbit.pos == p0, "e continua onde estava")
+	room.kill()
+	check(boss.lives == 2, "piscando, é imune")
+	idle(boss.INVULN + 2)
+	check(room.invuln == 0, "a imunidade é curta (%d quadros)" % boss.INVULN)
+	room.kill()
+	check(room.state == "play" and boss.lives == 1 and boss.hearts == 1, "segundo dano: sobra 1 vida e o esquilo continua ferido")
+	idle(boss.INVULN + 2)
+	room.kill()
+	check(room.state == "dead", "terceiro dano: o coelho morre")
+	var guard := 0
+	while room.state != "play" and guard < 600:
+		tick()
+		guard += 1
+	check(boss.lives == 3 and boss.hearts == 3 and room.invuln == 0, "e a luta recomeça, os dois com 3")
+	boss.hearts = 2
+	boss.lives = 2
+	room.reset()
+	check(boss.lives == 3 and boss.hearts == 3, "reiniciar com R também recomeça a luta")
+	check(boss.blast_hits(Vector2(50, 50), Rect2(60, 44, 12, 12)) and not boss.blast_hits(Vector2(50, 50), Rect2(70, 44, 12, 12)), "a explosão fere só dentro do raio")

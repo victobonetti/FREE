@@ -223,6 +223,7 @@ var rot_lock_max := ROT_FRAMES + ROT_COOLDOWN
 # Atores (campo "actors": scripts com step(room) e on_reset(room)), como o boss da sala.
 var actors: Array = []
 var door_unlocked := false   # um ator (o boss derrotado) abriu a porta
+var invuln := 0              # quadros em que o coelho pisca e nada o mata (dano com vidas, no boss)
 var flip_dir := 1        # sentido da cambalhota (o mesmo do giro)
 var rot_frame := 0
 var rot_from := 0.0
@@ -307,6 +308,7 @@ func reset() -> void:
 	spinning = false
 	spin_frame = 0
 	door_unlocked = false
+	invuln = 0
 	view_angle = 0.0
 	pending_rot = 0
 	rot_lock = 0
@@ -1621,8 +1623,12 @@ func _push_dust() -> void:
 
 
 func kill() -> void:
-	if state != "play":
+	if state != "play" or invuln > 0:
 		return
+	# um ator pode transformar a morte em dano (o boss dá vidas ao coelho)
+	for a in actors:
+		if a.has_method("absorb_kill") and a.absorb_kill(self):
+			return
 	state = "dead"
 	timer = DEATH_FRAMES
 	shake = 4.0
@@ -2029,7 +2035,7 @@ func _draw_rabbit(base: Transform2D) -> void:
 		sc *= 1.0 - 0.85 * k
 		alpha = 1.0 - smoothstep(0.35, 0.55, t)
 		fr = [_rabbit_tex("back", "air", false), 0]
-	if alpha <= 0.0:
+	if alpha <= 0.0 or (invuln / 3) % 2 == 1:
 		return
 	var spin := 0.0
 	var off := Vector2(-6, -16 + fr[1])

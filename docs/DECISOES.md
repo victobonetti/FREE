@@ -507,3 +507,19 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 ### D66 — Música do boss
 - **Autor:** Victor (faixa); Claude (ligação).
 - **O quê:** `Boss Rush Groove.mp3`, que estava na raiz, foi para `music/boss-rush-groove.mp3`, importada em loop, e toca na sala do Jeffrey (campo `"music"`).
+
+### D67 — Jeffrey: animação, noz que se degrada, bomba e balanceamento
+- **Autor:** Victor (esboço `jeffrey-concept.jpeg`, regras da noz e da bomba, uma noz já no 1º coração); Claude (desenho em código e números).
+- **Balanceamento (chefe de capítulo 1):** a janela para girar era 0,85 / 0,55 / 0,35 s; passou a 0,95 / 0,75 / 0,6 s. Nozes na tela: 1 / 1 / 2 (eram 0 / 2 / 3). Bomba: 0 / 1 / 1. Nada é arremessado a caminho do ataque.
+- **Noz e bomba:** ver GDD 8b.
+- **Por que em código:** o esquilo continua desenhado em `_draw`, com poses por estado; trocar por quadros desenhados à mão depois não muda a luta.
+- **Não feito:** fintas na terceira fase (sugeridas por Claude); sons próprios (a explosão reaproveita o som de comporta).
+- **Nota:** depois do merge há duas séries D61 a D66 neste arquivo (editor e celular/boss); falta renumerar.
+
+### D68 — Vidas do coelho na sala do boss, retratos e nozes maiores
+- **Autor:** Victor.
+- **Vidas:** só na sala do chefão o coelho tem 3 vidas. Dano tira uma vida e dá 40 quadros (0,67 s) de imunidade, piscando; perder as 3 reinicia o chefão (os dois voltam a 3). Substitui a escolha de D64 (corações do esquilo persistiam entre mortes).
+- **Como:** `room.kill()` consulta os atores (`absorb_kill`); o boss transforma a morte em dano. Vale para qualquer fonte: noz, bomba e espinhos do bloco. `room.invuln` faz o coelho piscar.
+- **Retratos:** no alto, coelho e vidas à esquerda do centro, vidas e Jeffrey à direita. O retrato pisca em vermelho no dano; o do Jeffrey ri quando o coelho morre e fica tonto quando é atingido.
+- **Nozes:** colisão de 7 para 10 px; arco de 1,15 para 1,5 s (gravidade de 190 para 140).
+- **Escolhas de Claude:** a duração da imunidade (40 quadros) e o R reiniciar a luta inteira.
