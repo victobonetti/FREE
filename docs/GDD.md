@@ -264,7 +264,7 @@ PageDown e PageUp pulam entre salas. R reinicia a sala.
 - O esquilo pula entre apoios (chão, paredes, teto) e só usa trechos que passam longe do bloco. O ataque sai do apoio em frente à face, em linha reta: cai do teto na face de cima, sai das paredes para as laterais, sobe do chão para a de baixo.
 - Se o jogador gira durante o aviso e a face mirada ganha espinhos, ele troca de alvo.
 - Atingido, perde um coração, é arremessado e fica tonto no chão (1,25 s, sem machucar). Sem corações, some e a porta abre.
-- As nozes saem no meio dos saltos, em arco até o coelho; quicam e quebram no terceiro toque ou ao encostar nos espinhos do bloco.
+- As nozes (7 px, lentas: arco de ~1,15 s) saem no meio dos saltos, em direção ao coelho; quicam e quebram no terceiro toque ou ao encostar nos espinhos do bloco.
 - Esquilo com 12 px, como o coelho: dá para pular por cima.
 - **Decidido por Claude, aberto a revisão:** ao morrer, o coelho volta ao início da sala, mas os corações que o esquilo perdeu continuam perdidos.
 

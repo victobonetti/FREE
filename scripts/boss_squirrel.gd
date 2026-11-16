@@ -22,8 +22,9 @@ const ATTACK_TIME := [60, 42, 30]            # duração do salto de ataque: a j
 const MAX_NUTS := [0, 2, 3]
 const STUN_TIME := 75
 const PERCH := 7                     # quadros parado em cada apoio
-const NUT_GRAV := 330.0
-const NUT_SIZE := 4
+const NUT_GRAV := 190.0     # nozes lentas: dá para ver e desviar
+const NUT_SIZE := 7
+const NUT_FLIGHT := 1.15    # segundos do arremesso até onde o coelho estava
 
 const C_FUR := Color("c47a3c")
 const C_FUR_DARK := Color("8a4f22")
@@ -381,7 +382,7 @@ func _throw_nut() -> void:
 	var target := Vector2(room.rabbit.pos) + Vector2(6, 6)
 	var d := target - pos
 	# arremesso em arco: tempo de voo ~0,7 s até o coelho
-	var tf := 0.7
+	var tf := NUT_FLIGHT
 	var vel := Vector2(d.x / tf, d.y / tf - 0.5 * NUT_GRAV * tf)
 	nuts.append({"pos": pos, "vel": vel, "hits": 0})
 
@@ -455,8 +456,13 @@ func _draw() -> void:
 			_draw_face_mark(target_face)
 	for n in nuts:
 		var p: Vector2 = n["pos"].round()
-		draw_rect(Rect2(p - Vector2(2, 2), Vector2(4, 4)), C_NUT)
-		draw_rect(Rect2(p - Vector2(2, 2), Vector2(4, 1)), C_NUT_DARK)
+		# bolota: corpo arredondado com o chapéu escuro em cima e o cabinho
+		draw_rect(Rect2(p + Vector2(-3, -1), Vector2(7, 4)), C_NUT)
+		draw_rect(Rect2(p + Vector2(-2, 3), Vector2(5, 1)), C_NUT)
+		draw_rect(Rect2(p + Vector2(-1, 4), Vector2(3, 1)), C_NUT)
+		draw_rect(Rect2(p + Vector2(-3, -3), Vector2(7, 2)), C_NUT_DARK)
+		draw_rect(Rect2(p + Vector2(0, -4), Vector2(1, 1)), C_NUT_DARK)
+		draw_rect(Rect2(p + Vector2(-2, 0), Vector2(1, 1)), Color(1, 1, 1, 0.35))
 	if state != "gone" and state != "dead":
 		var visible_now := flash == 0 or (flash / 3) % 2 == 0
 		if state == "stunned" and (t / 5) % 2 == 1:
