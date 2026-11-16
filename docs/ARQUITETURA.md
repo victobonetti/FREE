@@ -20,6 +20,8 @@ scripts/
   box.gd                 dados de uma caixa
   levels.gd              as salas em texto
   input_setup.gd         teclas e botões
+  touch_controls.gd      joystick e botões de toque (D61)
+  boss_squirrel.gd       boss 1, Jeffrey: ator da sala 17 (D64)
 tests/
   run_tests.gd           testes sem janela
   shot.gd                capturas de tela

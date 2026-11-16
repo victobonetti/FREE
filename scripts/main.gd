@@ -12,6 +12,7 @@ const LevelStore := preload("res://scripts/level_store.gd")
 
 const EDITOR_SIZE := Vector2i(960, 540)
 const GAME_SIZE := Vector2i(320, 180)
+const TouchControls := preload("res://scripts/touch_controls.gd")
 
 const BAR_SIZE := Vector2(40, 3)
 const BAR_POS := Vector2(320 - 40 - 6, 180 - 3 - 6)
@@ -58,12 +59,15 @@ var rope_player: AudioStreamPlayer
 var prev_lock := 0
 var ui_layer: CanvasLayer
 var editor_layer: CanvasLayer
+var in_editor_window := false   # janela na escala do editor: o layout de toque não mexe nela
 var editor: Control
 var custom := ""            # "", "editor" (teste a partir do editor) ou "list" (fase da lista)
 var list_label: Label       # tela "Minhas fases"
 var list_items: Array = []
 var list_sel := 0
 var in_list := false
+var touch: Node2D           # controles de toque (aparecem no primeiro toque na tela)
+var hint_def := {}          # definição da sala atual, para trocar a dica ao detectar toque
 
 
 func _ready() -> void:
@@ -71,16 +75,25 @@ func _ready() -> void:
 	_make_ui()
 	_make_audio()
 	_show_intro()
-	# atalho de desenvolvimento: "-- --level=11" na linha de comando abre direto no nível 11
+	# atalho de teste: "-- --level=11" na linha de comando, ou "?level=11" no link da versão web,
+	# abre direto no nível 11 (pula a abertura)
+	var lv := 0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--level="):
-			_load_room(int(a.trim_prefix("--level=")) - 1)
+			lv = int(a.trim_prefix("--level="))
 		elif a == "--editor":
 			open_editor()
+	if OS.has_feature("web"):
+		var q = JavaScriptBridge.eval("new URLSearchParams(location.search).get('level') || ''")
+		if q is String and q.is_valid_int():
+			lv = int(q)
+	if lv > 0:
+		_load_room(lv - 1)
 
 
 func _make_ui() -> void:
 	var layer := CanvasLayer.new()
+	ui_layer = layer
 	layer.layer = 10
 	add_child(layer)
 	ui_layer = layer
@@ -131,6 +144,55 @@ func _make_ui() -> void:
 	fade_rect.modulate.a = 0.0
 	fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(fade_rect)
+	var touch_layer := CanvasLayer.new()
+	touch_layer.layer = 11   # por cima do fade: dá para ver os controles nas transições
+	add_child(touch_layer)
+	touch = TouchControls.new()
+	touch_layer.add_child(touch)
+	touch.touch_detected.connect(_on_touch_detected)
+	touch.panned.connect(func(d: Vector2) -> void:
+		if room != null and not transitioning:
+			room.pan(d))
+	touch.pan_ended.connect(func() -> void:
+		if room != null:
+			room.end_pan())
+	get_window().size_changed.connect(_apply_layout)
+	_apply_layout()
+
+
+## Primeiro toque na tela: troca os textos de teclado pelos de toque.
+func _on_touch_detected() -> void:
+	_apply_layout()
+	if intro != null:
+		intro.set_touch_mode()
+	if room != null:
+		hint.text = _hint_for(hint_def)
+
+
+## No modo toque, alarga a tela do jogo para o formato da janela (celular deitado é ~20:9).
+## A área de jogo continua 320×180 no centro; as faixas laterais ficam para os controles.
+func _apply_layout() -> void:
+	if in_editor_window:
+		return   # o editor tem a própria escala (960x540)
+	var w := 320
+	if touch.active:
+		var win := get_window().size
+		if win.y > 0:
+			# a escala é inteira (pixel art): escolhe a largura que cabe na janela nessa escala
+			var s := maxi(win.y / 180, 1)
+			w = clampi(win.x / s, 320, 432)
+			w -= w % 2   # faixas de largura inteira e igual dos dois lados
+	var g := (w - 320) / 2
+	get_tree().root.content_scale_size = Vector2i(w, 180)
+	position.x = g
+	ui_layer.offset.x = g
+	touch.set_layout(w, g)
+
+
+func _hint_for(def: Dictionary) -> String:
+	if touch.active and def.has("hint_touch"):
+		return def["hint_touch"]
+	return def.get("hint", "")
 
 
 # ---------------------------------------------------------------- áudio
@@ -596,6 +658,8 @@ func _show_intro() -> void:
 	_play_music(TITLE_MUSIC)
 	intro = IntroScript.new()
 	add_child(intro)
+	if touch.active:
+		intro.set_touch_mode()
 	intro.started.connect(_stop_music)
 	intro.sfx.connect(_play_sfx)
 	intro.impact.connect(_on_impact)
@@ -637,7 +701,8 @@ func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
 	# Só em desenvolvimento (build de depuração: editor, run.ps1): o número do nível no canto.
 	# Nas versões exportadas não há texto nenhum além das dicas de controle.
 	title.text = str(i + 1) if OS.is_debug_build() and i >= 0 else ""
-	hint.text = def.get("hint", "")
+	hint_def = def
+	hint.text = _hint_for(def)
 	_play_music(def.get("music", Levels.DEFAULT_MUSIC))
 	hint.modulate.a = 0.0
 	if hint_tween != null:
@@ -685,6 +750,7 @@ func _advance() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	touch.hide_ui = intro != null
 	_tick()
 	_update_rotation_hud()
 
@@ -744,6 +810,7 @@ func _tick() -> void:
 
 func _set_window_for_editor(on: bool) -> void:
 	var w := get_window()
+	in_editor_window = on
 	if on:
 		w.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 		w.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
@@ -752,6 +819,8 @@ func _set_window_for_editor(on: bool) -> void:
 		w.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 		w.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
 		w.content_scale_size = GAME_SIZE
+		if touch != null:
+			_apply_layout()
 
 
 ## Abre o editor. Com `level` (um LevelData) abre essa fase; sem, continua de onde estava.

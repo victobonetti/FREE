@@ -56,6 +56,8 @@ func test_data_campaign() -> void:
 	var all: Array = Levels.ROOMS.duplicate()
 	all.append(Levels.START)
 	for def in all:
+		if def.has("actors"):
+			continue   # sala de boss: fora do que o editor representa
 		var d: RefCounted = LevelData.from_def(def)
 		var errs: Array = d.errors()
 		check(errs.is_empty(), "'%s' não tem erros%s" % [def["name"], "" if errs.is_empty() else " (%s)" % errs[0]["msg"]])
@@ -67,6 +69,8 @@ func test_data_roundtrip() -> void:
 	var ok_json := true
 	var ok_code := true
 	for def in Levels.ROOMS:
+		if def.has("actors"):
+			continue   # sala de boss: fora do que o editor representa
 		var d: RefCounted = LevelData.from_def(def)
 		var back: Dictionary = d.to_def()
 		for k in ["name", "rotate", "start_rot", "rows"]:

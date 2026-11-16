@@ -469,3 +469,41 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - O desenho gira em torno do centro da sala; com câmera seguindo o coelho, o centro do giro e o enquadramento precisam ser repensados.
 - O formato de `levels.gd` precisa de símbolos para plataformas por orientação e para portas intermediárias com seus compartimentos.
 - Os testes de formato (20×20) e os bots de cada sala terão de ser refeitos.
+
+### D61 — Controles de toque: joystick, pulo e dois giros
+- **Autor:** Victor (joystick + dois botões de giro); Claude (botão de pulo e layout), aceito por Victor.
+- **O quê:** joystick flutuante à esquerda (só o eixo horizontal anda; puxar para baixo desce a corda); à direita, botão grande de pulo com os dois giros logo acima; reiniciar pequeno no canto de cima. Qualquer toque confirma a tela de início.
+- **Por que um botão de pulo:** o pulo tem altura variável, buffer e coyote time; "joystick para cima" não dá esse controle.
+- **Onde ficam:** celular deitado é mais largo que 16:9. No modo toque a tela do jogo é alargada para o formato do aparelho (até 432×180), a sala continua 320×180 no centro e os controles vão para as faixas laterais, opacas. Assim nada da sala fica coberto. Em telas quase 16:9 (tablets) as faixas não cabem os botões, e eles ficam por cima do jogo, translúcidos.
+- **Implementação:** `scripts/touch_controls.gd` só aperta as ações do InputMap (`Input.action_press`); o resto do jogo não sabe que existe toque. Os controles só aparecem depois do primeiro toque (ou desde o início em navegador de celular), então no PC nada muda.
+- **Olhar a sala:** fora do joystick (terço esquerdo) e dos botões, arrastar o dedo move a vista, 1:1 com o dedo, sem passar das bordas da sala. Ao soltar, volta suave para o coelho; girar a sala também zera. Dá para andar e olhar ao mesmo tempo. Pensado para salas maiores no futuro; em sala que cabe na tela, não faz nada.
+- **Descartado:** controles em HTML fora do canvas (mais trabalho, dois sistemas de entrada); controles sempre por cima da sala (cobriam porta, compartimento e o coelho em várias salas).
+
+### D62 — Versão web publicada no GitHub Pages
+- **Autor:** Claude (proposta), aceita por Victor.
+- **O quê:** `.github/workflows/deploy-web.yml` exporta a versão web com o Godot 4.7.2 e publica no GitHub Pages a cada push na `main`.
+- **Por que funciona:** a exportação é sem threads, então não precisa dos cabeçalhos COOP/COEP que o Pages não permite configurar.
+- **Layout dos controles (pedido do Victor depois do teste no iPhone):** sempre o mesmo, medido a partir das bordas da tela: joystick grande à esquerda; pulo grande no canto direito; os dois giros em diagonal acima dele; reiniciar no canto de cima. É o layout que ele testou e aprovou. O layout compacto, com tudo empilhado dentro das faixas laterais, foi descartado.
+- **Tamanho da tela (corrigido depois do primeiro teste no iPhone):** o Safari informava uma área mais alta que a visível, e o fundo da sala ficava cortado. A política de redimensionamento do canvas passou a "nenhuma" (`canvas_resize_policy=0`) e o `head_include` dimensiona o canvas pela área visível de verdade (`visualViewport`), de novo a cada giro do aparelho e quando as barras do navegador aparecem ou somem.
+- **HTML:** o `head_include` da exportação web põe o jogo em tela cheia no primeiro toque, tenta travar em paisagem e mostra "Gire o celular" quando o aparelho está em pé. No iPhone o Safari não deixa a página entrar em tela cheia; lá o jeito é "Adicionar à Tela de Início".
+
+### D63 — Boss 1: Jeffrey, o esquilo (conceito)
+- **Autor:** Victor (conceito e esboço); Claude (análise), regras confirmadas por Victor.
+- **O quê:** sala que não gira; Q/E giram só um bloco quadrado com espinhos no centro. O esquilo salta entre as paredes jogando nozes e só é ferido se o bloco girar os espinhos para a face em que ele vai ricochetear, no último instante. Detalhes no GDD, seção 8b.
+- **Decidido:** o esquilo só mira faces vizinhas à dos espinhos (um giro sempre basta) e nunca salta numa face com espinhos; o coelho morre num toque; o esquilo tem 3 corações; o jogo não pausa durante o giro do bloco (prova de reflexo).
+- **Em aberto:** quando os espinhos da face nova passam a valer, o tamanho da janela de reação por coração, se os corações voltam ao morrer, as regras das nozes, o tamanho do esquilo.
+
+### D64 — Boss 1 implementado como protótipo
+- **Autor:** Claude, a partir de D63; pedido de Victor: encurtar o giro do bloco.
+- **Giro do bloco:** 9 quadros (0,15 s), sem pausar o jogo; os espinhos passam para a face nova no fim. Recarga de 45 quadros (0,75 s), em vez dos 2,5 s da sala, porque a luta pede um giro por ataque.
+- **Motor:** dois campos de sala, genéricos para os próximos bosses: `spin_block` e `actors`. Um ator recebe `step(room)` e `on_reset(room)` e pode abrir a porta (`door_unlocked`).
+- **Garantia de que o esquilo não se mata:** as rotas só usam trechos que passam longe do bloco; o único trecho perto dele é o salto de ataque, que só sai para uma face vizinha à dos espinhos (contando um giro em andamento). Teste: girando à toa fora do salto, em 6000 quadros, o esquilo nunca se fere. Outro teste: um bot que gira no último instante vence e chega à porta.
+- **Escolha de Claude, aberta a revisão:** os corações perdidos continuam perdidos quando o coelho morre.
+
+### D65 — O esquilo não machuca ao encostar
+- **Autor:** Victor, depois do primeiro teste no celular.
+- **O quê:** só as nozes matam o coelho. O esquilo pode passar por ele no chão e nos saltos sem dano.
+
+### D66 — Música do boss
+- **Autor:** Victor (faixa); Claude (ligação).
+- **O quê:** `Boss Rush Groove.mp3`, que estava na raiz, foi para `music/boss-rush-groove.mp3`, importada em loop, e toca na sala do Jeffrey (campo `"music"`).

@@ -7,6 +7,16 @@ Há duas versões, geradas na pasta `build/` do projeto (ela não faz parte do c
 | Web | `build/coelho-web.zip` | Qualquer pessoa com Chrome, Firefox ou Edge, pelo link do itch.io |
 | Windows | `build/free-windows.zip` | Quem prefere baixar e rodar; só Windows |
 
+## Link fixo: GitHub Pages (versão web, também no celular)
+
+Cada push na `main` exporta e publica a versão web sozinho (`.github/workflows/deploy-web.yml`). O link fica em `https://victobonetti.github.io/FREE/`.
+
+Configuração, uma vez só: no GitHub, **Settings → Pages → Source: GitHub Actions**. No plano grátis o repositório precisa ser público. Para publicar de novo sem mudar nada: aba **Actions → Deploy web → Run workflow**.
+
+Para testar um nível direto, sem passar pelos anteriores: acrescente `?level=N` ao link, por exemplo `https://victobonetti.github.io/FREE/?level=17` (o boss).
+
+No celular: abra o link, deite o aparelho e toque na tela. O jogo entra em tela cheia e os controles aparecem nas laterais. No iPhone, o Safari não deixa entrar em tela cheia; use **Compartilhar → Adicionar à Tela de Início** e abra pelo ícone.
+
 ## Gerar de novo (depois de mudar o jogo)
 
 Na pasta do projeto, no PowerShell:
@@ -49,5 +59,7 @@ Ao abrir, o jogo pede um clique para começar: o navegador só libera som depois
 - Se algum nível pareceu fácil ou difícil demais em relação ao anterior.
 - Como sentiram o pulo e o giro.
 - Se a música ou algum efeito incomodou.
+
+Controles no celular: joystick à esquerda para andar (para baixo desce a corda); à direita, o botão grande pula e as duas setas giram a sala; o botão pequeno no canto de cima reinicia. Arrastar o dedo pelo meio da tela mostra o resto da sala, quando ela é maior que a tela.
 
 Controles: A/D ou setas para andar; W, seta para cima ou Espaço para pular; Q e E para girar; R para reiniciar a sala. Controle de videogame também funciona (analógico, A, LB, RB, Y).

@@ -358,6 +358,28 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 
 ---
 
+## Rodada 26 — Celular e GitHub Pages (16/11/2026)
+
+**Entrada do Victor:** publicar na web e jogar no celular, com um joystick e dois botões para girar.
+
+**Feito (D61, D62):** controles de toque (joystick, pulo, dois giros, reiniciar) nas faixas laterais da tela; dicas de controle e "TAP TO START" próprios para toque; tela cheia e aviso para deitar o celular; workflow que publica no GitHub Pages. Conferido em navegador com celular emulado: andar, empurrar, pular andando (dois dedos) e girar. Os testes continuam passando.
+
+Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do Victor). Arrastar o dedo pela tela olha a sala (pedido do Victor, pensando em salas maiores), com testes na suíte.
+
+**Ainda não validado por quem joga:** tudo isto num celular de verdade, em especial o tamanho dos botões e o joystick.
+
+---
+
+## Rodada 27 — Boss 1, Jeffrey, o esquilo (16/11/2026)
+
+**Entrada do Victor:** esboço do boss (D63); respostas: só faces vizinhas, coelho morre num toque, esquilo com 3 corações, sem pausa; encurtar o giro do bloco; começar a implementação.
+
+**Feito (D64):** sala 17 com o bloco que gira (0,15 s, sem pausa) e o esquilo: entra girando, anda, zigue-zague pelas paredes, mira com aviso e ataca em linha reta; nozes a partir do segundo coração; tonto ao ser atingido; porta abre no fim. Testes: o bloco gira sem pausar, o esquilo nunca se acerta sozinho, e um bot vence girando no último instante.
+
+**Ainda não validado por quem joga:** tudo. Em especial as janelas de reação (1,0 / 0,7 / 0,5 s) e se o esquilo andando no chão é justo.
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |
@@ -368,7 +390,7 @@ O que foi feito em cada rodada, o retorno recebido e o que ficou pendente. Entra
 | Arte final (sprites, tiles) | não iniciado; hoje tudo é desenhado em código |
 | Áudio | efeitos gerados em código; primeira faixa de música do Victor ligada a todos os níveis (D44); faltam faixas para os níveis seguintes |
 | Dicas de controle | feitas nos níveis 1 e 5 (rodada 13) |
-| Exportar para amigos testarem | versões geradas (rodada 15); falta publicar no itch.io |
+| Exportar para amigos testarem | versões geradas (rodada 15); web publicada pelo GitHub Pages (rodada 23, D62) |
 | Tema e narrativa (laboratório?) | em aberto |
 | Nome do jogo | "Free" (D46) |
 | Música da abertura | feita (rodada 17): `free-title.mp3` na tela de início |

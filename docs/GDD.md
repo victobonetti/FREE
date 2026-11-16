@@ -39,6 +39,7 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 - Giro de 90° para cada lado, em torno do centro da sala.
 - Salas sempre quadradas, para qualquer orientação caber na tela.
 - Animação de ~0,25 s com easing. A simulação pausa durante o giro.
+- O coelho "faz" o giro: dá uma cambalhota encolhida no mesmo sentido (0,4 s, terminando já na queda) e solta faíscas azuis com um anel. O giro desfeito pelo limitador não tem esse efeito.
 - Ao fim do giro, a velocidade do coelho e das caixas zera, e tudo cai a partir do repouso.
 - **Giro no ar:** um por pulo, recarrega ao tocar o chão.
 - **Recarga do giro:** depois de cada giro, um novo giro fica bloqueado por 2,5 s (animação incluída; D60). Uma barra branca no canto inferior direito enche durante a recarga, com um som que fica mais agudo; um "plim" avisa quando está pronto.
@@ -97,12 +98,14 @@ Referências de sensação de controle: Celeste e Super Meat Boy.
 
 ### 3.5 Controles
 
-| Ação | Teclado | Controle |
-|---|---|---|
-| Andar | A/D ou setas | Analógico ou direcional |
-| Pular | Espaço | A |
-| Girar anti-horário / horário | Q / E | LB / RB |
-| Reiniciar sala | R | Y |
+| Ação | Teclado | Controle | Toque (D61) |
+|---|---|---|---|
+| Andar | A/D ou setas | Analógico ou direcional | Joystick à esquerda |
+| Pular | Espaço | A | Botão grande, embaixo à direita |
+| Descer a corda | S ou seta para baixo | Analógico ou direcional para baixo | Joystick para baixo |
+| Girar anti-horário / horário | Q / E | LB / RB | Os dois botões de seta acima do pulo |
+| Reiniciar sala | R | Y | Botão pequeno no canto de cima |
+| Olhar a sala (salas maiores que a tela) | — | — | Arrastar o dedo pela tela; ao soltar, a câmera volta para o coelho |
 
 ### 3.6 Estética
 
@@ -158,6 +161,8 @@ scripts/
   box.gd
   levels.gd            # as salas, desenhadas em texto (qualquer tamanho)
   input_setup.gd       # teclas e controle registrados em código
+  touch_controls.gd    # controles de toque (celular), apertam as mesmas ações
+  boss_squirrel.gd     # boss 1, Jeffrey, o esquilo (ator da sala 17)
 tests/
   run_tests.gd         # formato das salas, pulo e bots que resolvem cada sala
   shot.gd              # capturas de tela de cada sala
@@ -228,6 +233,8 @@ A sensação de controle é ajustada em M1 e M2, antes de qualquer fase ou arte.
 
 PageDown e PageUp pulam entre salas. R reinicia a sala.
 
+Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?level=17` no link da versão web (`https://victobonetti.github.io/FREE/?level=17`), que também serve no celular.
+
 ## 8. Expansões (fora do piloto)
 
 - **Tipos de caixa:** pesada (esmaga espinhos), de vidro (quebra na queda), magnética (gruda na parede), balão (cai para cima).
@@ -235,6 +242,47 @@ PageDown e PageUp pulam entre salas. R reinicia a sala.
 - **Cenário:** botões de peso, segunda cor de caixa, zonas onde o giro é proibido, inimigos que também caem. (Plataformas por orientação e comportas já entraram no piloto; corda e água entraram depois dele.)
 - **Rejogabilidade:** cronômetro de speedrun, cenouras colecionáveis em rotas arriscadas, versões difíceis das salas.
 - **Narrativa:** coelho de laboratório fugindo de câmaras de teste, o que justifica o visual estéril e as salas que giram.
+
+## 8b. Boss 1 — Jeffrey, o esquilo (D63, D64)
+
+**Protótipo jogável (rodada 24):** sala 17, depois da Fuga (`./run.ps1 -Level 17`). Esboço do Victor em três quadros: o bloco com espinhos no centro, o esquilo subindo as paredes, o giro no último instante.
+
+**A sala:** o coelho cai numa sala que não gira. Q/E giram só um **bloco quadrado com espinhos numa das faces**, no centro da sala. Por ser quadrado, girar não muda a colisão, só qual face tem espinhos. A gravidade e o resto da sala não mudam.
+
+**O esquilo:** entra girando, de fora da borda da tela. Anda no chão e ataca saltando algumas vezes entre as paredes, girando no ar e jogando nozes. Só as nozes matam o coelho; encostar no esquilo não machuca (pedido do Victor depois do primeiro teste). As nozes caem com a gravidade e quebram depois de 3 toques.
+
+**Como vencer:** o esquilo **nunca salta numa face com espinhos**, e depois que um salto começa ele não muda. Ele só mira faces **vizinhas** à dos espinhos, então um giro sempre basta. Girar cedo não adianta (ele escolhe outro alvo), girar tarde também não (ele já ricocheteou): o acerto vem de girar no último instante, no meio do salto dele.
+
+**Regras decididas:**
+- O coelho morre num toque, como no resto do jogo. O esquilo tem 3 corações. Depois do terceiro acerto, abre-se a porta.
+- O jogo **não pausa** durante o giro do bloco: tudo continua se movendo. É uma prova de reflexo.
+
+- O giro do bloco é mais curto que o da sala: 0,15 s (9 quadros). Os espinhos passam para a face nova no fim dele. Recarga de 0,75 s.
+
+**Como ficou no protótipo (valores no topo de `scripts/boss_squirrel.gd`, por fase = corações perdidos):**
+
+| | 1º coração | 2º | 3º |
+|---|---|---|---|
+| Andando no chão | 1,7 s, devagar | 1,25 s | 0,9 s, mais rápido |
+| Saltos de zigue-zague antes do ataque | 1 | 2 | 3 |
+| Aviso antes do salto (a face mirada ganha uma linha amarela) | 0,67 s | 0,5 s | 0,4 s |
+| Salto de ataque (janela de reação) | 1,0 s | 0,7 s | 0,5 s |
+| Nozes na tela, no máximo | 0 | 2 | 3 |
+
+- O esquilo pula entre apoios (chão, paredes, teto) e só usa trechos que passam longe do bloco. O ataque sai do apoio em frente à face, em linha reta: cai do teto na face de cima, sai das paredes para as laterais, sobe do chão para a de baixo.
+- Se o jogador gira durante o aviso e a face mirada ganha espinhos, ele troca de alvo.
+- Atingido, perde um coração, é arremessado e fica tonto no chão (1,25 s, sem machucar). Sem corações, some e a porta abre.
+- As nozes (7 px, lentas: arco de ~1,15 s) saem no meio dos saltos, em direção ao coelho; quicam e quebram no terceiro toque ou ao encostar nos espinhos do bloco.
+- **Decidido por Claude, aberto a revisão:** ao morrer, o coelho volta ao início da sala, mas os corações que o esquilo perdeu continuam perdidos.
+
+**Em aberto:**
+- Tudo isto precisa ser sentido jogando: janelas, velocidade no chão, quantidade de nozes.
+- Noz parada no chão: hoje ela quica até quebrar; não fica parada servindo de apoio.
+- A entrada: o coelho ainda começa no chão; a queda na sala e a entrada do esquilo podem virar uma pequena cena.
+- Arte e efeitos sonoros próprios (hoje: desenho em código e efeitos reaproveitados). A música é a do Victor: `music/boss-rush-groove.mp3`, em loop.
+- Opcional, para trazer de volta o "tudo que está solto cai": nozes presas nas faces do bloco caem quando ele gira.
+
+**Implementação:** a grade é uma sala comum em `levels.gd` (`JEFFREY`) com dois campos novos: `spin_block` (o giro mira o bloco, não a sala) e `actors` (scripts que a sala cria e chama a cada quadro). O esquilo, as nozes e os corações ficam em `scripts/boss_squirrel.gd`; a sala só oferece o bloco, `kill()` e `door_unlocked`.
 
 ## 9. Decisões
 

@@ -15,7 +15,11 @@ signal impact(strength: float)  # pouso de caixa; 0 a 2,5 (mais altura e mais ca
 const TILE := 8
 const VIEW := Vector2(320, 180)  # tamanho da tela (resolução interna)
 const CAM_SMOOTH := 0.12
+const LOOK_RETURN := 0.08   # fração do olhar que volta para o coelho a cada quadro, ao soltar
 const ROT_FRAMES := 16       # duração da animação do giro
+const SPIN_FRAMES := 9       # giro do bloco (sala de boss): mais curto que o da sala, sem pausar
+const FLIP_FRAMES := 24      # cambalhota do coelho ao girar (passa um pouco do giro, já caindo)
+const C_FLIP := Color("8fd0ff")       # faíscas azuis do giro
 const ROT_COOLDOWN := 134    # espera extra depois do giro: com a animação, 2,5 s (150 quadros)
 const DEFAULT_RELOAD := 2.5   # s: recarga do giro e tempo do limitador, se a fase não disser outro
 const ROT_BUFFER := 6        # apertar até 6 quadros antes do fim da recarga ainda vale
@@ -205,6 +209,21 @@ var timer := 0
 var frame := 0
 
 var rotating := false
+var flip_t := 0          # quadros restantes da cambalhota do coelho
+# Bloco que gira (campo "spin_block" da sala): a sala não gira; Q/E giram só um bloco quadrado
+# e os espinhos presos nele. Por ser quadrado, a colisão não muda: só a face com espinhos.
+# O jogo não pausa durante esse giro, e os espinhos passam para a face nova no fim dele.
+var has_spin := false
+var spin_rect := Rect2i()    # o bloco, em px
+var spin_face := 0           # face com espinhos (0 cima, 1 direita, 2 baixo, 3 esquerda)
+var spinning := false
+var spin_frame := 0
+var spin_dir := 0
+var rot_lock_max := ROT_FRAMES + ROT_COOLDOWN
+# Atores (campo "actors": scripts com step(room) e on_reset(room)), como o boss da sala.
+var actors: Array = []
+var door_unlocked := false   # um ator (o boss derrotado) abriu a porta
+var flip_dir := 1        # sentido da cambalhota (o mesmo do giro)
 var rot_frame := 0
 var rot_from := 0.0
 var view_angle := 0.0
@@ -218,6 +237,10 @@ var limiter_frames := ROT_FRAMES + ROT_COOLDOWN   # tempo até o limitador desfa
 var orientation := 0  # giros acumulados (0..3), só informativo
 
 var cam := Vector2.ZERO  # ponto da sala (px) que fica no centro da tela
+# Olhar (celular: arrastar o dedo pela tela): deslocamento da câmera em relação ao coelho.
+# Limitado às bordas da sala; ao soltar, volta para o coelho.
+var look := Vector2.ZERO
+var looking := false     # dedo arrastando agora
 
 var particles: Array = []
 var rabbit_frames := {}
@@ -235,7 +258,12 @@ func setup(room_def: Dictionary) -> void:
 	def = room_def
 	allow_rotate = room_def.get("rotate", true)
 	reload_frames = seconds_to_frames(float(room_def.get("reload_time", DEFAULT_RELOAD)))
+	rot_lock_max = reload_frames
 	limiter_frames = seconds_to_frames(float(room_def.get("limiter_time", DEFAULT_RELOAD)))
+	for path in room_def.get("actors", []):
+		var a: Node = load(path).new()
+		add_child(a)
+		actors.append(a)
 	reset()
 
 
@@ -275,6 +303,10 @@ func reset() -> void:
 	door_flash = 0
 	rotating = false
 	rot_frame = 0
+	flip_t = 0
+	spinning = false
+	spin_frame = 0
+	door_unlocked = false
 	view_angle = 0.0
 	pending_rot = 0
 	rot_lock = 0
@@ -302,7 +334,11 @@ func reset() -> void:
 	for i in 300:
 		_update_ropes()
 	_update_sockets()
+	look = Vector2.ZERO
 	cam = _cam_target()
+	_init_spin_block()
+	for a in actors:
+		a.on_reset(self)
 
 
 ## 0.0 logo após girar, 1.0 quando o giro está disponível de novo.
@@ -312,7 +348,71 @@ static func seconds_to_frames(s: float) -> int:
 
 
 func rot_ratio() -> float:
-	return 1.0 - float(rot_lock) / float(reload_frames)
+	return 1.0 - float(rot_lock) / float(rot_lock_max)
+
+
+# ---------------------------------------------------------------- bloco que gira
+
+## "spin_block": [coluna, linha, lado] em tiles. Os espinhos encostados nele giram junto.
+## "spin_cooldown" (opcional): recarga do giro do bloco, em quadros.
+func _init_spin_block() -> void:
+	has_spin = def.has("spin_block")
+	if not has_spin:
+		return
+	var b: Array = def["spin_block"]
+	spin_rect = Rect2i(b[0] * TILE, b[1] * TILE, b[2] * TILE, b[2] * TILE)
+	var ring := spin_rect.grow(TILE)
+	for sp in spikes:
+		if ring.encloses(sp["rect"]) and not spin_rect.intersects(sp["rect"]):
+			sp["block"] = true
+			spin_face = sp["facing"]
+
+
+## A face que terá espinhos quando o giro em andamento terminar (ou a atual, sem giro).
+func spin_face_next() -> int:
+	return (spin_face + spin_dir + 4) % 4 if spinning else spin_face
+
+
+func _begin_spin(dir: int) -> void:
+	if not rabbit.free_rotate():
+		rabbit.air_rot = false
+	_flip_fx(dir)
+	sfx.emit("platform")
+	spinning = true
+	spin_frame = 0
+	spin_dir = dir
+	rot_lock_max = SPIN_FRAMES + int(def.get("spin_cooldown", ROT_COOLDOWN))
+	rot_lock = rot_lock_max
+
+
+func _update_spin() -> void:
+	if not spinning:
+		return
+	spin_frame += 1
+	if spin_frame < SPIN_FRAMES:
+		return
+	spinning = false
+	# os espinhos passam para a face nova: giro de 90° em torno do centro do bloco
+	var c := Vector2(spin_rect.position) + Vector2(spin_rect.size) / 2.0
+	for sp in spikes:
+		if not sp.get("block", false):
+			continue
+		var cell := Vector2(sp["rect"].position) + Vector2(TILE, TILE) / 2.0 - c
+		cell = Vector2(-cell.y, cell.x) if spin_dir > 0 else Vector2(cell.y, -cell.x)
+		var np := (c + cell - Vector2(TILE, TILE) / 2.0).round()
+		sp["rect"] = Rect2i(Vector2i(np), Vector2i(TILE, TILE))
+		sp["facing"] = (int(sp["facing"]) + spin_dir + 4) % 4
+	spin_face = (spin_face + spin_dir + 4) % 4
+	shake = maxf(shake, 1.0)
+
+
+## Retângulos que machucam dos espinhos do bloco (para o boss saber se bateu neles).
+func spin_hurt_rects() -> Array:
+	var out: Array = []
+	for sp in spikes:
+		if sp.get("block", false):
+			out.append(_spike_hurt(sp["rect"], sp["facing"]))
+	return out
 
 
 # ---------------------------------------------------------------- parsing
@@ -505,6 +605,7 @@ func _rotate_logic(dir: int) -> void:
 	rabbit.pos = _rot_rect(rabbit.rect, dir).position
 	rabbit.on_rotate()
 	cam = _rot_point(cam, dir)
+	look = Vector2.ZERO   # depois do giro, a vista volta para o coelho
 	for p in particles:
 		p["pos"] = _rot_point(p["pos"], dir)
 		p["vel"] = Vector2(-p["vel"].y, p["vel"].x) if dir > 0 else Vector2(p["vel"].y, -p["vel"].x)
@@ -531,11 +632,30 @@ func _begin_rotate(dir: int, forced := false) -> void:
 		limit_net += dir
 		limit_t = limiter_frames if limit_net != 0 else 0
 	_rotate_logic(dir)
+	if not forced:
+		_flip_fx(dir)
 	rotating = true
 	rot_frame = 0
 	rot_from = -dir * PI / 2.0
 	view_angle = rot_from
-	rot_lock = reload_frames
+	rot_lock_max = reload_frames
+	rot_lock = rot_lock_max
+
+
+## O coelho "faz" o giro: cambalhota encolhida e faíscas azuis saindo do corpo.
+## Só no giro do jogador; o giro desfeito pelo limitador não tem.
+func _flip_fx(dir: int) -> void:
+	flip_t = FLIP_FRAMES
+	flip_dir = dir
+	var c := Vector2(rabbit.pos) + Vector2(6, 6)
+	particles.append({"pos": c, "vel": Vector2.ZERO, "life": 12, "col": C_FLIP, "grav": 0.0, "ring": 2.0})
+	for i in 12:
+		var a := TAU * (i + randf_range(-0.3, 0.3)) / 12.0
+		var v := Vector2(cos(a), sin(a)) * randf_range(40.0, 75.0)
+		particles.append({
+			"pos": c + Vector2(cos(a), sin(a)) * 3.0, "vel": v,
+			"life": randi_range(12, 20), "col": C_BOX if i % 3 == 0 else C_FLIP, "grav": 12.0,
+		})
 
 
 func _ease(t: float) -> float:
@@ -548,16 +668,48 @@ func _ease(t: float) -> float:
 
 ## Onde a câmera quer estar: centralizada no eixo em que a sala cabe na tela; no outro,
 ## seguindo o coelho, sem mostrar além das bordas da sala.
+## O olhar arrastado (look) soma por cima disso, ainda dentro das bordas.
 func _cam_target() -> Vector2:
-	var rc := Vector2(rabbit.pos) + Vector2(6, 2)
+	return _cam_clamp(_cam_follow() + look)
+
+
+func _cam_follow() -> Vector2:
+	return _cam_clamp(Vector2(rabbit.pos) + Vector2(6, 2))
+
+
+func _cam_clamp(p: Vector2) -> Vector2:
 	var t := Vector2.ZERO
-	t.x = pw / 2.0 if pw <= VIEW.x else clampf(rc.x, VIEW.x / 2.0, pw - VIEW.x / 2.0)
-	t.y = ph / 2.0 if ph <= VIEW.y else clampf(rc.y, VIEW.y / 2.0, ph - VIEW.y / 2.0)
+	t.x = pw / 2.0 if pw <= VIEW.x else clampf(p.x, VIEW.x / 2.0, pw - VIEW.x / 2.0)
+	t.y = ph / 2.0 if ph <= VIEW.y else clampf(p.y, VIEW.y / 2.0, ph - VIEW.y / 2.0)
 	return t
 
 
 func _update_camera() -> void:
-	cam = cam.lerp(_cam_target(), CAM_SMOOTH)
+	if looking:
+		cam = _cam_target()   # arrastando: a sala acompanha o dedo, sem atraso
+	else:
+		look = look.lerp(Vector2.ZERO, LOOK_RETURN)
+		if look.length() < 0.5:
+			look = Vector2.ZERO
+		cam = cam.lerp(_cam_target(), CAM_SMOOTH)
+
+
+## Arrasta a vista `delta` px (sentido do dedo: arrastar para a esquerda mostra o que está à
+## direita). Só tem efeito no eixo em que a sala é maior que a tela.
+func pan(delta: Vector2) -> void:
+	looking = true
+	look -= delta
+	_clamp_look()
+
+
+func end_pan() -> void:
+	looking = false
+
+
+## Não deixa o olhar acumular além das bordas: ao soltar, a volta começa na hora.
+func _clamp_look() -> void:
+	var base := _cam_follow()
+	look = _cam_clamp(base + look) - base
 
 
 # ---------------------------------------------------------------- colisão
@@ -628,6 +780,7 @@ func push_box(b, d: Vector2i) -> bool:
 func step(inp: Dictionary) -> void:
 	frame += 1
 	_update_particles()
+	flip_t = maxi(flip_t - 1, 0)
 	door_flash = maxi(door_flash - 1, 0)
 	if state == "won":
 		timer -= 1
@@ -669,9 +822,13 @@ func step(inp: Dictionary) -> void:
 	if pending_rot != 0 and rot_lock == 0:
 		var dir := pending_rot
 		pending_rot = 0
-		if allow_rotate and rabbit.can_rotate():
+		if has_spin:
+			if rabbit.can_rotate():
+				_begin_spin(dir)
+		elif allow_rotate and rabbit.can_rotate():
 			_begin_rotate(dir)
 			return
+	_update_spin()
 
 	_update_mechanisms(false)
 	rabbit.update(self, inp)
@@ -699,6 +856,10 @@ func step(inp: Dictionary) -> void:
 		_push_dust()
 	_update_ropes()
 	_update_boxes()
+	if state != "play":
+		return
+	for a in actors:
+		a.step(self)
 	if state != "play":
 		return
 	_update_water()
@@ -839,7 +1000,7 @@ func _update_sockets() -> void:
 	else:
 		door_dry = mini(door_dry + 1, DOOR_DRY_FRAMES)
 	door_flooded = door_dry < DOOR_DRY_FRAMES
-	var open: bool = (group_filled(0) or def.get("door_open", false)) and not door_flooded
+	var open: bool = (group_filled(0) or def.get("door_open", false) or door_unlocked) and not door_flooded
 	if open != door_open:
 		door_open = open
 		door_flash = 14
@@ -1606,9 +1767,13 @@ func _draw() -> void:
 	_draw_drains()
 	_draw_ropes()
 
-	# espinhos
+	# espinhos (os do bloco, durante o giro dele, são desenhados girando)
 	for s in spikes:
+		if spinning and s.get("block", false):
+			continue
 		draw_colored_polygon(_spike_points(s["rect"], s["facing"]), C_SPIKE)
+	if spinning:
+		_draw_spin_block(base)
 
 	# caixas
 	for b in boxes:
@@ -1653,6 +1818,24 @@ func _draw() -> void:
 	if state == "dead":
 		var f := float(timer) / float(DEATH_FRAMES)
 		draw_rect(room_rect, Color(1, 1, 1, 0.35 * f * f))
+
+
+## O bloco no meio do giro: tapa o bloco parado e desenha um girando, com os espinhos.
+func _draw_spin_block(base: Transform2D) -> void:
+	var t := _ease(float(spin_frame) / float(SPIN_FRAMES))
+	var c := Vector2(spin_rect.position) + Vector2(spin_rect.size) / 2.0
+	var half := Vector2(spin_rect.size) / 2.0
+	draw_rect(Rect2(spin_rect).grow(1.0), C_BG)
+	draw_set_transform_matrix(base * Transform2D(spin_dir * PI / 2.0 * t, c))
+	draw_rect(Rect2(-half, half * 2.0), C_WALL)
+	draw_rect(Rect2(-half, half * 2.0), C_EDGE, false, 1.0)
+	for s in spikes:
+		if s.get("block", false):
+			var pts := _spike_points(s["rect"], s["facing"])
+			for i in pts.size():
+				pts[i] -= c
+			draw_colored_polygon(pts, C_SPIKE)
+	draw_set_transform_matrix(base)
 
 
 ## Compartimentos da porta: cinza/amarelo. Compartimentos de comporta: na cor da comporta.
@@ -1848,8 +2031,17 @@ func _draw_rabbit(base: Transform2D) -> void:
 		fr = [_rabbit_tex("back", "air", false), 0]
 	if alpha <= 0.0:
 		return
-	draw_set_transform_matrix(base * Transform2D(-view_angle, sc, 0.0, pivot))
-	draw_texture(fr[0], Vector2(-6, -16 + fr[1]), Color(1, 1, 1, alpha))
+	var spin := 0.0
+	var off := Vector2(-6, -16 + fr[1])
+	if flip_t > 0 and state != "won":
+		# cambalhota: uma volta inteira em torno do meio do corpo, encolhendo no meio dela
+		var t := 1.0 - float(flip_t) / float(FLIP_FRAMES)
+		spin = flip_dir * TAU * _ease(t)
+		sc *= 1.0 - 0.35 * sin(PI * t)
+		pivot.y -= 6.0
+		off.y += 6.0
+	draw_set_transform_matrix(base * Transform2D(-view_angle + spin, sc, 0.0, pivot))
+	draw_texture(fr[0], off, Color(1, 1, 1, alpha))
 	draw_set_transform_matrix(base)
 
 
