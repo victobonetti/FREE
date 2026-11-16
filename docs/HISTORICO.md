@@ -425,3 +425,11 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 **Entrada do Victor:** na primeira vez, o jogador faz 3 giros antes de o Jeffrey aparecer, para entender a mecânica na prática; ele aparece rodando do céu; se o jogador morrer, a cena não se repete.
 
 **Feito (D69):** estado `wait` em `boss_squirrel.gd` e teste da abertura. Todos os testes passam.
+
+---
+
+## Rodada 31 — Música e barras só com o Jeffrey (16/11/2026)
+
+**Entrada do Victor:** o tema do boss só começa quando o Jeffrey aparece (até lá, o tema normal dos níveis); sem barra de vida do coelho até ele aparecer.
+
+**Feito (D70):** `boss_music` na sala, `music_request` em `room.gd`, barras escondidas durante a espera. Testes cobrem o pedido da faixa. Não conferido ouvindo.

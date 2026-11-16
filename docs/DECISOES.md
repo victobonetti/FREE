@@ -530,3 +530,8 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Não repete:** morrer, reiniciar com R ou voltar à sala não traz a espera de volta.
 - **Escolha de Claude, aberta a revisão:** "primeira vez" vale por sessão de jogo (`intro_seen`, estático em `boss_squirrel.gd`); fechar e abrir o jogo mostra a abertura de novo, porque o jogo ainda não salva progresso do boss.
 - **Também:** o retrato e os corações do Jeffrey só aparecem quando ele entra; a entrada passou a ser sempre de cima.
+
+### D70 — Música e barras de vida do boss só quando o Jeffrey aparece
+- **Autor:** Victor.
+- **O quê:** durante a abertura (3 giros), toca a música normal dos níveis e não há retratos nem vidas no alto. Quando o Jeffrey entra, o tema do boss começa (com fade) e as barras aparecem. Nas tentativas seguintes, o tema já toca desde o início.
+- **Como:** o campo da sala passou de `music` para `boss_music`; o esquilo pede a faixa por `room.music_request` (e deixa em `room.music_override` para quem conecta depois).

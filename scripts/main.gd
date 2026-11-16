@@ -695,6 +695,7 @@ func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
 	r.setup(def)
 	r.completed.connect(_on_completed)
 	r.sfx.connect(_play_sfx)
+	r.music_request.connect(_play_music)
 	r.impact.connect(_on_impact)
 	room = r
 	prev_lock = 0
@@ -703,7 +704,7 @@ func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
 	title.text = str(i + 1) if OS.is_debug_build() and i >= 0 else ""
 	hint_def = def
 	hint.text = _hint_for(def)
-	_play_music(def.get("music", Levels.DEFAULT_MUSIC))
+	_play_music(r.music_override if r.music_override != "" else def.get("music", Levels.DEFAULT_MUSIC))
 	hint.modulate.a = 0.0
 	if hint_tween != null:
 		hint_tween.kill()

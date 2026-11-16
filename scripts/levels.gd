@@ -576,7 +576,8 @@ const JEFFREY := {
 	# O esquilo nunca salta numa face com espinhos; o acerto é girar no último instante,
 	# no meio do salto de ataque dele. 3 corações; depois do último, a porta abre.
 	"name": "Jeffrey",
-	"music": "res://music/boss-rush-groove.mp3",
+	# a música do boss só começa quando o esquilo entra (antes, toca a música normal dos níveis)
+	"boss_music": "res://music/boss-rush-groove.mp3",
 	"spin_block": [17, 8, 6],
 	"spin_cooldown": 45,
 	"actors": ["res://scripts/boss_squirrel.gd"],

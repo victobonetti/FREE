@@ -126,6 +126,9 @@ func on_reset(r) -> void:
 ## Cai do céu, girando.
 func _enter() -> void:
 	_go_leg(Vector2(room.pw - 40, -30), Vector2(room.pw - 40, _floor_y()), 45)
+	room.music_override = room.def.get("boss_music", "")
+	if room.music_override != "":
+		room.music_request.emit(room.music_override)
 	last_pos = pos
 	state = "enter"
 	dir = -1
@@ -892,6 +895,8 @@ func _draw_head(hy: int, mood: String) -> void:
 ## No alto da tela: retrato do coelho com as vidas dele à esquerda, as do Jeffrey com o retrato
 ## à direita. (A sala é desenhada a partir do centro da tela: x de -160 a 160, y de -90 a 90.)
 func _draw_hearts() -> void:
+	if state == "wait":
+		return   # antes de o Jeffrey aparecer, não há barras de vida
 	var y := -89.0
 	# coelho
 	var rb := Rect2(-72, y, 16, 18)
@@ -900,9 +905,7 @@ func _draw_hearts() -> void:
 	draw_texture(tex, rb.position + Vector2(2, 1))
 	for i in LIVES:
 		_draw_heart(Vector2(-52 + i * 10, y + 6), i < lives)
-	# Jeffrey (só depois que ele aparece)
-	if state == "wait":
-		return
+	# Jeffrey
 	var jb := Rect2(56, y, 16, 18)
 	_draw_frame(jb, flash > 0 and (flash / 4) % 2 == 0)
 	draw_set_transform_matrix(Transform2D(0.0, Vector2(-1, 1), 0.0, jb.position + Vector2(12, 15)))

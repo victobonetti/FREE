@@ -1692,6 +1692,7 @@ func test_jeffrey_intro() -> void:
 	var boss = room.actors[0]
 	idle(300)
 	check(boss.state == "wait" and boss.nuts.is_empty(), "sem girar, o esquilo não aparece")
+	check(room.music_override == "", "e a música do boss ainda não toca")
 	for n in 2:
 		wait_rot_ready()
 		tick({"rotate": 1})
@@ -1702,6 +1703,7 @@ func test_jeffrey_intro() -> void:
 	idle(20)
 	check(boss.state == "wait", "depois do terceiro, uma pausa curta")
 	idle(15)
+	check(room.music_override == "res://music/boss-rush-groove.mp3", "a música do boss é pedida quando ele aparece")
 	check(boss.state == "enter" and boss.pos.y < room.ph / 2.0, "e ele cai do céu, girando (%s em y=%d)" % [boss.state, boss.pos.y])
 	idle(60)
 	check(boss.state != "enter" and boss.state != "wait", "e a luta começa")

@@ -10,6 +10,7 @@ signal completed
 ## "jump" | "death" | "win" | "sensor_on" | "sensor_off" | "gate_open" | "gate_close" | "platform"
 ## | "rope" (agarrou a corda) | "splash" (caiu na água)
 signal sfx(name: String)
+signal music_request(path: String)   # um ator pede outra faixa (o boss, ao entrar)
 signal impact(strength: float)  # pouso de caixa; 0 a 2,5 (mais altura e mais caixas = mais forte)
 
 const TILE := 8
@@ -223,6 +224,7 @@ var rot_lock_max := ROT_FRAMES + ROT_COOLDOWN
 # Atores (campo "actors": scripts com step(room) e on_reset(room)), como o boss da sala.
 var actors: Array = []
 var door_unlocked := false   # um ator (o boss derrotado) abriu a porta
+var music_override := ""        # faixa pedida por um ator; vale também para quem conecta depois
 var invuln := 0              # quadros em que o coelho pisca e nada o mata (dano com vidas, no boss)
 var flip_dir := 1        # sentido da cambalhota (o mesmo do giro)
 var rot_frame := 0
