@@ -643,3 +643,9 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Um balanço só para tudo que pende** (`_sway()`): como tudo pendia reto antes do giro, a diferença é sempre os 90° do giro; uma oscilação amortecida global basta, sem estado por objeto.
 - **Paralaxe com limite:** o fundo deslocado não pode vazar para fora da sala; as faixas visíveis são cortadas pelo deslocamento.
 - **Passos pela distância andada** (`rabbit.anim`), não pelo tempo: andar devagar ou contra a parede não faz barulho à toa.
+
+### D85 — Botão por tempo: o elevador de Prensas e vapor volta
+- **Pedido do Victor:** o botão mais visível, a plataforma voltando mesmo depois de apertar uma vez, e mais rápida.
+- **Modo novo de botão, "timed"** (campo `time`, em segundos): cada pisada liga o canal; ao sair, conta o tempo e desliga; dá para chamar de novo. No editor: "liga por um tempo (pode chamar de novo)".
+- **Prensas e vapor:** botão por tempo (5 s), elevador de 50 para 120 px/s, mantendo 1 s de espera para embarcar (com menos, ele saía antes de o coelho pousar). Rota do robô refeita e a fase substituída no mesmo lugar da campanha (`tools/canonize_levels.gd` agora substitui pelo nome).
+- **Botão mais visível** (todos): brilho no chão na cor do canal, base mais larga, botão colorido, uma seta pulsando acima enquanto não está apertado e, no modo por tempo, uma barra com o que falta.

@@ -51,7 +51,8 @@ const TYPES := {
 		"fields": [
 			{"key": "rect", "label": "Área", "kind": "rect"},
 			{"key": "ch", "label": "Canal (cor)", "kind": "int", "min": 0, "max": 7, "def": 0},
-			{"key": "mode", "label": "Modo", "kind": "choice", "opts": [{"v": "hold", "t": "só enquanto apertado"}, {"v": "once", "t": "liga e fica"}], "def": "hold"},
+			{"key": "mode", "label": "Modo", "kind": "choice", "opts": [{"v": "hold", "t": "só enquanto apertado"}, {"v": "once", "t": "liga e fica"}, {"v": "timed", "t": "liga por um tempo (pode chamar de novo)"}], "def": "hold"},
+			{"key": "time", "label": "Tempo ligado, no modo por tempo (s)", "kind": "float", "min": 0.5, "max": 30.0, "step": 0.5, "def": 4.0},
 		],
 		"rects": ["rect"], "dirs": [],
 	},

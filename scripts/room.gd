@@ -260,8 +260,9 @@ var _vignette: Texture2D       # escurecimento nas bordas da tela (gerado uma ve
 var cycle_t := 0         # quadros de simulação desde o início: os conectores em ciclo seguem este relógio
 var plate_on := {}       # canal -> true enquanto um botão de pressão dele está apertado
 # Botões de pressão (campo "plates": {"rect": [coluna, linha, largura] em tiles, "ch": canal, "mode":
-# "hold" (padrão: ligado enquanto apertado) ou "once" (liga e fica)}. O coelho ou uma caixa em cima
-# aperta. Servem a conectores do mesmo canal.
+# "hold" (padrão: ligado enquanto apertado), "once" (liga e fica) ou "timed" (cada pisada liga por
+# "time" segundos, contados depois de soltar; depois desliga e pode ser chamado de novo)}. O coelho ou
+# uma caixa em cima aperta. Servem a conectores do mesmo canal.
 var plates: Array = []
 var mover_pending: Array = []   # trocas de canal avisadas e ainda não feitas: [canal, quadros]
 # Chapas soltas (campo "crumbles"): chão que desaba pouco depois de o coelho pisar. Não voltam
@@ -480,7 +481,8 @@ func reset() -> void:
 	_init_dynamics()
 	for pd in def.get("plates", []):
 		plates.append({"rect": _tile_rect(pd["rect"]),
-			"ch": int(pd.get("ch", 0)), "once": str(pd.get("mode", "hold")) == "once", "down": false, "latched": false, "k": 0.0})
+			"ch": int(pd.get("ch", 0)), "once": str(pd.get("mode", "hold")) == "once", "down": false, "latched": false, "k": 0.0,
+			"timed": str(pd.get("mode", "hold")) == "timed", "time": seconds_to_frames(float(pd.get("time", 4.0))), "left": 0})
 	for cr in def.get("crumbles", []):
 		crumbles.append({"rect": Rect2i(int(cr[0]) * TILE, int(cr[1]) * TILE, int(cr[2]) * TILE, int(cr[3]) * TILE), "t": -1})
 	_water_build()
@@ -1090,6 +1092,12 @@ func _update_plates() -> void:
 		if p["once"]:
 			p["latched"] = p["latched"] or pressed
 			pressed = p["latched"]
+		elif p["timed"]:
+			if pressed:
+				p["left"] = p["time"]
+			else:
+				p["left"] = maxi(p["left"] - 1, 0)
+			pressed = pressed or p["left"] > 0
 		if pressed != p["down"]:
 			p["down"] = pressed
 			if Vector2(pr.position).distance_to(cam) < VIEW.length():
@@ -1106,13 +1114,28 @@ func _draw_plates() -> void:
 			continue
 		var col: Color = C_CHANNEL[p["ch"] % C_CHANNEL.size()]
 		var dip: float = p["k"] * 2.0
-		draw_rect(Rect2(pr.position.x, pr.end.y - 3, pr.size.x, 3), C_SEAM)
-		draw_rect(Rect2(pr.position.x + 1, pr.end.y - 4 + dip, pr.size.x - 2, 3), C_STEEL[1])
-		draw_rect(Rect2(pr.position.x + 1, pr.end.y - 4 + dip, pr.size.x - 2, 1), Color(col, 0.55 + 0.4 * p["k"]))
-		draw_rect(Rect2(pr.position.x + 2, pr.end.y - 6, 1, 2 - int(dip)), C_RIVET)
-		draw_rect(Rect2(pr.end.x - 3, pr.end.y - 6, 1, 2 - int(dip)), C_RIVET)
-		if p["k"] > 0.5:
-			draw_rect(Rect2(pr.position.x, pr.end.y - 5, pr.size.x, 1), Color(col, 0.25))
+		var cx := pr.get_center().x
+		# brilho no chão em volta, na cor do canal (mais forte apertado)
+		var glow: float = 0.10 + 0.08 * sin(frame * 0.12) + 0.25 * p["k"]
+		draw_circle(Vector2(cx, pr.end.y - 3), pr.size.x * 0.9, Color(col, glow * 0.5))
+		# base mais larga que o botão, e o botão com a borda na cor do canal
+		draw_rect(Rect2(pr.position.x - 2, pr.end.y - 3, pr.size.x + 4, 3), C_SEAM)
+		draw_rect(Rect2(pr.position.x - 2, pr.end.y - 3, pr.size.x + 4, 1), C_STEEL_LIGHT)
+		draw_rect(Rect2(pr.position.x + 1, pr.end.y - 5 + dip, pr.size.x - 2, 3), col.darkened(0.35))
+		draw_rect(Rect2(pr.position.x + 1, pr.end.y - 5 + dip, pr.size.x - 2, 1), col.lightened(0.2 + 0.3 * p["k"]))
+		draw_rect(Rect2(pr.position.x + 2, pr.end.y - 4 + dip, 1, 1), Color(1, 1, 1, 0.6))
+		if p["k"] < 0.5 and not (p["once"] and p["latched"]):
+			# seta pulsando acima: "pise aqui"
+			var bob := roundf(sin(frame * 0.15) * 1.5)
+			var ty := pr.end.y - 12.0 + bob
+			var ac := Color(col, 0.55 + 0.35 * sin(frame * 0.15))
+			draw_colored_polygon(PackedVector2Array([Vector2(cx - 3, ty), Vector2(cx + 3, ty), Vector2(cx, ty + 3)]), ac)
+			draw_rect(Rect2(cx - 0.5, ty - 3, 1, 3), ac)
+		if p["timed"] and p["left"] > 0:
+			# quanto falta para desligar
+			var f := float(p["left"]) / float(p["time"])
+			draw_rect(Rect2(pr.position.x - 1, pr.end.y - 9, pr.size.x + 2, 2), C_SEAM)
+			draw_rect(Rect2(pr.position.x - 1, pr.end.y - 9, (pr.size.x + 2) * f, 2), col)
 
 
 # ---------------------------------------------------------------- chapas soltas

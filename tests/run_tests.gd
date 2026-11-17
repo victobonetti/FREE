@@ -2541,6 +2541,21 @@ func test_mover_triggers() -> void:
 	for i in 90:
 		tick({"move": 1.0})
 	check(room.mover_wants_on(room.movers[0]) and room.plates[0]["down"], "no modo 'once' o botão fica apertado depois que o coelho sai")
+	load_def(_mover_def([pm], false, {"plates": [{"rect": [9, 13, 3], "ch": 2, "mode": "timed", "time": 1.0}]}))
+	for i in 150:
+		tick({"move": 1.0})
+		if room.plates[0]["down"]:
+			break
+	var gone := 0
+	while room.plates[0]["down"] and gone < 200:
+		tick({"move": 1.0})
+		gone += 1
+	check(gone > 60 and not room.plates[0]["down"], "no modo 'timed' o botão fica ligado um tempo depois de sair e então desliga (%d quadros)" % gone)
+	for i in 120:
+		tick({"move": -1.0})
+		if room.plates[0]["down"]:
+			break
+	check(room.plates[0]["down"], "no modo 'timed' dá para chamar de novo")
 	var pr: Rect2i = room.plates[0]["rect"]
 	for i in 4:
 		room._rotate_logic(1)

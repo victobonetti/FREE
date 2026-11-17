@@ -5,7 +5,7 @@ extends SceneTree
 ##   godot --headless --path . -s tools/canonize_levels.gd -- jeffrey montagem esteiras prensas dutos forca
 ##
 ## O primeiro argumento é a fase depois da qual inserir; os demais são os ids em levels/wip, na ordem.
-## Se o id já estiver na campanha (mesmo nome), a fase é substituída no mesmo lugar.
+## Se já houver na campanha uma fase com o mesmo nome, ela é substituída no mesmo lugar.
 
 const Levels := preload("res://scripts/levels.gd")
 const LevelData := preload("res://scripts/level_data.gd")
@@ -47,11 +47,17 @@ func _initialize() -> void:
 			bad += 1
 			continue
 		data.mark_verified()
-		var out: Dictionary = CampaignStore.canonize(data, replay, "", at)
+		# a mesma fase (mesmo nome) já está na campanha: substitui no lugar
+		var same := ""
+		for cid in Levels.ids():
+			if str(Levels.by_id(cid).get("name", "")) == data.name:
+				same = cid
+		var out: Dictionary = CampaignStore.canonize(data, replay, same, at)
 		if out.has("erro"):
 			print("%s: %s" % [wip, out["erro"]])
 			bad += 1
 			continue
-		print("%s -> campanha '%s' na posição %d (vence no quadro %d)" % [wip, out["id"], at + 1, res["frame"]])
-		at += 1
+		print("%s -> campanha '%s' (%s; vence no quadro %d)" % [wip, out["id"], "substituída" if same != "" else "posição %d" % (at + 1), res["frame"]])
+		if same == "":
+			at += 1
 	quit(1 if bad > 0 else 0)

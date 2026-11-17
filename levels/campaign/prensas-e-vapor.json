@@ -67,7 +67,7 @@
 				44.0,
 				16.0
 			],
-			"speed": 50.0
+			"speed": 120.0
 		}
 	],
 	"name": "Prensas e vapor",
@@ -75,13 +75,14 @@
 	"plates": [
 		{
 			"ch": 5.0,
-			"mode": "once",
+			"mode": "timed",
 			"rect": [
 				41.0,
 				46.0,
 				2.0,
 				1.0
-			]
+			],
+			"time": 5.0
 		}
 	],
 	"rotate": true,
@@ -190,6 +191,6 @@
 		}
 	],
 	"verified": true,
-	"verified_hash": "bf507e781c8fbd1c8c8602afec59ab1e60d0bf2f617995c7eac6d830f45b8788",
+	"verified_hash": "5fd7f815d70537a5c943a378dee515620540d8f2860293bb5ee6556a6a477d08",
 	"version": 1
 }

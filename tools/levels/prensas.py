@@ -34,9 +34,9 @@ lv.mark("passou as prensas")
 # --- zona B: o poço (colunas 38..58), o botão e o elevador
 lv.solid(59, 1, 59, 7)                       # parede direita do poço, acima do corredor alto
 lv.solid(59, 16, 59, F - 1)                  # e abaixo dele
-lv.add("plates", {"rect": [41, 46, 2, 1], "ch": 5, "mode": "once"})
+lv.add("plates", {"rect": [41, 46, 2, 1], "ch": 5, "mode": "timed", "time": 5.0})
 lv.step("run_to", cx(41) + 4)
-lv.add("movers", {"ch": 5, "off": [44, 46, 4, 1], "on": [44, 16], "speed": 50.0, "delay": 1.0})
+lv.add("movers", {"ch": 5, "off": [44, 46, 4, 1], "on": [44, 16], "speed": 120.0, "delay": 1.0})
 EL = len(lv.objs["movers"]) - 1
 lv.step("jump_in_place", 1, 22, *xr(44, 47), 46)
 lv.step("wait_mover", EL, "on", 0)
