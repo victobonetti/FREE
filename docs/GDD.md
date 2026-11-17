@@ -359,6 +359,44 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 - Quantos giros do Gatsby, e onde.
 - Tamanho da sala e como o editor se comporta com ela.
 
+## 8d. Ato 2: as 5 fases industriais (proposta aprovada; D76)
+
+**Ordem:** as 15 iniciais, o Jeffrey, **estas cinco**, e então o Gatsby (a fuga). As cinco entram **imediatamente depois do Jeffrey**. Tema industrial do Gatsby (aço remendado, rebites, ferrugem).
+
+**O loop:** o coelho pega de 1 a X **baterias** (X vale 1, 2, 2, 3 e 3 nas cinco fases). Com todas, a **alavanca se ativa sozinha** (a câmera vai até ela e volta), e a **calha** solta uma **caixa**. A caixa vai ao compartimento, e a porta abre. **Sem checkpoint:** morrer volta ao início da fase (D73 continua valendo).
+
+**Foco:** plataforming pesado em fases grandes (de 80×40 a 130×50, de duas a quatro telas de largura), com seções dinâmicas.
+
+| Fase | Tamanho | Baterias | Peças novas | Plataforming | A caixa |
+|---|---|---|---|---|---|
+| 1 Linha de montagem | 80×40 | 1 | bateria, alavanca, calha, plataforma em ciclo | saltos de 3 a 4 tiles, plataformas em vai-e-vem | cai perto do compartimento; ensina o ciclo |
+| 2 Esteiras | 100×44 | 2 | esteira | pular contra e a favor das esteiras, chapas soltas | calha distante; viaja por esteiras e pontes |
+| 3 Prensas e vapor | 110×50 | 2 | jato de vapor, botão de pressão | estampadores e vapor em ritmo, elevador por botão, catapulta | calha no alto; o giro derruba a caixa pelo poço |
+| 4 Dutos | 80×70 | 3 | ventilador, mola | subida vertical em três ramais, uma bateria por ramal, corrida pela parede | sobe por uma corrente de ar até a porta |
+| 5 Casa de força | 130×50 | 3 | (mistura) | todas as mecânicas | ao pegar a 3ª bateria a placa acorda e o jogador corre com a caixa |
+
+**Ácido (Victor):** água verde que **mata o coelho ao toque**. Mesma física da água (escorre, nivela, gira com a sala), mas não se nada nela. Entra como componente de sala e é usado nas fases a partir da 2.
+
+**Gatsby nas cinco fases:** aparece **só na fase 5, bem rápido**, ativando a placa de espinhos (ensaio da fuga).
+
+**Régua de plataforma (medida no jogo):** salto máximo de 30 px de altura (3,75 tiles) e 52 px de alcance (6,5 tiles). Degrau máximo: 3 tiles. Vão confortável: 4 a 5 tiles; 6 tiles só a partir da fase 4, com pouso de 2 tiles. Catapulta: de 9 a 15 tiles.
+
+**Componentes novos (todos de sala, reutilizáveis, com sons e suporte no editor):**
+
+| Componente | O que é |
+|---|---|
+| Tema `industrial` | Campo da fase: paredes de chapa rebitada, dutos e lâmpadas ao fundo, listras de aviso nos perigos |
+| Bateria | Coletável; acende uma vaga da alavanca |
+| Alavanca e calha | Mostra as vagas; com todas cheias, puxa sozinha e solta a caixa |
+| Ácido | Fluido verde que mata ao toque |
+| Gatilhos dos conectores | Ciclo automático, botão de pressão (coelho ou caixa), acionamento por bateria |
+| Esteira | Carrega coelho e caixa, com direção e velocidade |
+| Jato de vapor | Perigo periódico, com chiado de aviso |
+| Ventilador | Corrente de ar para cima; leva coelho e caixa |
+| Mola | Trampolim fixo, sem conector |
+
+**Ordem de trabalho (Victor: editor primeiro):** peças na sala → editor com todas elas → as fases (rascunhos provados por robô; o Victor refina no editor, grava os replays e canoniza).
+
 ## 9. Decisões
 
 O registro completo, com motivos e alternativas, está em [DECISOES.md](DECISOES.md). Resumo do que afeta o design:

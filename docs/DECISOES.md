@@ -578,3 +578,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Fase em `levels/wip/`:** ainda não é da campanha (falta a música e o replay do Victor), mas precisa ser jogável no celular; daí `?play=gatsby`.
 - **Escolhas minhas, abertas a revisão:** os saltos de 3 tiles com vão de 3 (exigem pular da beirada); 0,43 s para a chapa cair; a queda do corredor não tem perigo no caminho de quem cai rente ao chão (é espetáculo e respiro); sem checkpoint (D73).
 - **Descartado:** esteiras; uma balsa lenta (parar numa corrida é o contrário do que se quer); espinhos na pista da parede (ficam para uma segunda versão, se a pista se mostrar fácil).
+
+### D76 — Ato 2: cinco fases industriais com baterias, alavanca e ácido
+- **Autor:** Victor (a ordem, o loop de baterias, o tema, o ácido e as respostas abaixo); Claude (a proposta das fases e dos componentes).
+- **Decidido:** as cinco fases entram imediatamente depois do Jeffrey; com todas as baterias (de 1 a X) a alavanca se ativa sozinha e solta a caixa; morrer volta ao início por ora; o editor ganha as peças novas antes de as fases serem feitas; o Gatsby só aparece na fase 5, rápido, ativando a placa de espinhos.
+- **Ácido:** componente novo do Victor, água verde que mata ao toque.
+- **Em aberto:** a campanha tem 16 fases antes do Jeffrey, e o Victor falou em 15; ficam as 16 até ele dizer qual sai.
+- **Descartado por ora:** a bateria como checkpoint (a proposta de Claude); o Gatsby em todas as cinco fases.
