@@ -13,3 +13,4 @@ desktop.ini
 # Arquivos temporários de editores
 *.tmp
 *~
+__pycache__/

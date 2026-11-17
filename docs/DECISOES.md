@@ -585,3 +585,13 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Ácido:** componente novo do Victor, água verde que mata ao toque.
 - **Em aberto:** a campanha tem 16 fases antes do Jeffrey, e o Victor falou em 15; ficam as 16 até ele dizer qual sai.
 - **Descartado por ora:** a bateria como checkpoint (a proposta de Claude); o Gatsby em todas as cinco fases.
+
+### D77 — As cinco fases industriais: rascunhos provados por robô, editor com objetos
+- **Autor:** Claude, seguindo D76.
+- **Entregue:** o ácido, o tema industrial, bateria/alavanca/calha, os gatilhos dos conectores (ciclo, bateria, botão, atraso), esteira, mola, ventilador e vapor; o editor com a janela de objetos (tudo desfazível, girando com a sala); as cinco fases em `levels/wip/`, cada uma com uma rota do robô nos testes.
+- **Ácido:** um fluido só por sala. Misturar com água exigiria duas simulações que se sobrepõem quando as salas giram; fica para quando houver uma fase que peça.
+- **O botão de pressão não podia chamar o elevador sozinho:** ele partia antes de o coelho subir. Daí o campo `delay` dos conectores (espera, com aviso), que serve a qualquer fase.
+- **O robô pegou três erros de desenho** que um olhar nas capturas não pegaria: um salto de 3 tiles com vão de 1 (bate na lateral), um pouso na plataforma errada na mesma coluna (agora confere a altura) e uma parede que fechava a saída de um elevador.
+- **Sem giro nas cinco fases:** o foco é plataforming e as fases iniciais do jogo também começam sem giro. Se quiser uma corrida pela parede com o limitador (a ideia da fase 4 da proposta), é uma fase nova ou uma mudança.
+- **Em aberto:** os números (velocidades, ritmos, folga da parede) são palpites; as fases são curtas para um humano? O robô as vence em 16 a 33 s; um jogador deve levar de 2 a 5 vezes isso. Falta música, o replay do Victor, e a ligação delas depois do Jeffrey na história.
+- **Ideia deixada de lado:** a caixa subir por uma coluna de ar até o compartimento (o ventilador já levanta caixas e elas pairam no alto da coluna; falta um jeito de a caixa sair dela para o compartimento sem o coelho entrar na corrente).

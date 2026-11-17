@@ -35,6 +35,7 @@ const TYPES := {
 			{"key": "cycle", "label": "Ciclo (s por meio ciclo; 0 = não)", "kind": "float", "min": 0.0, "max": 30.0, "step": 0.25, "def": 0.0},
 			{"key": "phase", "label": "Defasagem do ciclo (s)", "kind": "float", "min": 0.0, "max": 30.0, "step": 0.25, "def": 0.0},
 			{"key": "bat", "label": "Liga com N baterias (0 = não)", "kind": "int", "min": 0, "max": 3, "def": 0},
+			{"key": "delay", "label": "Atraso depois do gatilho (s)", "kind": "float", "min": 0.0, "max": 10.0, "step": 0.25, "def": 0.0},
 			{"key": "launch", "label": "Catapulta (px/s; 0 = não)", "kind": "float", "min": 0.0, "max": 500.0, "step": 10.0, "def": 0.0},
 			{"key": "spikes", "label": "Espinhos", "kind": "choice", "opts": [{"v": -1, "t": "nenhum"}, {"v": 0, "t": "em cima"}, {"v": 1, "t": "à direita"}, {"v": 2, "t": "embaixo"}, {"v": 3, "t": "à esquerda"}], "def": -1},
 		],

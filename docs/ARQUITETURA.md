@@ -193,6 +193,32 @@ Medido pelos testes: pulo longo 30 px, pulo curto 8 px. Degraus de até 3 tiles 
 - O campo fica em `LevelData.extra` (entra no hash da verificação). **O editor ainda não mostra nem edita a placa**: ela é escrita à mão no JSON.
 - `_draw_walls` passou a recortar as paredes à tela também durante a animação do giro (um círculo com a meia diagonal da tela em volta da câmera), para salas gigantes.
 
+## Componentes do ato 2 (D76, D77)
+
+Todos são campos da fase (JSON) lidos por `room.gd`, giram com a sala e são destruídos pela placa de espinhos. Os que têm lista (`conveyors`, `springs`...) são objetos; os de glifo estão na grade.
+
+- **Tema** `"theme": "industrial"`: só desenho. Paredes viram chapas de 2×2 tiles com emendas, rebites e remendos de ferrugem (`_draw_steel_tile`, cor e remendo por hash da chapa); o fundo ganha tubulações, dutos e manchas de luz apagadas (`_draw_industrial_back`), com pouco contraste para não atrapalhar as plataformas.
+- **Ácido** `%`: o mesmo fluido da água (a mesma simulação), em verde; `fluid_acid` na sala. Mata ao toque (`ACID_TOUCH` = 2% do coelho dentro). Uma sala tem um fluido só: o validador recusa `~` e `%` juntos.
+- **Bateria** `+`, **alavanca** `L` (2×2) e **calha** `H` (2×2): 1 a `MAX_BATTERIES` (3) baterias, uma alavanca, uma calha. Com todas coletadas, `_lever_fire` trava a entrada e a câmera vai à alavanca (`LEVER_PAN`), ela vira sozinha (`LEVER_PULL`, com raio âmbar até a calha), a calha abre e solta uma `Box` (`LEVER_WATCH`). A calha conta como a caixa do compartimento na validação. Marcador de baterias no alto da tela.
+- **Gatilhos dos conectores** (`movers`): `cycle`/`phase` (relógio `cycle_t`, zerado ao morrer), `bat` (liga com N baterias), botões de pressão (`plates`: `hold` ou `once`; coelho ou caixa apertam) e `delay` (espera depois do gatilho, com aviso). O aviso é um piscar dos encaixes e um bipe nos últimos `MOVER_WARN` quadros.
+- **Esteira** (`conveyors`): `_update_conveyors` carrega o coelho e as caixas que estão apoiados em cima (resto fracionário em `belt_acc`); `ch` inverte o sentido, `cycle` inverte sozinha. De lado (a sala girou), não carrega.
+- **Mola** (`springs`): lança no sentido de `dir` ao toque (`power` em px/s; 280 sobe ~44 px).
+- **Ventilador** (`fans`): `rabbit.ext` (força externa, aplicada em `Rabbit.update`) sobe o coelho até `cap`; caixas só sobem em ventilador para cima (`box_fan_lift`) e pairam com a base na borda de cima da coluna.
+- **Jato de vapor** (`vents`): período, tempo aberto (no fim do período) e defasagem; avisa 30 quadros antes (luz e chiado); aberto, mata.
+- **Chapas soltas** e **perigo**: ver D75.
+- **Sons:** `sfx_factory.gd` ganhou `battery`, `charge`, `hatch`, `plate_on/off`, `spring`, `steam_warn/burst`, `acid_burn/splash` e os loops `fan_loop` e `belt_loop` (volume por proximidade, `room.fan_gain`/`belt_gain`).
+
+### Editor: objetos (D77)
+
+- `scripts/editor/objects.gd` descreve cada tipo (campos, valores padrão, cor) e sabe girar, espelhar e redimensionar os objetos junto com a sala (um teste confere que o editor gira como o jogo). `EditModel` guarda os objetos em `LevelData.extra` com desfazer e refazer (`set_objects`, `add_object`, `remove_object`, `set_object_field`).
+- `scripts/editor/objects_panel.gd` é a janela **Objetos…** (não bloqueia a grade): lista, cria (na seleção da grade, se houver), duplica, edita e apaga; **Usar a seleção** define o retângulo. A grade desenha o contorno de cada objeto, com sigla e seta de sentido. No painel da fase há o seletor de **Tema**; o roteiro do Gatsby é um texto JSON.
+- Glifos `+`, `L`, `H`, `%` na paleta; alavanca e calha são únicas (colocar outra move a anterior).
+
+### Ferramentas para fazer fases grandes (D77)
+
+- `tools/levelkit.py` descreve uma fase (geometria e objetos) e, junto, o roteiro de um robô que a joga (`hop`, `jump_from`, `drop`, `step`...); `tools/levels/<id>.py` escrevem `levels/wip/<id>.json` e `tools/plans/<id>.json`.
+- `tools/robot.gd` executa o roteiro (corre, pula da beirada, dirige no ar, espera conectores e jatos, empurra a caixa, entra na porta), confere onde pousa (coluna e altura) e, se vencer sem morrer, grava `tests/fixtures/route-<id>.json`, que os testes rodam (`test_industrial_levels`). Rodar: `python3 tools/levels/<id>.py` e `godot --headless --path . -s tools/robot.gd -- <id>`.
+
 ## Componentes da corrida (D75)
 
 - **Conectores** (os blocos motorizados, campo `movers`): `mover_toggle(ch)` agora avisa antes: os dois encaixes piscam por `MOVER_WARN` (16) quadros, com o som `mover_warn`, e só então o canal muda (`_mover_flip`). `mover_toggle(ch, true)` muda na hora. `mover_warning(ch)` diz se o canal está no aviso. Sons: `mover_go` ao partir, `mover_dock` ao encaixar.

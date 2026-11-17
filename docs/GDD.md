@@ -359,7 +359,19 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 - Quantos giros do Gatsby, e onde.
 - Tamanho da sala e como o editor se comporta com ela.
 
-## 8d. Ato 2: as 5 fases industriais (proposta aprovada; D76)
+## 8d. Ato 2: as 5 fases industriais (D76, D77)
+
+**Estado: cinco rascunhos jogáveis**, em `levels/wip/` (fora da história), cada um provado por um robô (`tools/robot.gd`) e testado. Ninguém jogou ainda. Para jogar: `./run.ps1 -Play montagem` (ou `esteiras`, `prensas`, `dutos`, `forca`) ou, na web, `?play=montagem`. Para colocá-las na história depois do Jeffrey: abrir no editor, jogar e vencer, e canonizar (Campanha…).
+
+| Fase | Tamanho | Baterias | Tempo do robô | Como é |
+|---|---|---|---|---|
+| `montagem` · Linha de montagem | 80×40 | 1 | 26 s | Degraus até uma plataforma em ciclo sobre espinhos, um elevador e uma subida de 5 saltos de 3 tiles até a bateria. A caixa cai da calha no compartimento ao lado da porta. |
+| `esteiras` · Esteiras | 100×44 | 2 | 17 s | Três esteiras (contra, a favor, contra) e uma ponte de chapas soltas sobre um lago de ácido; uma bateria em cada trecho. A caixa viaja por uma esteira e cai entre duas paredes no compartimento. |
+| `prensas` · Prensas e vapor | 110×50 | 2 | 29 s | Três prensas em ritmo; um botão chama o elevador (parte depois de 1 s, com aviso); no alto, um corredor com quatro jatos de vapor defasados. |
+| `dutos` · Dutos | 80×70 | 3 | 16 s | Subida de 57 tiles em três ramais sobre espinhos: molas, uma coluna de ar, um elevador e outra coluna de ar. |
+| `forca` · Casa de força | 130×50 | 3 | 33 s | Mistura de tudo, em ziguezague até o alto. No corredor final o Gatsby aparece rápido, puxa uma alavanca e liga a parede de espinhos (36 px/s; o robô nunca chega a menos de 83 px dela). |
+
+**Decididas por Claude, abertas a revisão:** nenhuma das cinco usa o giro (`rotate: false`), como as fases iniciais do jogo: o foco é plataforming; o tema `industrial` está ligado em todas; o ácido só aparece na fase 2 (um fluido por sala); a caixa só viaja de verdade na 2 (esteira) e na 5 (esteira, com a parede atrás), nas outras cai direto da calha; os valores de velocidade e de ritmo são palpites a ajustar jogando.
 
 **Ordem:** as 15 iniciais, o Jeffrey, **estas cinco**, e então o Gatsby (a fuga). As cinco entram **imediatamente depois do Jeffrey**. Tema industrial do Gatsby (aço remendado, rebites, ferrugem).
 
@@ -395,7 +407,7 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 | Ventilador | Corrente de ar para cima; leva coelho e caixa |
 | Mola | Trampolim fixo, sem conector |
 
-**Ordem de trabalho (Victor: editor primeiro):** peças na sala → editor com todas elas → as fases (rascunhos provados por robô; o Victor refina no editor, grava os replays e canoniza).
+**Ordem de trabalho (Victor: editor primeiro):** peças na sala → editor com todas elas → as fases (rascunhos provados por robô; o Victor refina no editor, grava os replays e canoniza). **Feito (D77).**
 
 ## 9. Decisões
 

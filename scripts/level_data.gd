@@ -478,6 +478,8 @@ func _validate_objects(out: Array, w: int, h: int) -> void:
 			out.append({"erro": true, "msg": "Conector %d: o canal vai de 0 a 7." % (i + 1), "pos": no_pos})
 		if int(m.get("spikes", -1)) < -1 or int(m.get("spikes", -1)) > 3:
 			out.append({"erro": true, "msg": "Conector %d: 'spikes' vai de -1 a 3." % (i + 1), "pos": no_pos})
+		if float(m.get("delay", 0.0)) < 0.0 or float(m.get("delay", 0.0)) > 10.0:
+			out.append({"erro": true, "msg": "Conector %d: o atraso vai de 0 a 10 s." % (i + 1), "pos": no_pos})
 		if m.has("cycle") and float(m["cycle"]) != 0.0 and float(m["cycle"]) < 0.5:
 			out.append({"erro": true, "msg": "Conector %d: o ciclo mínimo é 0,5 s." % (i + 1), "pos": no_pos})
 		for dock in [off, on_rect]:

@@ -402,6 +402,18 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 
 ---
 
+## Rodada 35 — Ato 2: as cinco fases industriais (17/11/2026)
+
+**Entrada do Victor:** depois do Jeffrey, cinco fases com novas mecânicas e plataforming pesado, tema industrial do Gatsby; o loop de baterias, alavanca sozinha e caixa; editor primeiro; o Gatsby só na fase 5, rápido, ligando a parede de espinhos; um componente novo, o ácido (D76).
+
+**Feito (D77):** ácido; tema industrial; bateria, alavanca e calha; conectores com ciclo, bateria, botão e atraso; esteira, mola, ventilador, vapor; sons; janela de objetos no editor; e as cinco fases (`montagem`, `esteiras`, `prensas`, `dutos`, `forca`), feitas com uma ferramenta que gera a fase e o roteiro de um robô que a prova. Todos os testes passam.
+
+**Conferido em captura de tela:** as cinco fases ao longo da rota do robô. **Não jogado por ninguém.**
+
+**Falta:** jogar e ajustar; música; o Victor gravar os replays e canonizar; um ajuste fino do editor (arrastar objetos na grade); caixa subindo por coluna de ar.
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |

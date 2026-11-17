@@ -555,6 +555,10 @@ func _init_movers() -> void:
 			"cycle": roundi(float(d.get("cycle", 0.0)) * 60.0),
 			"phase": roundi(float(d.get("phase", 0.0)) * 60.0),
 			"bat": int(d.get("bat", 0)),
+			# "delay" (s): depois do gatilho (botão, bateria, canal), espera esse tempo, com os encaixes
+			# piscando no fim, antes de se mover. Não vale para os de ciclo.
+			"delay": roundi(float(d.get("delay", 0.0)) * 60.0),
+			"raw": false, "eff": false, "trig_t": 0,
 			"want": false, "warn": false,
 		})
 
@@ -588,6 +592,11 @@ func mover_warning(ch: int) -> bool:
 func mover_wants_on(m: Dictionary) -> bool:
 	if m["cycle"] > 0:
 		return m["want"]
+	return m["eff"]
+
+
+## O que o gatilho pede agora (antes do atraso).
+func _mover_raw(m: Dictionary) -> bool:
 	if m["bat"] > 0:
 		return bat_got >= m["bat"]
 	return mover_state.get(m["ch"], false) or plate_on.get(m["ch"], false)
@@ -604,6 +613,19 @@ func _update_movers() -> void:
 	for m in movers:
 		var P: int = m["cycle"]
 		if P <= 0:
+			var raw := _mover_raw(m)
+			if raw != m["raw"]:
+				m["raw"] = raw
+				m["trig_t"] = 0
+			else:
+				m["trig_t"] += 1
+			if m["eff"] != raw and m["trig_t"] >= m["delay"]:
+				m["eff"] = raw
+				m["fx"] = 0
+			m["warn"] = m["eff"] != raw and m["delay"] > 0 and m["delay"] - m["trig_t"] <= MOVER_WARN
+			if m["delay"] > 0 and m["eff"] != raw and m["delay"] - m["trig_t"] == MOVER_WARN \
+					and Vector2(m["r"].position).distance_to(cam) < VIEW.length() * 0.8:
+				sfx.emit("mover_warn")
 			continue
 		var t: int = cycle_t + m["phase"]
 		var on: bool = (t / P) % 2 == 1

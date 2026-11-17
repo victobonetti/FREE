@@ -40,6 +40,7 @@ func _init() -> void:
 	test_battery_lever()
 	test_mover_triggers()
 	test_dynamic_parts()
+	test_industrial_levels()
 	test_reload_params()
 	test_rope()
 	test_water()
@@ -2489,6 +2490,7 @@ func test_mover_triggers() -> void:
 		tick({"move": 1.0})
 		if room.bat_got == 2:
 			break
+	idle(2)
 	check(room.mover_wants_on(mb), "com 2 baterias o conector liga")
 
 	# botão de pressão
@@ -2504,11 +2506,13 @@ func test_mover_triggers() -> void:
 		tick({"move": 1.0})
 		if room.plates[0]["down"]:
 			break
+	idle(2)
 	check(room.plates[0]["down"] and room.mover_wants_on(mp) and got.has("plate_on"), "pisar no botão liga o canal dele, com clique")
 	for i in 120:
 		tick({"move": 1.0})
 		if not room.plates[0]["down"]:
 			break
+	idle(2)
 	check(not room.mover_wants_on(mp) and got.has("plate_off"), "sair do botão desliga (modo 'hold')")
 	load_def(_mover_def([pm], true, {"plates": [{"rect": [10, 13, 3], "ch": 2}]}))
 	idle(30)
@@ -2686,3 +2690,54 @@ func test_dynamic_parts() -> void:
 	room.rabbit.pos = Vector2i(27 * 8, 100)   # longe: a placa ainda não o alcançou
 	idle(150)
 	check(room.state == "play" and room.springs.is_empty(), "a placa de espinhos destrói a mola")
+
+
+# ------------------------------------------------------------ as 5 fases industriais (D76)
+
+const INDUSTRIAL := ["montagem", "esteiras", "prensas", "dutos", "forca"]
+
+
+## Cada fase do ato 2 (levels/wip) tem solução: a rota gravada pelo robô (tools/robot.gd) vence sem
+## morrer, pega todas as baterias e a caixa abre a porta. A fase valida sem erros nem avisos.
+func test_industrial_levels() -> void:
+	print("fases industriais: rotas do robô")
+	var Gatsby = load("res://scripts/boss_gatsby.gd")
+	for id in INDUSTRIAL:
+		var raw := FileAccess.get_file_as_string("res://levels/wip/%s.json" % id)
+		var data: RefCounted = LevelData.from_json(raw)
+		check(data != null and _msgs(data) == "", "%s: valida sem erros nem avisos (%s)" % [id, _msgs(data)])
+		var def: Dictionary = JSON.parse_string(raw)
+		var route: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/route-%s.json" % id))
+		Gatsby.intro_seen = false
+		load_def(def)
+		var died := false
+		var won_at := -1
+		var fired := false
+		var n := 0
+		for run in route["runs"]:
+			var k: Array = run[1]
+			var inp := {"move": float(k[0]), "jump_pressed": int(k[1]) == 1, "jump_held": int(k[2]) == 1, "rotate": int(k[3])}
+			for i in int(run[0]):
+				tick(inp)
+				n += 1
+				if room.state == "dead":
+					died = true
+				if room.lever != null and room.lever["pulled"]:
+					fired = true
+				if won_at < 0 and won():
+					won_at = n
+		for i in 90:
+			if won_at >= 0:
+				break
+			tick()
+			n += 1
+			if won():
+				won_at = n
+		check(not died, "%s: a rota não morre" % id)
+		check(won_at > 0, "%s: a rota chega à porta (quadro %d de %d)" % [id, won_at, int(route["frames"])])
+		check(room.bat_got == room.batteries.size() and fired, "%s: pega todas as %d baterias e a alavanca se puxa" % [id, room.batteries.size()])
+		check(room.group_filled(0) or won_at > 0, "%s: a caixa está no compartimento" % id)
+		var tall: int = room.gh
+		check(room.gw * room.gh >= 80 * 40, "%s: é grande (%dx%d tiles)" % [id, room.gw, tall])
+		check(room.theme == "industrial" and not room.allow_rotate, "%s: tema industrial, sem giro" % id)
+	Gatsby.intro_seen = false
