@@ -102,6 +102,7 @@ func _ready() -> void:
 ## Celular: troca o "PRESS ENTER" pelo convite ao toque.
 func set_touch_mode() -> void:
 	press_label.text = "TAP TO START"
+	menu_label.visible = false   # E e L não existem no celular
 
 
 func _exit_tree() -> void:
