@@ -25,6 +25,7 @@
 		"######################################"
 	],
 	"start_rot": -1,
+	"theme": "caverna",
 	"verified": true,
 	"verified_hash": "891853bf9c250791252142c58f836319dfecf0a7240876adac6a876ef5de7160",
 	"version": 1

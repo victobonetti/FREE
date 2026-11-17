@@ -37,6 +37,7 @@
 	],
 	"spin_cooldown": 45,
 	"start_rot": 0,
+	"theme": "despensa",
 	"verified": true,
 	"verified_hash": "6c9a9038e7da5517b8899a24cb8e953dd5ce736e1bb0a2fb51ce0accc83553b9",
 	"version": 1

@@ -70,6 +70,7 @@ func _init() -> void:
 	test_jeffrey_replay()
 	test_jeffrey_lives()
 	test_jeffrey_intro()
+	test_subsoil_and_anchors()
 	test_mecha_intro()
 	test_mecha_dash()
 	test_mecha_homing()
@@ -2921,3 +2922,47 @@ func test_mecha_bot() -> void:
 	check(m.hearts == 0, "o bot tira os 3 corações do Gatsby")
 	idle(m.DIE_FRAMES + 60)
 	check(room.door_unlocked, "a porta destrava")
+
+
+# ------------------------------------------------------------ ato 1: subsolo, amortecedor, despertar (D82)
+
+func test_subsoil_and_anchors() -> void:
+	print("subsolo: tema, amortecedor e despertar")
+	# o tema é só aparência: não muda o hash da verificação
+	var raw := FileAccess.get_file_as_string(Levels.level_path("passos"))
+	var a: RefCounted = LevelData.from_json(raw)
+	var d: Dictionary = JSON.parse_string(raw)
+	d["theme"] = "industrial"
+	var b: RefCounted = LevelData.from_json(JSON.stringify(d))
+	check(a.content_hash() == b.content_hash(), "trocar o tema não muda o hash")
+	var themed := 0
+	for i in 17:
+		if RoomScript.SUBSOIL.has(str(Levels.rooms()[i].get("theme", ""))):
+			themed += 1
+	check(themed == 17, "as 17 fases do ato 1 têm um trecho do subsolo (%d)" % themed)
+	# amortecedor: só nas salas com limitador, e gira com a sala
+	load_named("Maré")
+	check(not room.anchors.is_empty(), "Maré (com limitador) tem amortecedor")
+	var r0: Rect2i = room.anchors[0]["rect"]
+	var o0: int = room.orientation
+	check(room.anchors[0]["facing"] == posmod(2 + o0, 4), "o amortecedor fica no teto da fase como foi desenhada")
+	wait_rot_ready()
+	tick({"rotate": 1})
+	check(room.orientation != o0 and room.anchors[0]["facing"] == posmod(2 + room.orientation, 4) and room.anchors[0]["rect"] != r0, "o amortecedor gira com a sala")
+	var n := 0
+	while room.orientation != o0 and n < 400:
+		tick()
+		n += 1
+	check(room.orientation == o0 and room.anchors[0]["rect"] == r0, "o limitador desfaz e o amortecedor volta ao lugar")
+	load_named("Primeiros passos")
+	check(room.anchors.is_empty(), "sala sem limitador não tem amortecedor")
+	# despertar: a fase do giro mostra o susto e a primeira batida acende o clarão, uma vez só
+	RoomScript.awakened = false
+	load_named("Giro")
+	check(room.awaken_t == 0, "a fase do giro começa com o despertar")
+	idle(30)
+	wait_rot_ready()
+	tick({"rotate": 1})
+	check(RoomScript.awakened and room.awaken_flash > 0, "a primeira batida desperta o giro")
+	load_named("Giro")
+	check(room.awaken_t == -1, "depois de desperto, a fase não repete a cena")

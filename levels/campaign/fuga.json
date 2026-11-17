@@ -43,6 +43,7 @@
 		"################################"
 	],
 	"start_rot": 0,
+	"theme": "despensa",
 	"verified": true,
 	"verified_hash": "6acecaafaafcb161940d352428e757da693d2475d10cf29100985a5699378c47",
 	"version": 1

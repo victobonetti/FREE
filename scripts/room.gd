@@ -21,6 +21,21 @@ const ROT_FRAMES := 16       # duração da animação do giro
 const SPIN_FRAMES := 9       # giro do bloco (sala de boss): mais curto que o da sala, sem pausar
 const FLIP_FRAMES := 24      # cambalhota do coelho ao girar (passa um pouco do giro, já caindo)
 const C_FLIP := Color("8fd0ff")       # faíscas azuis do giro
+# Subsoil (ato 1): o subsolo embaixo do campo, em quatro trechos. Só aparência (D82).
+const SUBSOIL := ["raizes", "caverna", "aquifero", "despensa"]
+const C_SOIL := {
+	"raizes": [Color("3a291f"), Color("43301f"), Color("4e3826")],
+	"caverna": [Color("2a2c37"), Color("30323d"), Color("383b47")],
+	"aquifero": [Color("223038"), Color("283841"), Color("2f424b")],
+	"despensa": [Color("37281d"), Color("402e21"), Color("4a3726")],
+}
+const C_MOSS := {"raizes": Color("6f9e4a"), "caverna": Color("56784a"), "aquifero": Color("3f7a62"), "despensa": Color("7a8a3e")}
+const C_ROOT := Color("6b4a33")
+const C_DRIP := Color("9fd4ff")
+const C_SHROOM := [Color("c58cff"), Color("7fe0d0")]
+const C_CRYSTAL := Color("7fd6e8")
+const C_NUT_DECOR := Color("9a6a3a")
+const C_ANCHOR := Color("ff3b4e")      # o amortecedor das salas com limitador (a barra vermelha)
 const ROT_COOLDOWN := 134    # espera extra depois do giro: com a animação, 2,5 s (150 quadros)
 const DEFAULT_RELOAD := 2.5   # s: recarga do giro e tempo do limitador, se a fase não disser outro
 const ROT_BUFFER := 6        # apertar até 6 quadros antes do fim da recarga ainda vale
@@ -272,7 +287,15 @@ var batteries: Array = []
 var bat_got := 0
 var lever = null     # {"rect": Rect2i, "t": -1 parada; senão quadros desde o disparo, "pulled": bool}
 var chute = null     # {"rect": Rect2i, "open": quadros desde que abriu (0 = fechada)}
-var theme := ""      # "" ou "industrial": só muda o desenho
+var theme := ""      # "", "industrial" ou um trecho do subsolo (SUBSOIL): só muda o desenho
+# Amortecedores: nas salas com limitador, a peça que puxa a sala de volta (cristal vermelho no
+# subsolo, estabilizador na fábrica). Só desenho; giram com a sala. {"rect": Rect2i, "facing": 0..3}
+var anchors: Array = []
+var anchor_fx := 0           # quadros do pulso quando o limitador desfaz o giro
+# Despertar do giro (campo "awaken", fase 3): o coelho, encurralado, bate a pata pela primeira vez.
+static var awakened := false
+var awaken_t := -1           # quadros desde o início da sala (-1: não há despertar aqui)
+var awaken_flash := 0
 var water_vol := 0.0       # volume total (px²)
 var water_calm := false    # parada: a simulação descansa
 var water_dirty := true    # os vãos precisam ser refeitos (comporta ou plataforma mudou)
@@ -428,6 +451,10 @@ func reset() -> void:
 	chute = null
 	theme = str(def.get("theme", ""))
 	_parse(rows, water_tiles)
+	_find_anchors()
+	anchor_fx = 0
+	awaken_flash = 0
+	awaken_t = 0 if def.get("awaken", false) and not awakened else -1
 	_init_crushers()
 	_init_movers()
 	_init_dynamics()
@@ -1559,6 +1586,9 @@ func _rotate_logic(dir: int) -> void:
 		o["rect"] = _rot_rect(o["rect"], dir)
 		o["dir"] = posmod(o["dir"] + dir, 4)
 	belt_acc.clear()
+	for an in anchors:
+		an["rect"] = _rot_rect(an["rect"], dir)
+		an["facing"] = posmod(an["facing"] + dir, 4)
 	for c in crushers:
 		c["lane"] = _rot_rect(c["lane"], dir)
 		c["dir"] = posmod(c["dir"] + dir, 4)
@@ -1612,6 +1642,25 @@ func _begin_rotate(dir: int, forced := false) -> void:
 func _flip_fx(dir: int) -> void:
 	flip_t = FLIP_FRAMES
 	flip_dir = dir
+	# a batida de pata: um baque no chão, poeira e uma onda azul rente aos pés
+	sfx.emit("thump")
+	var feet := Vector2(rabbit.pos) + Vector2(6, 12)
+	particles.append({"pos": feet, "vel": Vector2.ZERO, "life": 10, "col": C_FLIP, "grav": 0.0, "ring": 4.0})
+	for i in 6:
+		var sd := -1.0 if i % 2 == 0 else 1.0
+		particles.append({"pos": feet + Vector2(sd * 2.0, 0), "vel": Vector2(sd * randf_range(25.0, 55.0), -randf_range(5.0, 20.0)),
+			"life": randi_range(8, 12), "col": C_DUST, "grav": 60.0})
+	if awaken_t >= 0 and not awakened:
+		# o despertar: a primeira batida da vida dele
+		awakened = true
+		awaken_flash = 30
+		shake = maxf(shake, 4.0)
+		sfx.emit("charge")
+		particles.append({"pos": feet, "vel": Vector2.ZERO, "life": 18, "col": C_FLIP, "grav": 0.0, "ring": 8.0})
+		for i in 18:
+			var a := TAU * i / 18.0
+			particles.append({"pos": feet, "vel": Vector2(cos(a), sin(a)) * randf_range(60.0, 110.0),
+				"life": randi_range(14, 22), "col": C_FLIP, "grav": 0.0})
 	var c := Vector2(rabbit.pos) + Vector2(6, 6)
 	particles.append({"pos": c, "vel": Vector2.ZERO, "life": 12, "col": C_FLIP, "grav": 0.0, "ring": 2.0})
 	for i in 12:
@@ -1753,6 +1802,10 @@ func push_box(b, d: Vector2i) -> bool:
 func step(inp: Dictionary) -> void:
 	frame += 1
 	_update_particles()
+	anchor_fx = maxi(anchor_fx - 1, 0)
+	awaken_flash = maxi(awaken_flash - 1, 0)
+	if awaken_t >= 0 and state == "play":
+		awaken_t += 1
 	flip_t = maxi(flip_t - 1, 0)
 	door_flash = maxi(door_flash - 1, 0)
 	if state == "won":
@@ -1780,6 +1833,7 @@ func step(inp: Dictionary) -> void:
 		if limit_t == 0 and not rotating:
 			pending_rot = 0
 			_begin_rotate(-signi(limit_net), true)
+			anchor_fx = 24
 			sfx.emit("limiter")
 			return
 	var req: int = inp.get("rotate", 0)
@@ -2998,6 +3052,8 @@ func _draw() -> void:
 	draw_rect(room_rect, C_BG)
 	if theme == "industrial":
 		_draw_industrial_back()
+	elif SUBSOIL.has(theme):
+		_draw_subsoil_back()
 
 	# compartimentos (fundo)
 	for s in sockets:
@@ -3055,6 +3111,7 @@ func _draw() -> void:
 	# coelho
 	if rabbit != null and (state == "play" or state == "won"):
 		_draw_rabbit(base)
+		_draw_awaken()
 
 	_draw_crushers(base)
 	_draw_water()
@@ -3379,6 +3436,8 @@ func _draw_walls() -> void:
 			var y := r * TILE
 			if theme == "industrial":
 				_draw_steel_tile(c, r, x, y)
+			elif SUBSOIL.has(theme):
+				_draw_soil_tile(c, r, x, y)
 			else:
 				draw_rect(Rect2(x, y, TILE, TILE), C_WALL)
 			if r > 0 and tiles[(r - 1) * gw + c] == 0:
@@ -3389,6 +3448,9 @@ func _draw_walls() -> void:
 				draw_rect(Rect2(x, y, 1, TILE), C_EDGE)
 			if c < gw - 1 and tiles[r * gw + c + 1] == 0:
 				draw_rect(Rect2(x + TILE - 1, y, 1, TILE), C_EDGE)
+			if SUBSOIL.has(theme):
+				_draw_soil_decor(c, r, x, y)
+	_draw_anchors()
 
 
 ## Tema industrial: a parede vira chapas de aço de 2×2 tiles, com emendas, rebites nos cantos e,
@@ -3453,6 +3515,247 @@ func _draw_industrial_back() -> void:
 			var cy := j * 14 * TILE + (hh / 7) % (8 * TILE) + 2 * TILE
 			draw_circle(Vector2(cx, cy), 26.0, Color(C_BAT, 0.025))
 			draw_circle(Vector2(cx, cy), 14.0, Color(C_BAT, 0.03))
+
+
+# ---------------------------------------------------------------- subsolo (ato 1, D82)
+
+## A direção do "cima" da fase como foi desenhada, na sala de agora (depois dos giros).
+func _orig_up() -> Vector2i:
+	var u := Vector2i(0, -1)
+	for i in posmod(orientation, 4):
+		u = Vector2i(-u.y, u.x)
+	return u
+
+
+func _cell_empty(c: int, r: int) -> bool:
+	return c >= 0 and r >= 0 and c < gw and r < gh and tiles[r * gw + c] == 0
+
+
+## Um retângulo encostado na face `u` do tile (x, y): `a` ao longo da face, `b` para fora dela.
+func _face_rect(x: int, y: int, u: Vector2i, a: float, b: float, w: float, h: float) -> Rect2:
+	var o := Vector2(x, y)
+	var tg := Vector2(1, 0)
+	if u == Vector2i(0, 1):
+		o = Vector2(x, y + TILE)
+	elif u == Vector2i(-1, 0):
+		tg = Vector2(0, 1)
+	elif u == Vector2i(1, 0):
+		o = Vector2(x + TILE, y)
+		tg = Vector2(0, 1)
+	var uf := Vector2(u)
+	var p0 := o + tg * a + uf * b
+	var p1 := o + tg * (a + w) + uf * (b + h)
+	return Rect2(p0, Vector2.ZERO).expand(p1)
+
+
+## Terra (raízes, despensa) ou pedra (caverna, lençol d'água): cor e pedrinhas por hash da posição
+## atual do tile (ao girar, o padrão se refaz; com cores tão próximas, não se percebe).
+func _draw_soil_tile(c: int, r: int, x: int, y: int) -> void:
+	var pal: Array = C_SOIL[theme]
+	var h := absi((c * 73856093) ^ (r * 19349663))
+	draw_rect(Rect2(x, y, TILE, TILE), pal[1])
+	if h % 3 == 0:
+		# manchas de terra mais escura ou mais clara, menores que o tile: sem xadrez
+		draw_rect(Rect2(x + (h >> 4) % 4, y + (h >> 6) % 4, 4, 3), pal[0] if (h >> 8) % 2 == 0 else pal[2])
+	if h % 5 == 0:
+		draw_rect(Rect2(x + 1 + (h >> 4) % 5, y + 1 + (h >> 7) % 5, 2, 1), pal[2])
+	if h % 7 == 1:
+		draw_rect(Rect2(x + (h >> 5) % 7, y + (h >> 9) % 7, 1, 1), Color(pal[0], 1.0).darkened(0.35))
+	if theme == "caverna" and h % 23 == 3:
+		draw_rect(Rect2(x + 2, y + 3, 1, 1), Color(C_CRYSTAL, 0.5))   # veio de cristal na pedra
+
+
+## Musgo e grama no que era o chão quando a fase foi desenhada (depois de um giro, ficam na parede ou
+## no teto: mostra que o mundo virou); raízes ou pingos no que era o teto; cogumelos, cristais, nozes.
+func _draw_soil_decor(c: int, r: int, x: int, y: int) -> void:
+	var h := absi((c * 2654435761) ^ (r * 40503))
+	var up := _orig_up()
+	var moss: Color = C_MOSS[theme]
+	if _cell_empty(c + up.x, r + up.y):
+		for i in 4:
+			var hh := 1 + ((h >> (i * 3)) % 3)
+			if theme == "aquifero":
+				hh = 1 + ((h >> (i * 3)) % 2)
+			draw_rect(_face_rect(x, y, up, i * 2 + ((h >> i) & 1), 0, 1, hh), moss if i % 2 == 0 else moss.darkened(0.25))
+		if theme == "caverna" and h % 9 == 0:
+			var col: Color = C_SHROOM[(h >> 4) % 2]
+			var pulse := 0.10 + 0.05 * sin(frame * 0.05 + h % 17)
+			var cap := _face_rect(x, y, up, 2, 2, 4, 1)
+			draw_circle(cap.get_center(), 5.0, Color(col, pulse))
+			draw_rect(_face_rect(x, y, up, 3, 0, 1, 2), Color("d8cfc0"))
+			draw_rect(cap, col)
+		elif theme == "despensa" and h % 6 == 0:
+			var nut := _face_rect(x, y, up, 2 + (h >> 5) % 3, 0, 3, 2)
+			draw_rect(nut, C_NUT_DECOR)
+			draw_rect(Rect2(nut.position, Vector2(1, 1)), Color(C_NUT_DECOR, 1.0).lightened(0.3))
+	var dn := -up
+	if _cell_empty(c + dn.x, r + dn.y):
+		if (theme == "raizes" or theme == "despensa") and h % 3 == 0:
+			# raiz pendurada, balançando de leve
+			var n := 3 + (h >> 4) % 8
+			var a0 := 2.0 + float((h >> 2) % 4)
+			for i in n:
+				var sway := sin(frame * 0.03 + i * 0.5 + h % 13) * (float(i) / n) * 1.5
+				draw_rect(_face_rect(x, y, dn, a0 + roundf(sway + sin(i * 0.9) * 0.8), i, 1, 1), C_ROOT if i < n - 1 else C_ROOT.lightened(0.15))
+		elif (theme == "caverna" or theme == "aquifero") and h % 4 == 0:
+			var a1 := 2.0 + float((h >> 3) % 4)
+			draw_rect(_face_rect(x, y, dn, a1, 0, 3, 1), C_SOIL[theme][2])
+			draw_rect(_face_rect(x, y, dn, a1 + 1, 1, 1, 2), C_SOIL[theme][2])
+			if theme == "aquifero":
+				# um pingo que se forma, cai e some
+				var period := 90 + h % 60
+				var tt := (frame + h % 97) % period
+				var fall := float(tt - 30) * float(tt - 30) * 0.02 if tt > 30 else 0.0
+				if fall < 40.0:
+					draw_rect(_face_rect(x, y, dn, a1 + 1, 3 + fall, 1, 2), Color(C_DRIP, 0.7))
+	if theme == "caverna" and h % 19 == 5:
+		for side in [Vector2i(-up.y, up.x), Vector2i(up.y, -up.x)]:
+			if _cell_empty(c + side.x, r + side.y):
+				var gl := 0.12 + 0.06 * sin(frame * 0.04 + h % 11)
+				var cr := _face_rect(x, y, side, 3, 0, 2, 3)
+				draw_circle(cr.get_center(), 4.0, Color(C_CRYSTAL, gl))
+				draw_rect(cr, C_CRYSTAL)
+				break
+
+
+## Fundo do subsolo: camadas de terra onduladas e, conforme o trecho, raízes e um feixe de luz
+## (logo abaixo do buraco), estalactites ao longe e brilhos, veios de água, montes de nozes.
+## Contraste baixo, só o que está na tela.
+func _draw_subsoil_back() -> void:
+	var half := VIEW / 2.0 + Vector2(24, 24)
+	var x0 := maxi(int(cam.x - half.x), 0)
+	var x1 := mini(int(cam.x + half.x), pw)
+	var y0 := maxi(int(cam.y - half.y), 0)
+	var y1 := mini(int(cam.y + half.y), ph)
+	var pal: Array = C_SOIL[theme]
+	var band := Color(pal[2], 0.22)
+	# camadas de terra
+	var k0 := maxi(y0 / 64 - 1, 0)
+	for k in range(k0, y1 / 64 + 2):
+		var by := k * 64 + absi(k * 7919) % 24
+		var xx := x0 - x0 % 8
+		while xx < x1 and by < ph - 12:
+			var wy := by + roundf(sin(xx * 0.035 + k * 1.7) * 4.0)
+			draw_rect(Rect2(xx, wy, mini(8, x1 - xx), 3), band)
+			xx += 8
+	# pedras soltas no fundo
+	var gx0 := x0 / 40
+	for gx in range(gx0, x1 / 40 + 1):
+		for gy in range(y0 / 40, y1 / 40 + 1):
+			var hh := absi(gx * 92837111 ^ gy * 689287499)
+			if hh % 4 != 0:
+				continue
+			var p := Vector2(gx * 40 + hh % 32, gy * 40 + (hh >> 5) % 32)
+			if p.x > pw - 12 or p.y > ph - 8:
+				continue
+			draw_rect(Rect2(p, Vector2(4 + hh % 3, 2)), Color(pal[2], 0.25))
+	match theme:
+		"raizes":
+			# o buraco lá em cima: um feixe de luz quente, bem fraco
+			var lx := pw * 0.35
+			draw_colored_polygon(PackedVector2Array([Vector2(lx - 12, 0), Vector2(lx + 14, 0), Vector2(lx + 70, ph), Vector2(lx + 10, ph)]), Color(1.0, 0.92, 0.66, 0.035))
+			for i in range(int(x0 / 26), int(x1 / 26) + 1):
+				var hh := absi(i * 2654435761)
+				var rx := i * 26 + hh % 18
+				if rx < 10 or rx > pw - 12:
+					continue
+				var depth := mini(30 + hh % 90, ph - 16)
+				for yy in range(0, mini(depth, y1), 2):
+					if yy < y0:
+						continue
+					draw_rect(Rect2(rx + roundf(sin(yy * 0.12 + i) * 2.0), yy, 1, 2), Color(C_ROOT, 0.35))
+			# torrões caindo do buraco
+			for i in 3:
+				var tt := float((frame + i * 97) % 240) / 240.0
+				draw_rect(Rect2(lx + 8 + i * 9 + sin(tt * 6.0 + i) * 3.0, tt * ph, 1, 1), Color(C_ROOT, 0.6))
+		"caverna":
+			for i in range(int(x0 / 30), int(x1 / 30) + 1):
+				var hh := absi(i * 40503 ^ 77)
+				var sx := float(i * 30 + hh % 20)
+				var ln := 10.0 + float(hh % 24)
+				draw_colored_polygon(PackedVector2Array([Vector2(sx - 4, 0), Vector2(sx + 4, 0), Vector2(sx, ln)]), Color(pal[2], 0.35))
+				var gpos := Vector2(sx + 7, 30 + (hh >> 3) % maxi(ph - 40, 1))
+				if gpos.y > y0 and gpos.y < y1 and (frame / 20 + hh) % 9 == 0:
+					draw_rect(Rect2(gpos, Vector2(1, 1)), Color(C_CRYSTAL, 0.6))
+		"aquifero":
+			for i in range(int(x0 / 34), int(x1 / 34) + 1):
+				var hh := absi(i * 92821)
+				var vx := i * 34 + hh % 20
+				draw_rect(Rect2(vx, y0, 1, y1 - y0), Color(C_DRIP, 0.05))
+				var tt := (frame * 2 + hh) % maxi(ph, 1)
+				draw_rect(Rect2(vx, tt, 1, 3), Color(C_DRIP, 0.25))
+		"despensa":
+			for i in range(int(x0 / 22), int(x1 / 22) + 1):
+				var hh := absi(i * 31337)
+				var nx := float(i * 22 + hh % 12)
+				for j in 3 + hh % 3:
+					var q := Vector2(nx + j * 4 - (j / 3) * 8, ph - 10 - (j / 3) * 4)
+					draw_circle(q, 2.5, Color(C_NUT_DECOR, 0.18))
+
+
+## Amortecedores das salas com limitador: um por trecho do teto da fase como foi desenhada.
+func _find_anchors() -> void:
+	anchors.clear()
+	if not def.get("limiter", false):
+		return
+	var n := maxi(1, gw / 26)
+	for k in n:
+		var c := clampi(int((k + 0.5) * gw / n), 2, gw - 3)
+		for dc in [0, 1, -1, 2, -2, 3, -3]:
+			var cc: int = c + dc
+			var found := false
+			for r in gh - 2:
+				if tiles[r * gw + cc] != 0 and tiles[(r + 1) * gw + cc] == 0:
+					anchors.append({"rect": Rect2i(cc * TILE, r * TILE, TILE, TILE), "facing": 2})
+					found = true
+					break
+			if found:
+				break
+
+
+## Cristal vermelho (subsolo) ou estabilizador com antena (fábrica). Pulsa forte enquanto o
+## giro está "esticado" (o limitador conta), e solta uma onda quando puxa a sala de volta.
+func _draw_anchors() -> void:
+	if anchors.is_empty():
+		return
+	var live := limit_t > 0
+	var pulse := (0.28 + 0.18 * sin(frame * 0.35)) if live else (0.07 + 0.03 * sin(frame * 0.05))
+	for an in anchors:
+		var rc: Rect2i = an["rect"]
+		var dv: Vector2 = [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][an["facing"]]
+		var basep := Vector2(rc.position) + Vector2(4, 4) + dv * 4.0
+		draw_set_transform_matrix(_base * Transform2D((an["facing"] - 2) * PI / 2.0, basep))
+		draw_circle(Vector2(0, 5), 9.0, Color(C_ANCHOR, pulse * 0.6))
+		if theme == "industrial":
+			draw_rect(Rect2(-6, 0, 12, 5), C_STEEL[1])
+			draw_rect(Rect2(-6, 4, 12, 1), C_SEAM)
+			draw_rect(Rect2(-5, 1, 1, 1), C_RIVET)
+			draw_rect(Rect2(4, 1, 1, 1), C_RIVET)
+			draw_line(Vector2(0, 5), Vector2(0, 10), C_RIVET, 1.0)
+			draw_rect(Rect2(-1, 10, 3, 3), C_ANCHOR if live or (frame / 30) % 2 == 0 else Color(C_ANCHOR, 0.4))
+		else:
+			var dark := Color(C_ANCHOR, 1.0).darkened(0.45)
+			draw_colored_polygon(PackedVector2Array([Vector2(-6, 0), Vector2(-2, 0), Vector2(-4, 5)]), dark)
+			draw_colored_polygon(PackedVector2Array([Vector2(2, 0), Vector2(6, 0), Vector2(4, 6)]), dark)
+			draw_colored_polygon(PackedVector2Array([Vector2(-2.5, 0), Vector2(2.5, 0), Vector2(0, 10)]), Color(C_ANCHOR, 1.0).darkened(0.15))
+			draw_line(Vector2(0, 1), Vector2(0, 7), Color(1, 0.75, 0.78, 0.5 + pulse), 1.0)
+		if anchor_fx > 0:
+			var kf := 1.0 - float(anchor_fx) / 24.0
+			draw_arc(Vector2(0, 5), 6.0 + kf * 40.0, 0.0, TAU, 28, Color(C_ANCHOR, 0.6 * (1.0 - kf)), 1.0)
+	draw_set_transform_matrix(_base)
+
+
+## O despertar (fase 3): encurralado, o coelho se assusta ("!") antes de descobrir a batida; na
+## primeira, um clarão azul.
+func _draw_awaken() -> void:
+	draw_set_transform_matrix(_base)
+	if awaken_t >= 20 and awaken_t < 150 and not awakened:
+		var p := Vector2(rabbit.pos) + Vector2(13, -13 + (1 if (awaken_t / 8) % 2 == 0 else 0))
+		draw_rect(Rect2(p, Vector2(2, 5)), C_EDGE)
+		draw_rect(Rect2(p + Vector2(0, 6), Vector2(2, 2)), C_EDGE)
+	if awaken_flash > 0:
+		var a := float(awaken_flash) / 30.0
+		draw_rect(Rect2(0, 0, pw, ph), Color(C_FLIP, 0.35 * a * a))
 
 
 ## Comporta: bloco escuro com barras. Ao abrir, as barras encolhem para o centro e somem.

@@ -24,6 +24,7 @@
 		"########################################"
 	],
 	"start_rot": 0,
+	"theme": "aquifero",
 	"verified": true,
 	"verified_hash": "42b3433baba1f009430b7c3332f9253b0b96094fe330755100ac31ce5c49f53b",
 	"version": 1

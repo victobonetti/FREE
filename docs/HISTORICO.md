@@ -502,3 +502,6 @@ Plano fechado (GDD 8e, D79) e implementado (D80): `scripts/boss_mecha.gd` e a sa
 
 ## Rodada 38: a mecha maior, numa peça só, com movimento
 Sala 30×30 sem limitador e com setas para o que está fora da tela; mecha de 40×52 com caixa única (corpo e cúpula), arte nova pela referência, motores laterais, vista de 3/4 e poses por estado; cena da fusão; pedaços de chapa e careta do Gatsby no acerto (D81). Testes passando.
+
+## Rodada 39: o subsolo, a batida de pata e o amortecedor
+As 17 fases do ato 1 ganharam tema (raízes, caverna, lençol d'água, despensa), com grama no "chão original" que denuncia o giro. O giro virou a batida de pata do coelho (som, poeira, onda azul), com o despertar na fase 3. As salas com barra vermelha mostram o amortecedor (cristal ou estabilizador). Tema e despertar saíram do hash; replays do ato 2 refeitos e conferidos. A história completa (cobaias, fuga) está registrada em `docs/HISTORIA.md` (D82).

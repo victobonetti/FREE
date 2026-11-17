@@ -1,6 +1,6 @@
 {
-	"hint": "Q e E giram a sala (no controle, LB e RB)",
-	"hint_touch": "Os botões de seta giram a sala",
+	"hint": "Bata a pata: Q e E giram a sala (no controle, LB e RB)",
+	"hint_touch": "Bata a pata: os botões de seta giram a sala",
 	"name": "Giro",
 	"notes": "o primeiro giro: a parede vira chão. O primeiro giro. A caixa vai fácil para o buraco, mas a porta está deitada na parede da direita, alta demais. Girando no sentido horário, essa parede vira chão.",
 	"rotate": true,
@@ -22,6 +22,8 @@
 		"##################"
 	],
 	"start_rot": 0,
+	"theme": "caverna",
+	"awaken": true,
 	"verified": true,
 	"verified_hash": "51df1f4a5966112d3e6157b3cf015f1ce4160995470ad46d18a515bb4ba084ae",
 	"version": 1

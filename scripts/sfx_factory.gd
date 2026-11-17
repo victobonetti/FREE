@@ -17,7 +17,7 @@ const ONE_SHOTS := {
 	"plate_on": [-15.0, 0.04], "plate_off": [-19.0, 0.04],
 	"spring": [-13.0, 0.05], "steam_warn": [-20.0, 0.05], "steam_burst": [-14.0, 0.06],
 	"lock_on": [-20.0, 0.0], "missile": [-17.0, 0.12], "homer": [-18.0, 0.08], "slam": [-8.0, 0.05],
-	"blast": [-15.0, 0.15],
+	"blast": [-15.0, 0.15], "thump": [-11.0, 0.08],
 }
 
 
@@ -77,6 +77,8 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _slam()
 		"blast":
 			return _blast()
+		"thump":
+			return _thump()
 	return null
 
 
@@ -508,6 +510,20 @@ static func _blast() -> AudioStreamWAV:
 		lp += (n - lp) * 0.2
 		var v := n * exp(-t * 60.0) * 0.8 + lp * 2.0 * exp(-t * 11.0) + sin(TAU * 70.0 * t) * exp(-t * 14.0) * 0.6
 		b[i] = tanh(v * 1.5) * 0.8
+	return _wav(b)
+
+
+## A batida de pata do coelho (o giro): um baque grave e curto, com um estalo de terra.
+static func _thump() -> AudioStreamWAV:
+	var b := _buf(0.22)
+	var rng := _rng(141)
+	var lp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var n := rng.randf_range(-1.0, 1.0)
+		lp += (n - lp) * 0.15
+		var v := sin(TAU * (95.0 - t * 160.0) * t) * exp(-t * 22.0) * 1.1 + lp * 1.6 * exp(-t * 45.0)
+		b[i] = tanh(v * 1.6) * 0.8
 	return _wav(b)
 
 

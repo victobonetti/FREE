@@ -3,6 +3,10 @@ extends Control
 ## propriedades e problemas à direita. Toda a lógica de edição está em EditModel/EditTools;
 ## aqui só há interface, arquivos e atalhos.
 
+## Temas do cenário (só aparência): o subsolo do ato 1, em quatro trechos, e a fábrica do ato 2.
+const THEMES := [["", "Padrão"], ["raizes", "Raízes"], ["caverna", "Caverna"], ["aquifero", "Lençol d'água"],
+	["despensa", "Despensa"], ["industrial", "Industrial"]]
+
 const LevelData := preload("res://scripts/level_data.gd")
 const LevelStore := preload("res://scripts/level_store.gd")
 const Levels := preload("res://scripts/levels.gd")
@@ -255,11 +259,11 @@ func _build_right(right: VBoxContainer) -> void:
 	tr.add_child(tl)
 	_theme_opt = OptionButton.new()
 	_theme_opt.focus_mode = Control.FOCUS_NONE
-	_theme_opt.add_item("Padrão")
-	_theme_opt.add_item("Industrial")
+	for th in THEMES:
+		_theme_opt.add_item(th[1])
 	_theme_opt.item_selected.connect(func(i):
 		if not _syncing:
-			model.set_extra_value("theme", "industrial" if i == 1 else null)
+			model.set_extra_value("theme", THEMES[i][0] if THEMES[i][0] != "" else null)
 			objects_changed())
 	tr.add_child(_theme_opt)
 	var br := HBoxContainer.new()
@@ -465,7 +469,7 @@ func _sync_props() -> void:
 	_open_check.button_pressed = d.door_open
 	_rot_spin.value = d.start_rot
 	_hint_touch_edit.text = str(d.extra.get("hint_touch", ""))
-	_theme_opt.select(1 if str(d.extra.get("theme", "")) == "industrial" else 0)
+	_theme_opt.select(_theme_index(str(d.extra.get("theme", ""))))
 	var boss_i := 0
 	for k in BOSSES.size():
 		if BOSSES[k].has("actors") and d.extra.get("actors", []) == BOSSES[k]["actors"]:
@@ -543,7 +547,7 @@ func _process(delta: float) -> void:
 		if objects_panel != null:
 			objects_panel.refresh_if_changed()
 		_syncing = true
-		_theme_opt.select(1 if str(model.data.extra.get("theme", "")) == "industrial" else 0)
+		_theme_opt.select(_theme_index(str(model.data.extra.get("theme", ""))))
 		_syncing = false
 		canvas.refresh()
 		_undo_btn.disabled = not model.can_undo()
@@ -987,3 +991,10 @@ func _input(event: InputEvent) -> void:
 			canvas.queue_redraw()
 		KEY_HOME:
 			canvas.fit()
+
+
+func _theme_index(th: String) -> int:
+	for i in THEMES.size():
+		if THEMES[i][0] == th:
+			return i
+	return 0

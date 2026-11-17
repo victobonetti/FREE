@@ -228,6 +228,12 @@ Todos são campos da fase (JSON) lidos por `room.gd`, giram com a sala e são de
 - **Sons** (`scripts/sfx_factory.gd`): todos gerados em código. `ONE_SHOTS` lista nome, volume e variação de tom; `main.gd` cria um tocador para cada um e toca quando a sala emite `sfx` com o nome. `rumble()` é o loop do ronco. Nomes: `lever`, `mover_warn`, `mover_go`, `mover_dock`, `launch`, `crumble_warn`, `crumble`, `crunch`, `crusher_wake`, `alarm`, `gatsby_dash`, `gatsby_laugh`.
 - **Fase e prova:** `tools/gatsby_level.py` escreve `levels/wip/gatsby.json`; `tools/gatsby_robot.gd` joga a fase com um plano de comandos (correr até x, pular, esperar, girar) e grava `tests/fixtures/gatsby-route.json`, que `test_gatsby_route` roda. Mudou a fase: rode os dois, nessa ordem. `levels/wip/` entra no pacote exportado; `--play=<id>` e `?play=<id>` jogam um rascunho do jogador ou, se não houver, a fase de `levels/wip`.
 
+## Subsolo, amortecedor e despertar (`room.gd`, D82)
+- `theme` em `SUBSOIL` troca a parede (`_draw_soil_tile`), o fundo (`_draw_subsoil_back`) e os enfeites das faces (`_draw_soil_decor`). `_orig_up()` dá o "cima" da fase como foi desenhada, na sala de agora: a grama nasce ali.
+- `anchors` (`_find_anchors`, só com `limiter`): giram em `_rotate_logic` como os espinhos (`facing`); `_draw_anchors` usa `limit_t` (pulso) e `anchor_fx` (onda ao desfazer).
+- `awaken` (campo da sala) + `static var awakened`: `awaken_t` conta o susto; `_flip_fx` faz a batida (som `thump`) e, na primeira vez, o clarão.
+- `level_data.gd`: `theme` e `awaken` estão em `TEXT_KEYS` (fora do hash). `tools/rehash_campaign.gd` refaz o hash dos replays quando o cálculo muda sem mudar a jogabilidade.
+
 ## A mecha (`boss_mecha.gd`, D80)
 - Ator da sala (`actors`), como o Jeffrey: `step`, `on_reset`, `on_rotate`, `absorb_kill` (3 corações do coelho), `replay_state` (a abertura vista).
 - `pos` é o centro da caixa (24×30), sempre em pé na tela. Em `on_rotate`, as posições giram com a sala, mas as velocidades da investida e dos teleguiados não (são de tela): é o que faz o giro desviar.

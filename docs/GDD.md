@@ -181,6 +181,25 @@ Esboço em `start-screen.jpeg`; detalhes em D46.
 - **Sala de início:** esse quadrado é jogável. O jogador anda até a porta e começa o nível 1.
 - Enter de novo pula a cutscene. A tela de início toca `music/free-title.mp3` em loop; a música para na hora em que o jogador aperta Enter, e a cutscene tem só efeitos.
 
+## 5c. O subsolo, a batida de pata e o amortecedor (D82)
+
+O enredo completo (com spoiler) está em `docs/HISTORIA.md`. No jogo:
+
+- **Ato 1 = o subsolo embaixo do campo** (campo `theme` da sala; só aparência, fora do hash):
+  - `raizes` (fases 1–2): terra marrom, raízes penduradas, feixe de luz fraco do buraco, torrões caindo;
+  - `caverna` (3–10): pedra azulada, estalactites ao longe, cogumelos e cristais que brilham;
+  - `aquifero` (11–15): pedra molhada, musgo, pingos que se formam e caem;
+  - `despensa` (16–17): terra escura, raízes e nozes.
+  Grama e musgo crescem no que era o chão quando a fase foi desenhada: depois de um giro, ficam na
+  parede ou no teto, e isso mostra que o mundo virou. As peças de jogo (caixa, porta, espinho, água)
+  não mudam de forma nem de cor. O editor escolhe o tema na lista "Tema".
+- **O giro é a batida de pata do coelho.** Cada giro do jogador tem um baque (som `thump`), poeira e
+  uma onda azul nos pés, antes da cambalhota. Na fase 3 (campo `awaken`), o coelho se assusta ("!") e
+  a primeira batida dá um clarão azul; só uma vez por sessão. A dica da fase diz "Bata a pata".
+- **A barra vermelha é o amortecedor**: nas salas com limitador, um cristal vermelho no teto (subsolo)
+  ou um estabilizador com antena (fábrica), um a cada ~26 colunas do teto da fase como foi desenhada.
+  Pulsa forte enquanto o limitador conta e solta uma onda vermelha quando desfaz o giro. Gira com a sala.
+
 ## 6. As 5 salas
 
 Cada sala introduz uma ideia. A dificuldade cresce porque as ideias se combinam.

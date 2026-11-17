@@ -622,3 +622,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Motores laterais:** a cápsula ganhou `fused` (sem balanço e sem o propulsor próprio) e `tilt` (inclina junto com o corpo). Quem empurra a mecha são os motores embaixo dos braços; o fogo aponta para trás do movimento.
 - **Movimento:** a pose é só desenho (`_pose()`), calculada do estado a cada quadro; nada disso muda a colisão, então os testes da luta não dependem da arte.
 - **Paleta:** as chapas da mecha são um pouco mais claras que as da cápsula, para ler no fundo escuro.
+
+### D82 — O subsolo do ato 1, a batida de pata e o amortecedor
+- **Ato 1 com alma:** o subsolo embaixo do campo da abertura, em quatro trechos (raízes, caverna, lençol d'água, despensa). Escolhido entre "subsolo" e "limbo abstrato" porque liga a abertura, o Jeffrey e a fábrica do Gatsby.
+- **Tema e despertar fora do hash** (`TEXT_KEYS` de `level_data.gd`): são só aparência. Os replays do ato 2 tinham o tema no hash; o hash deles foi refeito por `tools/rehash_campaign.gd`, que só aceita se o replay continuar vencendo (venceram nos mesmos quadros).
+- **O poder é do coelho** (pedido do Victor): a batida de pata, comportamento real de coelho assustado. Ele desperta na fase 3, encurralado. Na história completa (`docs/HISTORIA.md`), o poder foi implantado no laboratório (caminho 1).
+- **A barra vermelha ganhou corpo:** o amortecedor (cristal no subsolo, estabilizador na fábrica). É só desenho; a regra do limitador não mudou.
+- **História como registro:** o plot das cobaias e a fuga final ficam em `docs/HISTORIA.md`, sem nada no jogo por enquanto.
