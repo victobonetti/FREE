@@ -86,6 +86,12 @@ func _ready() -> void:
 			lv = int(a.trim_prefix("--level="))
 		elif a == "--editor":
 			open_editor()
+		elif a.begins_with("--play="):
+			# joga direto um rascunho de "Minhas fases" (user://levels/<id>.json); Esc volta à lista
+			var lvl = LevelStore.load_level(a.trim_prefix("--play="))
+			if lvl != null:
+				custom = "list"
+				_spawn_room(lvl.to_def(), -1, "")
 	if OS.has_feature("web"):
 		var q = JavaScriptBridge.eval("new URLSearchParams(location.search).get('level') || ''")
 		if q is String and q.is_valid_int():

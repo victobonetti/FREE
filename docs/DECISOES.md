@@ -544,3 +544,25 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Determinismo:** o Jeffrey ganhou sorteio próprio com semente fixa, e o replay guarda o estado de partida dos atores (se a abertura do boss já foi vista).
 - **Corrigido junto:** o editor apagava campos que não conhecia (`spin_block`, `actors`, `hint_touch`): editar a sala do Jeffrey destruía o boss. Agora ficam em `extra`, e o editor edita a dica no celular, o boss e o bloco giratório.
 - **Atenção:** o replay é gravado no Windows e rodado pelos testes onde eles rodarem. Contas com seno e cosseno (corda, água) podem, em tese, diferir entre sistemas; se um replay passar num e falhar noutro, é isso.
+
+### D72 — Boss 2: Gatsby, o texugo (conceito) e fim do limite de tamanho das fases
+- **Autor:** Victor (personagem, esboço, fuga pura, alavancas dentro da nave, placas como cenário, sala gigante com a virada na fase 2, Gatsby gira a sala); Claude (giro com limitador como corrida pela parede, componentes).
+- **O quê:** a fase do Gatsby é uma perseguição, não uma luta: ele nunca é alcançado e foge no final. Detalhes no GDD, seção 8c.
+- **Descartado:** alavancas que o coelho usa; dano ao Gatsby em três trechos; bloco em trilho que cai com o giro; dividir a fuga em salas ligadas por porta.
+- **Tamanho das fases:** o limite de 64×48 saiu. `MAX_W` e `MAX_H` em `level_data.gd` são agora 512, um teto técnico (contra erro de digitação), não de design.
+
+### D73 — Placa de espinhos como componente da sala; fuga sem checkpoint
+- **Autor:** Victor (a placa do esboço, que destrói os blocos no caminho; sem checkpoint por enquanto); Claude (formato e regras).
+- **O quê:** a placa é um campo da sala (`crushers`), não parte do Gatsby: serve para qualquer fase de fuga. Ela varre uma faixa retangular, o que permite duas placas na mesma sala (a que sobe o poço e a que vem pelo corredor).
+- **Gira com a sala,** como todo o resto: é o que faz o giro com limitador virar corrida pela parede com a placa vindo de lado.
+- **Não é sólida:** só mata e destrói. Assim nada fica "em cima" dela e não há caso de esmagamento a resolver.
+- **Guia (`leash`):** opcional; sem ela, quem sobe rápido deixa a placa fora da tela e a pressão some.
+- **Cordas não são destruídas:** o coelho pode estar pendurado numa; fica para quando uma fase precisar.
+- **Checkpoint:** nenhum por enquanto; morrer recomeça a fase. Rever depois de jogar a fase inteira.
+
+### D74 — Gatsby como ator com roteiro; visual industrial; carinha pichada e fixa
+- **Autor:** Victor (visual industrial com chapas remendadas em tudo o que é do Gatsby; carinha pichada e fixa; o Gatsby é do ato 2 e o visual muda); Claude (roteiro, ganchos na sala, desenho).
+- **Roteiro como dado:** o comportamento dele está no campo `gatsby` da fase, não no código, para a fase poder ser redesenhada sem programar. Avança pelo avanço do coelho, para ser justo com quem joga devagar ou rápido.
+- **O giro dele fica** e é independente do limitador: o giro do coelho continua sendo desfeito aos 2,5 s; o do Gatsby, não.
+- **A carinha gira com a sala** (é tinta na placa), ao contrário da primeira versão, que ficava em pé e seguia o coelho.
+- **Ele atravessa paredes** ao voar em linha reta entre os pontos do roteiro; quem desenha a fase escolhe pontos que evitem isso.

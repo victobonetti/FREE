@@ -62,6 +62,11 @@ const BOX_WET := 0.25          # fração submersa a partir da qual a caixa afun
 const BOX_WATER_GRAVITY := 300.0
 const BOX_WATER_FALL := 45.0
 
+const CRUSH_SPIKE := 6          # altura dos dentes da placa de espinhos (px)
+const CRUSH_CATCHUP := 5.0      # com "leash": vezes a velocidade enquanto o coelho está longe demais
+const CRUSH_FACE_MIN := 44      # avanço (px) a partir do qual a carinha pichada cabe na placa
+const CRUSH_BEAM := 6           # viga da frente, onde os dentes estão presos (px)
+
 const Rabbit := preload("res://scripts/rabbit.gd")
 const Box := preload("res://scripts/box.gd")
 
@@ -90,6 +95,16 @@ const C_ROPE := Color("e39a4c")
 const C_WATER := Color("2f86e0")
 const C_WATER_TOP := Color("9fd4ff")
 const C_DRAIN := Color("8d8d99")
+# Engenhocas do Gatsby (ato 2): aço em chapas remendadas, rebites, ferrugem e tinta de pichação.
+const C_STEEL := [Color("2b2d35"), Color("31343d"), Color("26282f")]
+const C_STEEL_LIGHT := Color("454852")
+const C_SEAM := Color("0e0f13")
+const C_RIVET := Color("7b7f8a")
+const C_RUST := Color("5a4034")
+const C_PAINT := Color("e9e4d6")
+# Canais dos blocos motorizados: a tinta da peça e do encaixe dela (cor = quem a aciona).
+const C_CHANNEL := [Color("8fd16a"), Color("e07ac8"), Color("4fd8d0"), Color("f0a05a"),
+		Color("d4bf45"), Color("7aa0ff"), Color("f4c8e8"), Color("6fe0a0")]
 
 # --- Sprite do coelho (12x16, virado para a direita), montado por partes ---
 # w branco | g sombra | p rosa | r olho
@@ -176,6 +191,14 @@ var platforms: Array = []  # {"rect": Rect2i, "facing", "solid", "fx"}
 # pts/old são os pontos da corda (Verlet): a forma dela é simulada, cai e balança de verdade.
 var ropes: Array = []
 var drains: Array = []     # {"rect": Rect2i, "t", "spin"}
+# Placas de espinhos (campo "crushers"): avançam por uma faixa da sala, matam e destroem o que
+# alcançam. {"lane": Rect2i, "dir", "adv", "speed", "wait", "leash", "face", "fx"}
+var crushers: Array = []
+# Blocos motorizados (campo "movers"): peças de aço pintadas que correm entre dois encaixes quando
+# o canal delas muda de estado (um ator chama mover_toggle). Sólidas; carregam e empurram.
+# {"off": Rect2i, "on": Rect2i, "r": Rect2i (atual), "pf": Vector2, "ch", "speed", "spikes", "fx"}
+var movers: Array = []
+var mover_state := {}    # canal -> true (peças em "on")
 # Água: modelo de colunas. Cada coluna de 1 px tem "vãos" (trechos verticais livres entre
 # sólidos); cada vão guarda uma altura de água (fracionária) apoiada no fundo dele. Vãos
 # ligados trocam água até igualar o nível; por cima disso, a superfície tem ondas.
@@ -204,6 +227,10 @@ var water_still := 0       # quadros seguidos quase sem vazão
 var door_flooded := false   # bloqueada pela água (inclui o tempo de secar)
 var door_dry := 0           # quadros seguidos com menos de DOOR_FLOOD de água na porta
 var rabbit
+# Para atores (o Gatsby): giro pedido por um ator, entrada travada e câmera presa numa cena.
+var actor_rot := 0
+var input_lock := false
+var cam_focus = null     # Vector2 (px da sala) ou null
 
 var state := "play"  # play | dead | won | done
 var timer := 0
@@ -288,6 +315,9 @@ func reset() -> void:
 	door_dry = DOOR_DRY_FRAMES
 	ropes.clear()
 	drains.clear()
+	crushers.clear()
+	movers.clear()
+	mover_state.clear()
 	boxes.clear()
 	sockets.clear()
 	socket_group.clear()
@@ -310,6 +340,9 @@ func reset() -> void:
 	spinning = false
 	spin_frame = 0
 	door_unlocked = false
+	actor_rot = 0
+	input_lock = false
+	cam_focus = null
 	invuln = 0
 	view_angle = 0.0
 	pending_rot = 0
@@ -322,6 +355,8 @@ func reset() -> void:
 	rabbit = Rabbit.new()
 	var water_tiles: Array = []
 	_parse(rows, water_tiles)
+	_init_crushers()
+	_init_movers()
 	_water_build()
 	for t in water_tiles:
 		for dx in TILE:
@@ -417,6 +452,279 @@ func spin_hurt_rects() -> Array:
 		if sp.get("block", false):
 			out.append(_spike_hurt(sp["rect"], sp["facing"]))
 	return out
+
+
+# ---------------------------------------------------------------- blocos motorizados
+
+## "movers": lista de {"ch": canal, "off": [coluna, linha, largura, altura] (tiles; onde a peça fica
+## com o canal desligado), "on": [coluna, linha] (onde ela vai quando o canal liga), "speed": px/s,
+## "spikes": lado dos espinhos (0 cima, 1 direita, 2 baixo, 3 esquerda; opcional)}. Os dois lugares
+## têm de estar na mesma linha ou na mesma coluna. As peças do mesmo canal têm a mesma cor.
+func _init_movers() -> void:
+	for d in def.get("movers", []):
+		var o: Array = d["off"]
+		var n: Array = d["on"]
+		var off := Rect2i(int(o[0]) * TILE, int(o[1]) * TILE, int(o[2]) * TILE, int(o[3]) * TILE)
+		var on := Rect2i(int(n[0]) * TILE, int(n[1]) * TILE, off.size.x, off.size.y)
+		movers.append({
+			"off": off, "on": on, "r": off, "pf": Vector2(off.position),
+			"ch": int(d.get("ch", 0)), "speed": float(d.get("speed", 40.0)),
+			"spikes": int(d.get("spikes", -1)), "fx": 0,
+		})
+
+
+## Liga ou desliga um canal: as peças dele correm para o outro encaixe.
+func mover_toggle(ch: int) -> void:
+	mover_state[ch] = not mover_state.get(ch, false)
+	sfx.emit("platform")
+	for m in movers:
+		if m["ch"] == ch:
+			m["fx"] = 0
+
+
+func mover_wants_on(m: Dictionary) -> bool:
+	return mover_state.get(m["ch"], false)
+
+
+## A peça está encaixada (parada no lugar a que o canal a manda).
+func mover_docked(m: Dictionary) -> bool:
+	var tgt: Rect2i = m["on"] if mover_wants_on(m) else m["off"]
+	return m["r"].position == tgt.position
+
+
+func _update_movers() -> void:
+	for m in movers:
+		if m["fx"] >= 0:
+			m["fx"] += 1
+		var tgt: Rect2i = m["on"] if mover_wants_on(m) else m["off"]
+		var was: bool = m["r"].position == tgt.position
+		if not was:
+			var delta: Vector2 = Vector2(tgt.position) - m["pf"]
+			var dist: float = delta.length()
+			var mv: float = minf(dist, float(m["speed"]) * DT)
+			m["pf"] += delta / dist * mv
+			var d: Vector2i = Vector2i(m["pf"].round()) - m["r"].position
+			while d != Vector2i.ZERO:
+				var st: Vector2i = Vector2i(signi(d.x), 0) if d.x != 0 else Vector2i(0, signi(d.y))
+				if not _mover_step(m, st):
+					m["pf"] = Vector2(m["r"].position)
+					break
+				d -= st
+				if state != "play":
+					return
+			if m["r"].position == tgt.position:
+				# encaixou: um estalo curto, com o brilho do encaixe
+				m["pf"] = Vector2(tgt.position)
+				m["fx"] = 0
+				shake = maxf(shake, 0.5)
+				sfx.emit("sensor_on")
+
+
+## Anda a peça 1 px. Quem está em cima vai junto; quem estava no caminho é empurrado, e é
+## esmagado se não tem para onde ir. Devolve false se a peça não pôde andar (caixa travando).
+func _mover_step(m: Dictionary, st: Vector2i) -> bool:
+	var old: Rect2i = m["r"]
+	var nr := Rect2i(old.position + st, old.size)
+	var riders: Array = []
+	var pushed: Array = []
+	var bodies: Array = [rabbit]
+	bodies.append_array(boxes)
+	for b in bodies:
+		var br: Rect2i = b.rect
+		if overlaps(Rect2i(br.position.x, br.end.y, br.size.x, 1), old):
+			riders.append(b)
+		elif overlaps(br, nr):
+			pushed.append(b)
+	for b in pushed:
+		if b != rabbit and not _body_can_move(b, st, nr):
+			return false
+	m["r"] = nr
+	for b in riders + pushed:
+		if _body_can_move(b, st, Rect2i()):
+			b.pos += st
+		elif b == rabbit:
+			kill()   # esmagado entre a peça e a parede
+			return true
+	return true
+
+
+func _body_can_move(b, st: Vector2i, ignore_rect: Rect2i) -> bool:
+	var nxt := Rect2i(b.pos + st, b.rect.size)
+	if tile_solid_rect(nxt):
+		return false
+	for g in gates:
+		if g["closed"]:
+			for gr in g["rects"]:
+				if overlaps(nxt, gr):
+					return false
+	for p in platforms:
+		if p["solid"] and overlaps(nxt, p["rect"]):
+			return false
+	for o in movers:
+		if overlaps(nxt, o["r"]) and o["r"] != ignore_rect and not overlaps(b.rect, o["r"]):
+			return false
+	return box_at(nxt, b) == null
+
+
+## As células de espinho de uma peça: uma por tile ao longo da face, do lado de fora dela.
+func _mover_teeth(m: Dictionary) -> Array:
+	var r: Rect2i = m["r"]
+	var out: Array = []
+	var f: int = m["spikes"]
+	var n: int = (r.size.x if f % 2 == 0 else r.size.y) / TILE
+	for i in n:
+		match f:
+			0:
+				out.append(Rect2i(r.position.x + i * TILE, r.position.y - TILE, TILE, TILE))
+			1:
+				out.append(Rect2i(r.end.x, r.position.y + i * TILE, TILE, TILE))
+			2:
+				out.append(Rect2i(r.position.x + i * TILE, r.end.y, TILE, TILE))
+			_:
+				out.append(Rect2i(r.position.x - TILE, r.position.y + i * TILE, TILE, TILE))
+	return out
+
+
+# ---------------------------------------------------------------- placa de espinhos
+
+## "crushers": lista de {"rect": [coluna, linha, largura, altura] (a faixa que ela varre, em
+## tiles), "dir" (para onde avança: 0 cima, 1 direita, 2 baixo, 3 esquerda), "speed" (px/s),
+## "delay" (s até começar; negativo: espera um ator chamar crusher_start), "start" (px já
+## avançados ao carregar), "leash" (px; se o coelho abre mais que isso, ela acelera; 0 = não),
+## "face" ("happy" ou "sad")}.
+func _init_crushers() -> void:
+	for d in def.get("crushers", []):
+		var r: Array = d["rect"]
+		var c := {
+			"lane": Rect2i(int(r[0]) * TILE, int(r[1]) * TILE, int(r[2]) * TILE, int(r[3]) * TILE),
+			"dir": posmod(int(d.get("dir", 0)), 4),
+			"adv": 0.0,
+			"speed": float(d.get("speed", 9.0)),
+			"wait": roundi(float(d.get("delay", 0.0)) * 60.0),
+			"leash": float(d.get("leash", 0.0)),
+			"face": String(d.get("face", "happy")),
+			"turn": 0,   # giros desde o desenho da fase: a carinha é pintada na placa e gira com ela
+		}
+		c["adv"] = clampf(float(d.get("start", 0.0)), 0.0, float(_crusher_len(c)))
+		crushers.append(c)
+		_crusher_eat(c, true)
+
+
+## Um ator gira a sala (o Gatsby). Acontece no quadro seguinte, fora da animação de outro giro.
+func actor_rotate(dir: int) -> void:
+	actor_rot = signi(dir)
+
+
+## Um ator liga a placa `i` (as que têm "delay" negativo esperam por isto).
+func crusher_start(i: int) -> void:
+	if i >= 0 and i < crushers.size():
+		crushers[i]["wait"] = 0
+
+
+func _crusher_len(c: Dictionary) -> int:
+	var lane: Rect2i = c["lane"]
+	return lane.size.y if c["dir"] % 2 == 0 else lane.size.x
+
+
+## O trecho da faixa entre dois avanços (px a partir do lado de onde a placa vem).
+func _crusher_rect(c: Dictionary, a0: int, a1: int) -> Rect2i:
+	var l: Rect2i = c["lane"]
+	match c["dir"]:
+		0:
+			return Rect2i(l.position.x, l.end.y - a1, l.size.x, a1 - a0)
+		1:
+			return Rect2i(l.position.x + a0, l.position.y, a1 - a0, l.size.y)
+		2:
+			return Rect2i(l.position.x, l.position.y + a0, l.size.x, a1 - a0)
+	return Rect2i(l.end.x - a1, l.position.y, a1 - a0, l.size.y)
+
+
+## Distância (px) da frente da placa até o coelho, no sentido em que ela avança.
+func crusher_gap(c: Dictionary) -> float:
+	var l: Rect2i = c["lane"]
+	var a: float = c["adv"]
+	match c["dir"]:
+		0:
+			return (l.end.y - a) - (rabbit.pos.y + Rabbit.SIZE)
+		1:
+			return rabbit.pos.x - (l.position.x + a)
+		2:
+			return rabbit.pos.y - (l.position.y + a)
+	return (l.end.x - a) - (rabbit.pos.x + Rabbit.SIZE)
+
+
+func _update_crushers() -> void:
+	for c in crushers:
+		if c["wait"] != 0:
+			if c["wait"] > 0:
+				c["wait"] -= 1
+			continue
+		var total := float(_crusher_len(c))
+		if c["adv"] >= total:
+			continue
+		var v: float = c["speed"]
+		if c["leash"] > 0.0 and crusher_gap(c) > c["leash"]:
+			v *= CRUSH_CATCHUP
+		c["adv"] = minf(c["adv"] + v * DT, total)
+		_crusher_eat(c, false)
+
+
+## Destrói o que os dentes alcançaram: paredes, espinhos, plataformas, comportas, ralos,
+## compartimentos e caixas. `all`: confere a placa inteira (ao carregar); senão, só a frente.
+## Cordas ficam (o coelho pode estar pendurado numa).
+func _crusher_eat(c: Dictionary, all: bool) -> void:
+	var a1 := int(c["adv"]) + CRUSH_SPIKE
+	if c["adv"] <= 0.0:
+		return
+	var hurt := _crusher_rect(c, 0, a1)
+	var strip := hurt if all else _crusher_rect(c, maxi(a1 - 2 * TILE, 0), a1)
+	var changed := false
+	var x0 := maxi(strip.position.x, 0) >> 3
+	var y0 := maxi(strip.position.y, 0) >> 3
+	var x1 := mini(strip.end.x - 1, pw - 1) >> 3
+	var y1 := mini(strip.end.y - 1, ph - 1) >> 3
+	for ty in range(y0, y1 + 1):
+		for tx in range(x0, x1 + 1):
+			if tiles[ty * gw + tx] != 0:
+				tiles[ty * gw + tx] = 0
+				changed = true
+				if not all:
+					_crush_debris(Vector2(tx * TILE + 4, ty * TILE + 4), c["dir"])
+	var n := spikes.size() + platforms.size() + drains.size() + boxes.size() + movers.size()
+	spikes = spikes.filter(func(s): return not overlaps(hurt, s["rect"]))
+	platforms = platforms.filter(func(p): return not overlaps(hurt, p["rect"]))
+	drains = drains.filter(func(d): return not overlaps(hurt, d["rect"]))
+	movers = movers.filter(func(m): return not overlaps(hurt, m["r"]))
+	boxes = boxes.filter(func(b): return not overlaps(hurt, b.rect))
+	if n != spikes.size() + platforms.size() + drains.size() + boxes.size() + movers.size():
+		changed = true
+	for g in gates:
+		var rs: Array = g["rects"]
+		var keep := rs.filter(func(r): return not overlaps(hurt, r))
+		if keep.size() != rs.size():
+			g["rects"] = keep
+			changed = true
+	for i in range(sockets.size() - 1, -1, -1):
+		if overlaps(hurt, sockets[i]):
+			sockets.remove_at(i)
+			socket_group.remove_at(i)
+			socket_filled.remove_at(i)
+			socket_fx.remove_at(i)
+	if changed:
+		if not all:
+			shake = maxf(shake, 0.8)
+		if water_vol > 0.0:
+			water_dirty = true
+
+
+func _crush_debris(p: Vector2, dir: int) -> void:
+	var fwd: Vector2 = [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][dir]
+	for i in 2:
+		particles.append({
+			"pos": p + Vector2(randf_range(-3.0, 3.0), randf_range(-3.0, 3.0)),
+			"vel": fwd * randf_range(20.0, 60.0) + Vector2(randf_range(-40.0, 40.0), randf_range(-40.0, 10.0)),
+			"life": randi_range(12, 22), "col": C_EDGE if i == 0 else C_DUST, "grav": 300.0,
+		})
 
 
 # ---------------------------------------------------------------- parsing
@@ -605,6 +913,20 @@ func _rotate_logic(dir: int) -> void:
 		rp["old"] = old
 	for d in drains:
 		d["rect"] = _rot_rect(d["rect"], dir)
+	for m in movers:
+		m["off"] = _rot_rect(m["off"], dir)
+		m["on"] = _rot_rect(m["on"], dir)
+		m["r"] = _rot_rect(m["r"], dir)
+		m["pf"] = Vector2(m["r"].position)
+		if m["spikes"] >= 0:
+			m["spikes"] = posmod(m["spikes"] + dir, 4)
+	for c in crushers:
+		c["lane"] = _rot_rect(c["lane"], dir)
+		c["dir"] = posmod(c["dir"] + dir, 4)
+		c["turn"] = posmod(c["turn"] + dir, 4)
+	for a in actors:
+		if a.has_method("on_rotate"):
+			a.on_rotate(self, dir)
 	var slivers := _water_slivers(dir)
 	rabbit.pos = _rot_rect(rabbit.rect, dir).position
 	rabbit.on_rotate()
@@ -678,6 +1000,8 @@ func _cam_target() -> Vector2:
 
 
 func _cam_follow() -> Vector2:
+	if cam_focus != null:
+		return _cam_clamp(cam_focus)
 	return _cam_clamp(Vector2(rabbit.pos) + Vector2(6, 2))
 
 
@@ -751,6 +1075,9 @@ func solid_static(r: Rect2i) -> bool:
 	for p in platforms:
 		if p["solid"] and overlaps(r, p["rect"]):
 			return true
+	for m in movers:
+		if overlaps(r, m["r"]):
+			return true
 	return false
 
 
@@ -803,6 +1130,8 @@ func step(inp: Dictionary) -> void:
 	if state != "play":
 		return
 
+	if input_lock:
+		inp = {}
 	rot_lock = maxi(rot_lock - 1, 0)
 	if limit_t > 0:
 		limit_t -= 1
@@ -823,6 +1152,17 @@ func step(inp: Dictionary) -> void:
 		else:
 			view_angle = rot_from * (1.0 - _ease(t))
 			return
+	if actor_rot != 0:
+		# giro feito por um ator: não mexe na recarga nem no limitador do coelho, e fica
+		var ad := actor_rot
+		actor_rot = 0
+		_rotate_logic(ad)
+		rotating = true
+		rot_frame = 0
+		rot_from = -ad * PI / 2.0
+		view_angle = rot_from
+		sfx.emit("limiter")
+		return
 	if pending_rot != 0 and rot_lock == 0:
 		var dir := pending_rot
 		pending_rot = 0
@@ -835,6 +1175,9 @@ func step(inp: Dictionary) -> void:
 	_update_spin()
 
 	_update_mechanisms(false)
+	_update_movers()
+	if state != "play":
+		return
 	rabbit.update(self, inp)
 	if state != "play":
 		return
@@ -866,6 +1209,7 @@ func step(inp: Dictionary) -> void:
 		a.step(self)
 	if state != "play":
 		return
+	_update_crushers()
 	_update_water()
 	_update_sockets()
 	_update_camera()
@@ -1580,6 +1924,17 @@ func _check_hazards() -> void:
 		if overlaps(rr, _spike_hurt(s["rect"], s["facing"])):
 			kill()
 			return
+	for m in movers:
+		if m["spikes"] >= 0:
+			for cell in _mover_teeth(m):
+				if overlaps(rr, _spike_hurt(cell, m["spikes"])):
+					kill()
+					return
+	for c in crushers:
+		# 2 px de folga na ponta dos dentes
+		if c["adv"] > 0.0 and overlaps(rr, _crusher_rect(c, 0, int(c["adv"]) + CRUSH_SPIKE - 2)):
+			kill()
+			return
 
 
 func _check_win() -> void:
@@ -1772,6 +2127,7 @@ func _draw() -> void:
 	_draw_walls()
 	_draw_gates()
 	_draw_platforms()
+	_draw_movers()
 	_draw_drains()
 	_draw_ropes()
 
@@ -1806,6 +2162,7 @@ func _draw() -> void:
 	if rabbit != null and (state == "play" or state == "won"):
 		_draw_rabbit(base)
 
+	_draw_crushers(base)
 	_draw_water()
 
 	# partículas
@@ -1826,6 +2183,212 @@ func _draw() -> void:
 	if state == "dead":
 		var f := float(timer) / float(DEATH_FRAMES)
 		draw_rect(room_rect, Color(1, 1, 1, 0.35 * f * f))
+
+
+## Blocos motorizados e os encaixes deles: trilho, moldura em cada ponta (acende quando a peça
+## está encaixada), a peça de aço com a borda na cor do canal e rebites; espinhos se tiver.
+func _draw_movers() -> void:
+	var reach := VIEW.length() / 2.0 + 40.0
+	for m in movers:
+		var r: Rect2i = m["r"]
+		if (Vector2(r.position) - cam).length() > reach and (Vector2(m["off"].position) - cam).length() > reach \
+				and (Vector2(m["on"].position) - cam).length() > reach:
+			continue
+		var col: Color = C_CHANNEL[m["ch"] % C_CHANNEL.size()]
+		var off: Rect2i = m["off"]
+		var on: Rect2i = m["on"]
+		# trilho: uma linha pontilhada entre os centros
+		var ca := Vector2(off.position) + Vector2(off.size) / 2.0
+		var cb := Vector2(on.position) + Vector2(on.size) / 2.0
+		var len := ca.distance_to(cb)
+		var dirv := (cb - ca) / maxf(len, 1.0)
+		var k := 0.0
+		while k < len:
+			draw_rect(Rect2((ca + dirv * k).round(), Vector2(1, 1)), Color(col, 0.35))
+			k += 4.0
+		# molduras dos encaixes
+		for dock in [off, on]:
+			var lit: bool = r.position == dock.position
+			var fx: float = 0.0
+			if lit and m["fx"] >= 0 and m["fx"] < 14:
+				fx = 1.0 - float(m["fx"]) / 14.0
+			_draw_dock(Rect2(dock), col, lit, fx)
+		_draw_mover_body(m, col)
+
+
+func _draw_dock(d: Rect2, col: Color, lit: bool, fx: float) -> void:
+	draw_rect(d, Color(col, 0.10 + 0.12 * fx))
+	var c := Color(col, 0.95 if lit else 0.5)
+	var L := minf(4.0, minf(d.size.x, d.size.y) / 2.0)
+	# cantoneiras nos quatro cantos
+	for q in [[Vector2(0, 0), 1, 1], [Vector2(d.size.x, 0), -1, 1], [Vector2(0, d.size.y), 1, -1], [Vector2(d.size.x, d.size.y), -1, -1]]:
+		var o: Vector2 = d.position + q[0]
+		draw_rect(Rect2(o + Vector2(0 if q[1] > 0 else -L, 0 if q[2] > 0 else -1), Vector2(L, 1)), c)
+		draw_rect(Rect2(o + Vector2(0 if q[1] > 0 else -1, 0 if q[2] > 0 else -L), Vector2(1, L)), c)
+	if fx > 0.0:
+		draw_rect(d.grow(1.0), Color(1, 1, 1, 0.5 * fx), false, 1.0)
+
+
+func _draw_mover_body(m: Dictionary, col: Color) -> void:
+	var r: Rect2 = Rect2(m["r"])
+	var seed: int = (m["ch"] + 1) * 7919 + int(m["off"].position.x) * 31 + int(m["off"].position.y)
+	draw_rect(r, C_SEAM)
+	draw_rect(r.grow(-1.0), C_STEEL[absi(seed) % 3])
+	# a tinta do canal: uma faixa de 2 px na face de cima e na de baixo
+	draw_rect(Rect2(r.position + Vector2(1, 1), Vector2(r.size.x - 2, 2)), col)
+	draw_rect(Rect2(r.position + Vector2(1, r.size.y - 3), Vector2(r.size.x - 2, 2)), Color(col, 0.55))
+	# emendas e rebites a cada tile
+	var tiles_x := int(r.size.x) / TILE
+	for i in tiles_x:
+		var x := r.position.x + i * TILE
+		if i > 0:
+			draw_rect(Rect2(x, r.position.y + 3, 1, maxf(r.size.y - 6, 1.0)), C_SEAM)
+		draw_rect(Rect2(x + 3, r.position.y + r.size.y / 2.0 - 0.5, 2, 1), C_RIVET)
+	# remendo enferrujado em algumas peças
+	if absi(seed) % 3 == 0 and r.size.x >= 16:
+		draw_rect(Rect2(r.position + Vector2(r.size.x - 11, 3), Vector2(8, maxf(r.size.y - 6, 1.0))), C_RUST)
+	# encaixe macho: duas pontas na cor do canal, na direção do movimento
+	var tgt: Vector2 = Vector2(m["on"].position - m["off"].position)
+	if tgt.x != 0.0:
+		var sx := signf(tgt.x if mover_wants_on(m) else -tgt.x)
+		var ex: float = r.end.x if sx > 0 else r.position.x - 2
+		draw_rect(Rect2(ex, r.position.y + r.size.y / 2.0 - 2, 2, 4), col)
+	elif tgt.y != 0.0:
+		var sy := signf(tgt.y if mover_wants_on(m) else -tgt.y)
+		var ey: float = r.end.y if sy > 0 else r.position.y - 2
+		draw_rect(Rect2(r.position.x + r.size.x / 2.0 - 2, ey, 4, 2), col)
+	if m["spikes"] >= 0:
+		for cell in _mover_teeth(m):
+			draw_colored_polygon(_spike_points(cell, m["spikes"]), C_SPIKE)
+
+
+## Um retângulo em coordenadas da placa: `u` ao longo da frente, `v` para trás a partir dela.
+func _crusher_local(c: Dictionary, u: int, v: int, w: int, h: int) -> Rect2i:
+	var l: Rect2i = c["lane"]
+	var a := int(c["adv"])
+	match c["dir"]:
+		0:
+			return Rect2i(l.position.x + u, l.end.y - a + v, w, h)
+		1:
+			return Rect2i(l.position.x + a - v - h, l.position.y + u, h, w)
+		2:
+			return Rect2i(l.position.x + u, l.position.y + a - v - h, w, h)
+	return Rect2i(l.end.x - a + v, l.position.y + u, h, w)
+
+
+## Placa de espinhos: chapas de aço remendadas e rebitadas, uma viga na frente com os dentes
+## e a carinha pichada no meio (pintada na placa: não se mexe e gira com a sala).
+func _draw_crushers(base: Transform2D) -> void:
+	var reach := int(VIEW.length() / 2.0) + 8
+	for c in crushers:
+		var a := int(c["adv"])
+		if a <= 0:
+			continue
+		var d: int = c["dir"]
+		var l: Rect2i = c["lane"]
+		var width: int = l.size.x if d % 2 == 0 else l.size.y
+		draw_rect(Rect2(_crusher_rect(c, 0, a)), C_SEAM)
+		# a câmera em coordenadas da placa, para só desenhar as chapas que estão na tela
+		var uc: int
+		var vc: int
+		match d:
+			0:
+				uc = int(cam.x) - l.position.x
+				vc = int(cam.y) - (l.end.y - a)
+			1:
+				uc = int(cam.y) - l.position.y
+				vc = (l.position.x + a) - int(cam.x)
+			2:
+				uc = int(cam.x) - l.position.x
+				vc = (l.position.y + a) - int(cam.y)
+			_:
+				uc = int(cam.y) - l.position.y
+				vc = int(cam.x) - (l.end.x - a)
+		var u0 := maxi(uc - reach, 0)
+		var u1 := mini(uc + reach, width)
+		var v0 := maxi(vc - reach, CRUSH_BEAM)
+		var v1 := mini(vc + reach, a)
+		if u1 > u0 and v1 > v0:
+			for j in range((v0 - CRUSH_BEAM) / 16, (v1 - CRUSH_BEAM) / 16 + 1):
+				var off := 16 if j % 2 == 1 else 0
+				for i in range((u0 + off) / 32, (u1 + off) / 32 + 1):
+					_draw_crusher_panel(c, i * 32 - off, CRUSH_BEAM + j * 16, width, a, i * 7919 + j * 104729)
+		# viga da frente, com um parafuso por dente
+		if a >= CRUSH_BEAM:
+			draw_rect(Rect2(_crusher_local(c, 0, 0, width, CRUSH_BEAM - 1)), C_STEEL_LIGHT)
+			draw_rect(Rect2(_crusher_local(c, 0, 0, width, 1)), C_RIVET)
+		var fwd: Vector2 = [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][d]
+		var along := Vector2(1, 0) if d % 2 == 0 else Vector2(0, 1)
+		var p0 := Vector2(_crusher_rect(c, 0, a).position)
+		if d == 1:
+			p0.x += a
+		elif d == 2:
+			p0.y += a
+		for i in range(u0 / TILE, (u1 + TILE - 1) / TILE):
+			var o := p0 + along * (i * TILE)
+			draw_colored_polygon(PackedVector2Array([
+				o + along * 1.0, o + along * 4.0 + fwd * CRUSH_SPIKE, o + along * 7.0,
+			]), C_SPIKE)
+			if a >= CRUSH_BEAM:
+				draw_rect(Rect2(_crusher_local(c, i * TILE + 3, 2, 2, 2)), C_SEAM)
+		if a >= CRUSH_FACE_MIN and width >= 40:
+			var fc := _crusher_local(c, width / 2, 26, 0, 0).position
+			draw_set_transform_matrix(base * Transform2D(c["turn"] * PI / 2.0, Vector2(fc)))
+			_draw_graffiti_face(c["face"] == "sad")
+			draw_set_transform_matrix(base)
+
+
+## Uma chapa de 32x16 (recortada à placa), com rebites nos cantos e, às vezes, um remendo.
+func _draw_crusher_panel(c: Dictionary, u: int, v: int, width: int, a: int, key: int) -> void:
+	var h := absi(key * 2654435761) >> 4
+	var cu0 := maxi(u, 0)
+	var cu1 := mini(u + 31, width)
+	var cv1 := mini(v + 15, a)
+	if cu1 <= cu0 or cv1 <= v:
+		return
+	draw_rect(Rect2(_crusher_local(c, cu0, v, cu1 - cu0, cv1 - v)), C_STEEL[h % 3])
+	if cu1 - cu0 < 31 or cv1 - v < 15:
+		return
+	for q in [Vector2i(2, 2), Vector2i(28, 2), Vector2i(2, 12), Vector2i(28, 12)]:
+		draw_rect(Rect2(_crusher_local(c, u + q.x, v + q.y, 1, 1)), C_RIVET)
+	if h % 4 == 0:
+		# remendo: chapa menor, de outra cor, presa por quatro rebites
+		var px := u + 5 + (h >> 3) % 10
+		var pw2 := 9 + (h >> 7) % 5
+		draw_rect(Rect2(_crusher_local(c, px - 1, v + 3, pw2 + 2, 10)), C_SEAM)
+		draw_rect(Rect2(_crusher_local(c, px, v + 4, pw2, 8)), C_RUST if (h >> 11) % 2 == 0 else C_STEEL_LIGHT)
+		for q in [Vector2i(1, 5), Vector2i(pw2 - 2, 5), Vector2i(1, 10), Vector2i(pw2 - 2, 10)]:
+			draw_rect(Rect2(_crusher_local(c, px + q.x, v + q.y, 1, 1)), C_RIVET)
+	elif h % 7 == 0:
+		# risco de solda
+		draw_rect(Rect2(_crusher_local(c, u + 6 + (h >> 5) % 8, v + 7, 12, 1)), C_SEAM)
+
+
+## Carinha pichada com tinta clara: traço grosso e torto, tinta escorrendo, respingos.
+## Desenhada em volta de (0, 0); quem chama põe a transformação.
+func _draw_graffiti_face(sad: bool) -> void:
+	var col := Color(C_PAINT, 0.92)
+	var thin := Color(C_PAINT, 0.6)
+	for r in [Rect2(-12, -10, 5, 6), Rect2(-13, -8, 1, 3), Rect2(-11, -11, 3, 1),
+			Rect2(7, -10, 5, 6), Rect2(12, -9, 1, 3), Rect2(8, -11, 3, 1)]:
+		draw_rect(r, col)
+	# tinta escorrendo dos olhos
+	draw_rect(Rect2(-10, -4, 1, 5), thin)
+	draw_rect(Rect2(9, -4, 1, 8 if sad else 4), thin)
+	var pts: PackedVector2Array
+	if sad:
+		pts = PackedVector2Array([Vector2(-13, 13), Vector2(-10, 8), Vector2(-5, 5), Vector2(1, 4), Vector2(6, 5), Vector2(11, 8), Vector2(14, 13)])
+		draw_rect(Rect2(-14, 13, 1, 4), thin)
+		draw_rect(Rect2(13, 13, 1, 6), thin)
+	else:
+		pts = PackedVector2Array([Vector2(-14, 2), Vector2(-11, 7), Vector2(-5, 10), Vector2(1, 11), Vector2(6, 10), Vector2(11, 7), Vector2(14, 1)])
+		draw_rect(Rect2(-12, 7, 1, 6), thin)
+		draw_rect(Rect2(1, 12, 1, 4), thin)
+		draw_rect(Rect2(10, 8, 1, 3), thin)
+	draw_polyline(pts, col, 2.0)
+	# respingos
+	for q in [Vector2(-17, -3), Vector2(16, -12), Vector2(-4, -14), Vector2(17, 5), Vector2(-16, 9), Vector2(4, 16)]:
+		draw_rect(Rect2(q, Vector2(1, 1)), thin)
 
 
 ## O bloco no meio do giro: tapa o bloco parado e desenha um girando, com os espinhos.
@@ -1854,17 +2417,16 @@ func _socket_color(i: int, filled: bool) -> Color:
 
 
 func _draw_walls() -> void:
-	# fora da animação de giro, só desenha o que está na tela (salas grandes)
-	var c0 := 0
-	var c1 := gw - 1
-	var r0 := 0
-	var r1 := gh - 1
-	if not rotating:
-		var half := VIEW / 2.0 + Vector2(24, 24)
-		c0 = maxi(int((cam.x - half.x) / TILE), 0)
-		c1 = mini(int((cam.x + half.x) / TILE), gw - 1)
-		r0 = maxi(int((cam.y - half.y) / TILE), 0)
-		r1 = mini(int((cam.y + half.y) / TILE), gh - 1)
+	# só desenha o que está na tela (salas grandes). Durante a animação do giro a tela mostra
+	# um círculo em volta da câmera: o raio é a meia diagonal.
+	var half := VIEW / 2.0 + Vector2(24, 24)
+	if rotating:
+		var rad := VIEW.length() / 2.0 + 24.0
+		half = Vector2(rad, rad)
+	var c0 := maxi(int((cam.x - half.x) / TILE), 0)
+	var c1 := mini(int((cam.x + half.x) / TILE), gw - 1)
+	var r0 := maxi(int((cam.y - half.y) / TILE), 0)
+	var r1 := mini(int((cam.y + half.y) / TILE), gh - 1)
 	for r in range(r0, r1 + 1):
 		for c in range(c0, c1 + 1):
 			if tiles[r * gw + c] == 0:

@@ -31,6 +31,10 @@ func _init() -> void:
 	test_platforms()
 	test_rot_cooldown()
 	test_limiter()
+	test_crusher()
+	test_movers()
+	test_gatsby()
+	test_gatsby_route()
 	test_reload_params()
 	test_rope()
 	test_water()
@@ -659,6 +663,333 @@ func test_limiter() -> void:
 	tick({"rotate": 1})
 	idle(300)
 	check(room.orientation == 1, "sem o campo limiter, o giro fica")
+
+
+## Poço 12x20 para a placa de espinhos: chão grosso, o coelho num degrau alto, e uma caixa e
+## um espinho no chão (a placa os alcança antes do coelho).
+const CRUSH_ROOM := {
+	"name": "teste placa", "rotate": true, "start_rot": 0, "door_open": true,
+	"crushers": [{"rect": [1, 1, 10, 18], "dir": 0, "speed": 30.0, "delay": 0.5}],
+	"rows": [
+		"############",
+		"#DD........#",
+		"#DD........#",
+		"###........#",
+		"#.......PP.#",
+		"#.......PP.#",
+		"#.......####",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#....BB..^.#",
+		"#....BB..#.#",
+		"############",
+		"############",
+		"############",
+		"############",
+		"############",
+		"############",
+		"############",
+	],
+}
+
+
+func _crush_def(over: Dictionary) -> Dictionary:
+	var d: Dictionary = CRUSH_ROOM.duplicate(true)
+	for k in over:
+		d["crushers"][0][k] = over[k]
+	return d
+
+
+func test_crusher() -> void:
+	print("placa de espinhos")
+	load_def(CRUSH_ROOM)
+	var gw: int = room.gw
+	idle(25)
+	check(room.crushers[0]["adv"] == 0.0 and room.state == "play", "antes do atraso, a placa está parada")
+	check(room.tiles[18 * gw + 5] == 1, "as paredes de baixo estão inteiras")
+	idle(60)
+	check(room.crushers[0]["adv"] > 10.0, "depois do atraso ela avança (%.1f px)" % room.crushers[0]["adv"])
+	check(room.tiles[18 * gw + 5] == 0 and room.tiles[17 * gw + 5] == 0, "destrói as paredes que alcança")
+	check(room.tiles[13 * gw + 5] == 1, "o que ela ainda não alcançou fica")
+	check(room.tiles[18 * gw] == 1 and room.tiles[18 * gw + 11] == 1, "fora da faixa, a parede fica")
+	check(room.state == "play", "o coelho ainda está vivo acima dela")
+	var died := false
+	for i in 300:
+		tick()
+		if room.state == "dead":
+			died = true
+			break
+	check(died, "a placa mata o coelho ao alcançá-lo")
+	check(room.boxes.is_empty() and room.spikes.is_empty(), "a caixa e o espinho do caminho sumiram")
+	idle(30)
+	check(room.state == "play" and room.crushers[0]["adv"] == 0.0 and room.tiles[18 * gw + 5] == 1 		and room.boxes.size() == 1 and room.spikes.size() == 1, "morrer reinicia a placa e devolve o que ela destruiu")
+
+	# espera por um ator
+	load_def(_crush_def({"delay": -1, "speed": 240.0}))
+	idle(120)
+	check(room.crushers[0]["adv"] == 0.0, "com atraso negativo, espera ser ligada")
+	room.crusher_start(0)
+	idle(8)
+	check(room.crushers[0]["adv"] > 20.0 and room.state == "play", "crusher_start liga a placa")
+
+	# gira com a sala
+	load_def(_crush_def({"delay": -1}))
+	var lane0: Rect2i = room.crushers[0]["lane"]
+	room._rotate_logic(1)
+	check(room.crushers[0]["dir"] == 1, "giro horário: a placa que vinha de baixo passa a vir da esquerda")
+	check(room.crushers[0]["lane"].size == Vector2i(lane0.size.y, lane0.size.x), "a faixa gira junto")
+	for i in 3:
+		room._rotate_logic(1)
+	check(room.crushers[0]["dir"] == 0 and room.crushers[0]["lane"] == lane0, "quatro giros restauram a placa")
+	room._rotate_logic(-1)
+	room.crusher_start(0)
+	room.crushers[0]["speed"] = 240.0
+	var before: float = room.crusher_gap(room.crushers[0])
+	idle(4)
+	check(room.crushers[0]["dir"] == 3 and room.crusher_gap(room.crushers[0]) < before, "girada, ela avança da direita para a esquerda")
+
+	# começa já avançada; a guia acelera quando o coelho está longe
+	load_def(_crush_def({"delay": -1, "start": 16}))
+	check(room.crushers[0]["adv"] == 16.0 and room.tiles[18 * room.gw + 5] == 0, "\"start\": começa avançada e já sem as paredes de baixo")
+	check(room.tiles[13 * room.gw + 5] == 1, "o chão continua")
+	load_def(_crush_def({"delay": 0, "speed": 6.0, "leash": 20}))
+	idle(30)
+	var fast: float = room.crushers[0]["adv"]
+	load_def(_crush_def({"delay": 0, "speed": 6.0}))
+	idle(30)
+	check(fast > room.crushers[0]["adv"] * 3.0, "com guia, ela acelera enquanto o coelho está longe (%.1f contra %.1f px)" % [fast, room.crushers[0]["adv"]])
+
+
+## Corredor 30x12 para o Gatsby: uma cutscene que liga a placa, um giro feito por ele e a fuga.
+const GATSBY_ROOM := {
+	"name": "teste gatsby", "rotate": true, "start_rot": 0, "door_open": true,
+	"actors": ["res://scripts/boss_gatsby.gd"],
+	"crushers": [{"rect": [1, 1, 28, 10], "dir": 1, "speed": 6.0, "delay": -1}],
+	"movers": [{"ch": 0, "off": [20, 4, 3, 1], "on": [24, 4], "speed": 50.0}],
+	"gatsby": {"start": [10, 3], "script": [
+		{"cut": true, "mood": "smug", "fly": [12, 5], "lever": true, "crusher": 0, "toggle": 0, "wait": 0.2},
+		{"when": [14, 1, 2, 10], "mood": "furious", "rotate": 1},
+		{"when": [1, 1, 28, 10], "mood": "smirk", "flee": true},
+	]},
+	"rows": [
+		"##############################",
+		"#DD..........................#",
+		"#DD..........................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#....PP......................#",
+		"#....PP......................#",
+		"##############################",
+	],
+}
+
+
+func test_gatsby() -> void:
+	print("gatsby")
+	var Gatsby = load("res://scripts/boss_gatsby.gd")
+	Gatsby.intro_seen = false
+	load_def(GATSBY_ROOM)
+	var g = room.actors[0]
+	var x0: int = room.rabbit.pos.x
+	for i in 20:
+		tick({"move": 1.0})
+	check(room.input_lock and room.rabbit.pos.x == x0, "na cutscene a entrada fica travada")
+	check(room.cam_focus != null, "e a câmera vai para ele")
+	check(room.crushers[0]["wait"] != 0, "a placa ainda está desligada")
+	for i in 200:
+		tick()
+		if not room.input_lock:
+			break
+	check(not room.input_lock and room.cam_focus == null, "a cutscene termina e devolve o controle")
+	check(room.crushers[0]["wait"] == 0 and g.lever_on, "ele puxou a alavanca e ligou a placa")
+	check(Gatsby.intro_seen and g.mood == "smug", "a cutscene fica marcada como vista")
+	check(room.mover_state.get(0, false), "o passo liga o canal 0 (toggle)")
+	# flutua em volta do coelho, sem encostar e sem se afastar demais
+	var dmin := 9999.0
+	var dmax := 0.0
+	for i in 150:
+		tick({"move": 1.0} if i % 40 < 30 else {})
+		if g.phase == "flee":
+			break
+		var d: float = (g.pos - (Vector2(room.rabbit.pos) + Vector2(6, 6))).length()
+		dmin = minf(dmin, d)
+		dmax = maxf(dmax, d)
+	check(dmin >= 24.0 and dmax < 110.0, "ele flutua em volta do coelho, nem encosta nem some (%.0f a %.0f px)" % [dmin, dmax])
+	walk_until(1.0, func(): return room.orientation != 0, 300)
+	check(room.orientation == 1 and room.limit_t == 0, "o coelho chega à área e ele gira a sala; não é o giro do limitador")
+	check(room.crushers[0]["dir"] == 2, "a placa girou junto: agora vem de cima")
+	check(g.jolt > 0, "ele é jogado dentro da cápsula")
+	idle(30)
+	check(g.phase == "flee" or g.phase == "gone", "no fim do roteiro ele foge")
+	idle(240)
+	check(g.phase == "gone", "e some da tela")
+	check(room.state == "play" or room.state == "dead" or won(), "a sala segue em jogo sem ele")
+	# repeat: a alavanca é puxada de novo, com pausa
+	var rd: Dictionary = GATSBY_ROOM.duplicate(true)
+	rd["gatsby"]["script"] = [{"mood": "annoyed", "lever": true, "toggle": 0, "repeat": 2, "wait": 0.5}]
+	load_def(rd)
+	var flips: Array = []
+	var last := false
+	for i in 300:
+		tick()
+		var now: bool = room.mover_state.get(0, false)
+		if now != last:
+			flips.append(now)
+			last = now
+	check(flips == [true, false, true], "repeat: três puxadas, ligando e desligando o canal (%s)" % [flips])
+	# segunda vez: sem cutscene
+	load_def(GATSBY_ROOM)
+	idle(2)
+	check(not room.input_lock and room.crushers[0]["wait"] == 0, "na segunda vez não há cutscene: a placa já liga")
+	Gatsby.intro_seen = false
+
+
+## Sala 30x16 para os blocos motorizados: o coelho começa em cima da peça A (a balsa).
+func _mover_def(movers: Array, box := false, extra := {}) -> Dictionary:
+	var rows: Array = []
+	for r in 16:
+		var line := ""
+		for c in 30:
+			var ch := "."
+			if r == 0 or r >= 14 or c == 0 or c == 29:
+				ch = "#"
+			if (r == 10 or r == 11) and (c == 4 or c == 5):
+				ch = "P"
+			if box and (r == 12 or r == 13) and (c == 10 or c == 11):
+				ch = "B"
+			line += ch
+		rows.append(line)
+	var d := {"name": "teste movers", "rotate": true, "start_rot": 0, "door_open": true, "movers": movers, "rows": rows}
+	d.merge(extra, true)
+	return d
+
+
+func test_movers() -> void:
+	print("blocos motorizados")
+	var ferry := {"ch": 0, "off": [3, 12, 5, 1], "on": [20, 12], "speed": 60.0}
+	load_def(_mover_def([ferry]))
+	idle(5)
+	var m: Dictionary = room.movers[0]
+	check(room.mover_docked(m) and m["r"].position == Vector2i(24, 96), "começa encaixada no lugar de desligado")
+	var x0: int = room.rabbit.pos.x
+	var y0: int = room.rabbit.pos.y
+	check(y0 == 84, "o coelho está em cima dela (y=%d)" % y0)
+	idle(30)
+	check(room.rabbit.pos.x == x0 and not room.mover_docked(m) == false, "sem o canal ligado, ela não se mexe")
+	room.mover_toggle(0)
+	idle(60)
+	check(absi(room.rabbit.pos.x - x0 - 60) <= 2 and room.rabbit.pos.y == y0, "quem está em cima vai junto (andou %d px)" % [room.rabbit.pos.x - x0])
+	idle(200)
+	check(room.mover_docked(m) and m["r"].position == Vector2i(160, 96), "chega e encaixa no lugar de ligado")
+	check(room.rabbit.pos.x - x0 == 136 and room.state == "play", "o coelho chegou do outro lado com ela")
+	room.mover_toggle(0)
+	idle(400)
+	check(m["r"].position == Vector2i(24, 96) and room.rabbit.pos.x == x0, "desligando, ela volta e leva o coelho de volta")
+
+	# elevador: sobe 8 tiles com o coelho em cima
+	load_def(_mover_def([{"ch": 1, "off": [26, 12, 3, 1], "on": [26, 4], "speed": 60.0}]))
+	room.rabbit.pos = Vector2i(26 * 8 + 4, 12 * 8 - 12)
+	idle(3)
+	room.mover_toggle(1)
+	idle(150)
+	check(room.movers[0]["r"].position.y == 32 and room.rabbit.pos.y == 20, "o elevador leva o coelho para cima (y=%d)" % room.rabbit.pos.y)
+
+	# empurra, e esmaga contra a parede
+	load_def(_mover_def([ferry]))
+	room.rabbit.pos = Vector2i(8 * 8, 100)
+	idle(3)
+	room.mover_toggle(0)
+	idle(40)
+	check(room.rabbit.pos.x > 8 * 8 + 20 and room.state == "play", "uma peça que anda empurra o coelho que estava no caminho")
+	load_def(_mover_def([{"ch": 0, "off": [20, 12, 3, 1], "on": [26, 12], "speed": 120.0}]))
+	room.rabbit.pos = Vector2i(29 * 8 - 12, 100)
+	idle(3)
+	room.mover_toggle(0)
+	check(dies_within(60), "contra a parede, ele é esmagado")
+
+	# a caixa também é empurrada
+	load_def(_mover_def([ferry], true))
+	idle(5)
+	var bx: int = room.boxes[0].pos.x
+	room.mover_toggle(0)
+	idle(300)
+	check(room.boxes[0].pos.x > bx + 20 and room.mover_docked(room.movers[0]), "a caixa é empurrada pela peça")
+
+	# espinhos
+	load_def(_mover_def([{"ch": 0, "off": [4, 12, 2, 1], "on": [4, 12], "spikes": 0}]))
+	idle(6)
+	check(room.state == "dead", "espinhos na face de cima matam quem cai na peça")
+	load_def(_mover_def([{"ch": 0, "off": [10, 12, 2, 1], "on": [18, 12], "spikes": 3}]))
+	room.rabbit.pos = Vector2i(10 * 8 - 20, 100)
+	idle(3)
+	check(room.state == "play", "longe dos espinhos, vivo")
+	room.mover_toggle(0)
+	idle(200)
+	check(room.state == "play" or room.state == "dead", "peça com espinhos anda")
+	load_def(_mover_def([{"ch": 0, "off": [10, 12, 2, 1], "on": [18, 12], "spikes": 1}]))
+	room.rabbit.pos = Vector2i(18 * 8 - 14, 100)
+	room.mover_toggle(0)
+	check(dies_within(150), "a peça com espinhos na frente alcança e mata o coelho no caminho")
+
+	# gira com a sala, e a placa destrói
+	load_def(_mover_def([{"ch": 0, "off": [10, 12, 2, 1], "on": [18, 12], "spikes": 0}]))
+	var r0: Rect2i = room.movers[0]["r"]
+	var o0: Rect2i = room.movers[0]["on"]
+	room._rotate_logic(1)
+	check(room.movers[0]["spikes"] == 1 and room.movers[0]["r"].size == Vector2i(r0.size.y, r0.size.x), "gira com a sala (espinhos e peça)")
+	for i in 3:
+		room._rotate_logic(1)
+	check(room.movers[0]["r"] == r0 and room.movers[0]["on"] == o0 and room.movers[0]["spikes"] == 0, "quatro giros restauram")
+	load_def(_mover_def([ferry], false, {"crushers": [{"rect": [1, 1, 28, 14], "dir": 0, "speed": 400.0, "delay": 0.0}]}))
+	idle(60)
+	check(room.movers.is_empty(), "a placa de espinhos destrói as peças no caminho")
+
+
+## A fase do Gatsby (tests/fixtures/gatsby-teste.json) tem solução: a rota gravada por um robô
+## (tests/fixtures/gatsby-route.json, quadro a quadro) vence a fase sem morrer, e o Gatsby sai de
+## cena antes de o coelho chegar à porta. Se mudar a fase, a rota precisa ser refeita.
+func test_gatsby_route() -> void:
+	print("fase do Gatsby: rota gravada")
+	var def: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/gatsby-teste.json"))
+	var route: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/gatsby-route.json"))
+	var Gatsby = load("res://scripts/boss_gatsby.gd")
+	Gatsby.intro_seen = false
+	load_def(def)
+	var g = room.actors[0]
+	var died := false
+	var fled_at := -1
+	var won_at := -1
+	var n := 0
+	for run in route["runs"]:
+		var k: Array = run[1]
+		var inp := {"move": float(k[0]), "jump_pressed": int(k[1]) == 1, "jump_held": int(k[2]) == 1, "rotate": int(k[3])}
+		for i in int(run[0]):
+			tick(inp)
+			n += 1
+			if room.state == "dead":
+				died = true
+			if fled_at < 0 and (g.phase == "flee" or g.phase == "gone"):
+				fled_at = n
+			if won_at < 0 and won():
+				won_at = n
+	for i in 120:
+		if won_at >= 0:
+			break
+		tick()
+		n += 1
+		if won():
+			won_at = n
+	check(not died, "a rota não morre")
+	check(won_at > 0, "a rota chega à porta (quadro %d de %d)" % [won_at, int(route["frames"])])
+	check(fled_at > 0 and fled_at < won_at - 120, "o Gatsby sai de cena bem antes do fim (saiu no quadro %d, a porta no %d)" % [fled_at, won_at])
+	check(room.crushers[1]["adv"] > 0.0 and room.crusher_gap(room.crushers[1]) > 60.0, "a placa triste não alcançou o coelho")
+	Gatsby.intro_seen = false
 
 
 func test_reload_params() -> void:

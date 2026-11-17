@@ -148,7 +148,7 @@ func test_data_validation() -> void:
 	d.set_cell(8, 2, "|")
 	d.set_cell(8, 3, ".")
 	check(not has_error(d, "corda"), "corda encostada no teto")
-	d = LevelData.blank(70, 12)
+	d = LevelData.blank(LevelData.MAX_W + 6, 12)
 	check(d.width() == LevelData.MAX_W, "o tamanho é limitado a %d" % LevelData.MAX_W)
 	d = LevelData.blank(20, 12)
 	d.limiter = true

@@ -21,6 +21,8 @@ const BOSSES := [
 	{"name": "Nenhum"},
 	{"name": "Jeffrey, o esquilo", "actors": ["res://scripts/boss_squirrel.gd"],
 		"boss_music": "res://music/boss-rush-groove.mp3", "needs_spin": true},
+	# o roteiro dele (campo "gatsby") e as placas ("crushers") ainda são escritos à mão no JSON
+	{"name": "Gatsby, o texugo", "actors": ["res://scripts/boss_gatsby.gd"]},
 ]
 
 signal exit_requested

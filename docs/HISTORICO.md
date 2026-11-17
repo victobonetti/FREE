@@ -443,3 +443,29 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 **Entrada do Victor:** o tema do boss só começa quando o Jeffrey aparece (até lá, o tema normal dos níveis); sem barra de vida do coelho até ele aparecer.
 
 **Feito (D70):** `boss_music` na sala, `music_request` em `room.gd`, barras escondidas durante a espera. Testes cobrem o pedido da faixa. Não conferido ouvindo.
+
+---
+
+## Rodada 32 — Gatsby: conceito e placa de espinhos (16/11/2026)
+
+**Entrada do Victor:** segundo boss, Gatsby, o texugo (`gatsby-concept.jpeg`): fuga pura numa sala gigante, com a virada para o horizontal na segunda fase; alavancas dentro da nave; placas como cenário; giro com limitador e giro feito pelo Gatsby; sem checkpoint por enquanto; tirar o limite de tamanho das fases.
+
+**Feito (D72, D73):** conceito no GDD (8c). Limite de tamanho das fases de 64×48 para 512×512. Placa de espinhos em `room.gd` (campo `crushers`), com testes. Paredes recortadas à tela também durante o giro. Todos os testes passam.
+
+**Conferido em captura de tela:** a placa sob o chão, subindo, girada (vindo de lado) e as duas carinhas. **Não jogado.**
+
+**Fase de teste:** rascunho "Placa (teste)" na pasta de fases do jogador (`user://levels/placa-teste.json`), fora do repositório: um poço de 24×84 com limitador.
+
+**Falta:** o editor mostrar e editar a placa; bloco motorizado; giro forçado por ator; o Gatsby (cápsula, roteiro, expressões); cutscene; som da placa.
+
+---
+
+## Rodada 33 — Gatsby e visual industrial (16/11/2026)
+
+**Entrada do Victor:** vibe industrial em tudo do Gatsby, com chapas metálicas remendadas; carinha feliz pichada e fixa; depois, o Gatsby.
+
+**Feito (D74):** placa redesenhada (chapas, rebites, remendos, viga, carinha pichada que gira com a sala). `scripts/boss_gatsby.gd`: cápsula com propulsor que gira contra o movimento, roteiro por áreas, alavanca, oito expressões, giro da sala, cutscene de entrada, fuga. Ganchos novos na sala (`actor_rotate`, `input_lock`, `cam_focus`, `on_rotate`). `run.ps1 -Play <id>` joga um rascunho direto. Todos os testes passam.
+
+**Conferido em captura de tela:** as duas placas, a cápsula, as oito expressões. **Não jogado do início ao fim:** a fase de teste "Gatsby (teste)" (`user://levels/gatsby-teste.json`, um L de 150×86) foi gerada por script e não tem prova de que tem solução.
+
+**Falta:** blocos motorizados; a fase de verdade; o editor editar placas e roteiro; som da placa e da cápsula; música.

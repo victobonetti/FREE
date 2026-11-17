@@ -6,7 +6,8 @@ param(
     [switch]$Console,
     [switch]$Editor,
     [switch]$Fases,
-    [int]$Level = 0
+    [int]$Level = 0,
+    [string]$Play = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +24,7 @@ if (-not (Test-Path $godot)) {
 $args_ = @("--path", $PSScriptRoot)
 if ($Editor) { $args_ += "--editor" }
 if ($Level -gt 0) { $args_ += @("--", "--level=$Level") }
+if ($Play) { $args_ += @("--", "--play=$Play") }
 if ($Fases) { $args_ += @("--", "--editor") }
 
 & $godot @args_

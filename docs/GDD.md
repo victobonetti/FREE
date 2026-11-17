@@ -293,6 +293,46 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 
 **Implementação:** a grade é uma sala comum (`levels/campaign/jeffrey.json`) com dois campos novos: `spin_block` (o giro mira o bloco, não a sala) e `actors` (scripts que a sala cria e chama a cada quadro). O esquilo, as nozes e os corações ficam em `scripts/boss_squirrel.gd`; a sala só oferece o bloco, `kill()` e `door_unlocked`.
 
+## 8c. Boss 2 — Gatsby, o texugo (conceito; D72)
+
+**Estado: protótipo (D74).** Existem a placa de espinhos, o Gatsby (cápsula, roteiro, alavanca, oito expressões, giro da sala, cutscene de entrada, fuga) e uma fase de teste. Faltam os blocos motorizados, a fase de verdade, som e música próprios.
+
+**Quem é:** um texugo extremamente inteligente, que opera engenhocas de dentro de uma cápsula voadora. O propulsor fica embaixo da cápsula e se inclina no sentido oposto ao do movimento. As alavancas ficam **dentro da nave**; só ele as usa. É a estrela da fase e um chefe para o futuro: aqui o jogador **nunca o alcança**.
+
+**A fase é uma fuga pura,** sem dano ao Gatsby e sem desfecho de luta. Uma sala só, gigante, em forma de L:
+
+1. **Cutscene:** o coelho entra pela porta; Gatsby aparece na cápsula e puxa a alavanca que acorda a placa de espinhos sob o chão.
+2. **Fase 1, a subida:** um poço alto. A placa (carinha feliz) sobe e destrói tudo o que alcança. Gatsby voa à frente, puxando alavancas que mudam plataformas de lugar.
+3. **Fase 2, a virada:** no topo, o caminho dobra para a direita e vira um corredor. Outra placa (carinha triste) vem da esquerda.
+4. **Final:** o coelho quase alcança o Gatsby, que sai voando.
+
+**O giro nesta fase:**
+- **Giro do coelho, com limitador:** dura 2,5 s e a sala volta sozinha. No poço, a parede vira chão por um instante: dá para correr por ela (correr é bem mais rápido que subir pulando) ou cruzar um trecho sem plataformas. As placas giram junto com a sala.
+- **Giro do Gatsby:** ele também gira a sala, contra o jogador, e esse giro fica. O mesmo trecho pode virar subida, corrida ou queda.
+
+**Humor do Gatsby,** que muda conforme a fase avança: entediado e arrogante (tomando chá) → divertido → irritado → furioso e descabelado → nervoso, olhando para trás → pânico → um sorrisinho ao fugir. A cápsula fica sempre em pé; a cada giro ele é jogado lá dentro.
+
+**As placas** são engenhocas dele, só cenário: não têm nome nem personalidade além da carinha.
+
+**Visual do ato 2 (Victor):** tudo o que é do Gatsby tem cara industrial: aço em chapas remendadas, rebites, remendos enferrujados. A carinha da placa é **pichada** com tinta clara (escorrida, com respingos) e é **fixa**: pintada no meio da placa, não acompanha o coelho e gira com a sala. O Gatsby é do ato 2 do jogo, e o visual das coisas muda com ele.
+
+**Componentes novos (reutilizáveis):**
+
+| Componente | O que é |
+|---|---|
+| Placa de espinhos | Avança a partir de um lado, numa faixa da sala, com velocidade própria; mata e destrói tiles, caixas e o que mais alcançar. Gira com a sala. Serve para fases de fuga sem boss. |
+| Bloco motorizado | Bloco sólido (pode ter espinhos numa face) que vai de uma posição a outra quando o canal dele é acionado. Quem aciona é um ator, não uma peça da sala. |
+| Giro forçado por ator | Um ator pede o giro da sala; não gasta nem respeita a recarga do coelho. |
+| Ator com roteiro | Ações disparadas pelo avanço do coelho (não pelo relógio): voar até um ponto, acionar um canal, girar a sala, mudar de expressão. |
+| Cutscene curta | Trava a entrada, move a câmera e os atores, toca sons. Serve também para a entrada do Jeffrey. |
+
+**Sem checkpoint por enquanto** (Victor): morrer recomeça a fase inteira.
+
+**Em aberto:**
+- Velocidade das placas. Ponto de partida: 8 a 10 px/s na subida (o coelho sobe uns 25 a 30 px/s numa escada ideal), sem deixar a placa sair da tela.
+- Quantos giros do Gatsby, e onde.
+- Tamanho da sala e como o editor se comporta com ela.
+
 ## 9. Decisões
 
 O registro completo, com motivos e alternativas, está em [DECISOES.md](DECISOES.md). Resumo do que afeta o design:

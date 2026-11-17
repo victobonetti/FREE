@@ -11,8 +11,8 @@ extends RefCounted
 ##   ^ > v <  espinho   ~  água   o  ralo   |  -  corda (sequência reta)
 
 const CODE_PREFIX := "FREE1:"
-const MAX_W := 64
-const MAX_H := 48
+const MAX_W := 512   # teto técnico, não de design (D72)
+const MAX_H := 512
 const MIN_TIME := 0.5   # s, recarga e limitador
 const MAX_TIME := 30.0
 const MIN_W := 6

@@ -48,7 +48,7 @@ scripts/editor/editor.gd     a tela: barra, ferramentas, peças, propriedades, p
 tests/editor_tests.gd        testes do editor, sem janela
 ```
 
-- **Dado:** `LevelData` guarda `rows` (strings, um caractere por tile, a legenda de `levels.gd`) e os campos `name`, `hint`, `music`, `door_open`, `rotate`, `limiter`, `start_rot`. `to_def()` devolve o dicionário que `room.setup()` já consome; ou seja, uma fase do editor e uma fase de `levels.gd` são a mesma coisa. Tamanho de 6×6 a 64×48.
+- **Dado:** `LevelData` guarda `rows` (strings, um caractere por tile, a legenda de `levels.gd`) e os campos `name`, `hint`, `music`, `door_open`, `rotate`, `limiter`, `start_rot`. `to_def()` devolve o dicionário que `room.setup()` já consome; ou seja, uma fase do editor e uma fase de `levels.gd` são a mesma coisa. Tamanho de 6×6 a 512×512 (teto técnico; D72).
 - **Validação (`validate()`):** erros (impedem jogar): grade retangular e cercada de parede, peças conhecidas, peças de 2×2 inteiras, um e só um coelho, porta retangular, comporta sem compartimento, compartimentos sem caixa suficiente, porta sem compartimento e sem "porta aberta", corda sem ponta numa parede. Avisos: compartimento que não abre nada, mais caixas que compartimentos, limitador sem giro, "porta aberta" com compartimento `S`. As 16 fases da campanha passam sem erros (teste).
 - **Verificação:** `mark_verified()` guarda o hash do que muda a jogabilidade (grade, giro, limitador, rotação inicial, porta aberta; nome e dica não contam). `is_verified()` só vale enquanto o hash bate: qualquer edição tira a marca. Só fases verificadas aparecem em "Minhas fases" e geram código de compartilhamento.
 - **Código de texto:** `FREE1:<tamanho>:<base64 do JSON comprimido>`; uma fase pequena tem uns 230 caracteres. A marca de verificada vai junto.
@@ -181,6 +181,30 @@ Medido pelos testes: pulo longo 30 px, pulo curto 8 px. Degraus de até 3 tiles 
 - Custo: proporcional ao número de ligações (cerca de 3 por coluna da sala), não ao volume de água.
 - Desenho (`_draw_water`): uma faixa por coluna, da superfície ao fundo; colunas vizinhas iguais viram um retângulo só. Cascatas são um fio da soleira até a água de baixo.
 
+## Placa de espinhos (D73)
+
+- Campo `crushers` da sala: lista de `{rect, dir, speed, delay, start, leash, face}`. `rect` é a faixa que a placa varre, em tiles (`[coluna, linha, largura, altura]`); `dir` é para onde ela avança (0 cima, 1 direita, 2 baixo, 3 esquerda); `speed` em px/s (padrão 9); `delay` em segundos até começar (negativo: espera um ator chamar `room.crusher_start(i)`); `start` são os px já avançados ao carregar (para ela aparecer sob o chão desde o início); `leash` é a distância em px a partir da qual ela anda 5 vezes mais rápido (`CRUSH_CATCHUP`) até reencostar no coelho (0 = desligado); `face` é `"happy"` ou `"sad"`.
+- Na sala: `crushers`, com `lane` (a faixa, em px), `dir`, `adv` (avanço em px, fracionário), `speed`, `wait`, `leash`, `face`. O corpo da placa é o trecho da faixa de 0 a `adv` (`_crusher_rect`); os dentes passam 6 px disso (`CRUSH_SPIKE`).
+- `_update_crushers` roda depois dos atores e antes da água. Ela não anda durante a animação do giro nem com o coelho morto (como o resto da simulação).
+- **Destrói** (`_crusher_eat`) o que os dentes alcançam: paredes (o tile vira vazio), espinhos, plataformas, tiles de comporta, ralos, compartimentos e caixas. Cordas ficam. Fora da faixa nada é tocado. Como `reset()` relê a grade, morrer devolve tudo.
+- **Mata** em `_check_hazards`: o corpo mais os dentes, com 2 px de folga na ponta. A placa não é sólida.
+- **Gira com a sala:** `_rotate_logic` gira a faixa e soma o giro em `dir`; o avanço não muda. A placa que vinha de baixo passa a vir do lado.
+- Desenho (`_draw_crushers`): por cima do coelho e por baixo da água. Chapas de aço de 32×16 em fiadas desencontradas, com rebites e, em algumas, um remendo (cor e posição saem de um hash da posição da chapa, então não mudam de um quadro para outro); uma viga na frente com os dentes. Só as chapas na tela são desenhadas. A carinha (`_draw_graffiti_face`) é pichada no meio da placa, a 26 px da frente: fixa, gira com a sala (`turn`) e só aparece com 44 px ou mais de avanço.
+- O campo fica em `LevelData.extra` (entra no hash da verificação). **O editor ainda não mostra nem edita a placa**: ela é escrita à mão no JSON.
+- `_draw_walls` passou a recortar as paredes à tela também durante a animação do giro (um círculo com a meia diagonal da tela em volta da câmera), para salas gigantes.
+
+## Gatsby (`boss_gatsby.gd`, D74)
+
+- Ator da sala, como o Jeffrey. Não tem colisão e não machuca. Segue o roteiro do campo `gatsby` da sala: `{"start": [coluna, linha], "script": [passos]}`. O formato dos passos está no topo do arquivo (`when`, `mood`, `fly`, `lever`, `crusher`, `speed`, `rotate`, `wait`, `flee`, `cut`).
+- O roteiro avança pelo **avanço do coelho** (`when` é uma área em tiles), não pelo relógio. Fases: `when` → `fly` → `lever` → `wait` → passo seguinte; `flee` no fim.
+- O que a sala ganhou para ele (serve a qualquer ator): `actor_rotate(dir)` (giro que fica: não mexe na recarga nem no limitador, toca o som do limitador), `input_lock` (entrada travada), `cam_focus` (câmera presa num ponto), `crusher_start(i)`, e a chamada `on_rotate(room, dir)` em cada ator quando a sala gira.
+- **Giro:** ele e o roteiro inteiro (áreas e pontos de voo) giram com a sala em `on_rotate`. No desenho a cápsula fica em pé (rotação contrária a `view_angle`, como o coelho) e ele é jogado lá dentro por 45 quadros.
+- **Cutscene** (`cut`): trava a entrada e leva a câmera para ele. Só na primeira vez (`intro_seen`, estático, como no Jeffrey; entra no estado do replay); depois o passo acontece na hora.
+- **Propulsor:** o bocal gira contra a velocidade horizontal (`nozzle`), com chama e fumaça.
+- **Expressões** (`_draw_badger`): `bored` (chá), `smug`, `amused`, `annoyed`, `furious`, `nervous`, `panic`, `smirk`. Ri quando o coelho morre.
+- `start_rot` não é considerado no roteiro: as posições valem para a fase como foi desenhada.
+- No editor, "Gatsby, o texugo" está na lista de bosses, mas o roteiro e as placas ainda são escritos à mão no JSON.
+
 ## Caixas
 
 - 16×16, posição inteira. Só se movem empurradas (horizontal) ou caindo (vertical).
@@ -275,6 +299,8 @@ Rodam sem janela e saem com código 1 se algo falhar. Os testes de mecânica usa
 - Câmera: não mostra além da borda, segue o coelho, respeita as bordas depois de girar, centraliza sala pequena.
 - Comporta: abre e fecha com a caixa, emite som, não fecha em cima do coelho.
 - Plataforma: sólida só com a seta para cima, segura caixa, não fica sólida em cima do coelho.
+- Placa de espinhos (sala `CRUSH_ROOM`): espera o atraso, avança, destrói paredes, caixa e espinho só dentro da faixa, mata, morrer devolve tudo, espera por `crusher_start`, gira com a sala (quatro giros restauram), `start` e `leash`.
+- Gatsby (sala `GATSBY_ROOM`): a cutscene trava a entrada e leva a câmera, ele puxa a alavanca e liga a placa, gira a sala quando o coelho chega à área (sem ligar o limitador; a placa gira junto), foge no fim, e na segunda vez não há cutscene.
 - Limitador (`FLAT` com `limiter`): liga ao girar, a barra desce, não dá para desfazer à mão, desfaz sozinho aos 2,5 s com som, e sem o campo o giro fica.
 - Corda (sala `ROPE_ROOM`): leitura da sala, quatro giros restauram, não agarra andando nem caindo, agarra pulando, fica parado, giro livre pendurado, o arco acelera, bater na parede e o pulo soltam, só desce (parando na ponta), agarra em pleno voo depois de um giro no ar, a corda solta cai aos poucos sem esticar nem entrar na parede, corda fora do teto não agarra.
 - Água (salas `WATER_ROOM` e `WATER_SPIKES`): começa plana, volume conservado e superfície nivelada (menos de 1 px de desnível) depois do giro, quatro giros restauram, o coelho afunda e depois boia parado, nada, pula da superfície e gira boiando, a caixa desce devagar, espinhos submersos matam quem cai de alto.
