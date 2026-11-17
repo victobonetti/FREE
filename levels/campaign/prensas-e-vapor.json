@@ -1,4 +1,5 @@
 {
+	"music": "res://music/industrial-theme.mp3",
 	"hint": "Pise no botão para chamar o elevador",
 	"hint_touch": "Pise no botão para chamar o elevador",
 	"limiter": true,

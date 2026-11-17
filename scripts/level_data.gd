@@ -85,7 +85,7 @@ const KNOWN_KEYS := ["name", "hint", "music", "door_open", "rotate", "limiter", 
 	"limiter_time", "start_rot", "rows", "verified", "verified_hash", "version", "id"]
 ## Campos de `extra` que não mudam a jogabilidade (não entram no hash da verificação): textos e
 ## o que é só aparência (o tema do cenário, a cena do despertar do giro).
-const TEXT_KEYS := ["hint_touch", "notes", "theme", "awaken"]
+const TEXT_KEYS := ["hint_touch", "notes", "theme", "awaken", "chase_music"]
 
 
 ## O dicionário que `room.setup()` e o resto do jogo entendem.

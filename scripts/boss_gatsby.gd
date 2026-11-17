@@ -300,6 +300,10 @@ func _effects(s: Dictionary = {}) -> void:
 			room.mover_toggle(int(ch))
 	if s.has("rotate"):
 		room.actor_rotate(int(s["rotate"]))
+	# "chase_music" (campo da sala): a perseguição começa quando o Gatsby foge
+	if s.get("flee", false) and str(room.def.get("chase_music", "")) != "":
+		room.music_override = str(room.def["chase_music"])
+		room.music_request.emit(room.music_override)
 
 
 func _next() -> void:

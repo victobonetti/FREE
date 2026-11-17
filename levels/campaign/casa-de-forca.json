@@ -1,4 +1,6 @@
 {
+	"music": "res://music/industrial-theme.mp3",
+	"chase_music": "res://music/industrial-chase.mp3",
 	"actors": [
 		"res://scripts/boss_gatsby.gd"
 	],

@@ -1,4 +1,5 @@
 {
+	"music": "res://music/industrial-chase.mp3",
 	"actors": [
 		"res://scripts/boss_gatsby.gd"
 	],
