@@ -65,6 +65,8 @@ var in_editor_window := false   # janela na escala do editor: o layout de toque 
 var editor: Control
 var extra_sfx := {}         # nome -> AudioStreamPlayer (efeitos de scripts/sfx_factory.gd)
 var rumble_player: AudioStreamPlayer
+var fan_player: AudioStreamPlayer
+var belt_player: AudioStreamPlayer
 var alarm_t := 0
 var rec_runs: Array = []    # comandos gravados no teste do editor (replay)
 var rec_state := {}         # estado de partida dos atores, para o replay
@@ -233,6 +235,14 @@ func _make_audio() -> void:
 	rumble_player.stream = SfxFactory.rumble()
 	rumble_player.volume_db = -60.0
 	add_child(rumble_player)
+	fan_player = AudioStreamPlayer.new()
+	fan_player.stream = SfxFactory.fan_loop()
+	fan_player.volume_db = -60.0
+	add_child(fan_player)
+	belt_player = AudioStreamPlayer.new()
+	belt_player.stream = SfxFactory.belt_loop()
+	belt_player.volume_db = -60.0
+	add_child(belt_player)
 	charge_player = AudioStreamPlayer.new()
 	charge_player.stream = _make_charge_tone()
 	charge_player.volume_db = -25.0
@@ -657,8 +667,21 @@ func _make_ready_blip() -> AudioStreamWAV:
 
 ## Som do perigo: o ronco da placa cresce e sobe de tom conforme ela chega perto, e um alarme
 ## toca cada vez mais depressa. Tudo sai de `room.danger` (0 a 1).
+func _update_ambient_loop(pl: AudioStreamPlayer, gain: float, quiet_db: float, loud_db: float) -> void:
+	if gain <= 0.02:
+		if pl.playing:
+			pl.stop()
+		return
+	if not pl.playing:
+		pl.play()
+	pl.volume_db = lerpf(quiet_db, loud_db, gain)
+
+
 func _update_danger_audio() -> void:
-	var d: float = room.danger if room != null and room.state == "play" and not finished else 0.0
+	var live: bool = room != null and room.state == "play" and not finished
+	_update_ambient_loop(fan_player, room.fan_gain if live else 0.0, -42.0, -20.0)
+	_update_ambient_loop(belt_player, room.belt_gain if live else 0.0, -44.0, -24.0)
+	var d: float = room.danger if live else 0.0
 	if d <= 0.0:
 		if rumble_player.playing:
 			rumble_player.stop()

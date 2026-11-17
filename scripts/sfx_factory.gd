@@ -15,6 +15,7 @@ const ONE_SHOTS := {
 	"acid_burn": [-13.0, 0.06], "acid_splash": [-17.0, 0.1],
 	"battery": [-14.0, 0.04], "charge": [-14.0, 0.0], "hatch": [-13.0, 0.05],
 	"plate_on": [-15.0, 0.04], "plate_off": [-19.0, 0.04],
+	"spring": [-13.0, 0.05], "steam_warn": [-20.0, 0.05], "steam_burst": [-14.0, 0.06],
 }
 
 
@@ -58,6 +59,12 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _plate(true)
 		"plate_off":
 			return _plate(false)
+		"spring":
+			return _spring()
+		"steam_warn":
+			return _steam_warn()
+		"steam_burst":
+			return _steam_burst()
 	return null
 
 
@@ -374,6 +381,89 @@ static func _plate(down: bool) -> AudioStreamWAV:
 		v += sin(TAU * f * 5.3 * t) * exp(-t * 70.0) * 0.2
 		b[i] = tanh(v * 1.3) * (0.8 if down else 0.55)
 	return _wav(b)
+
+
+## Mola: "boing" curto e brilhante, com uma segunda oscilação.
+static func _spring() -> AudioStreamWAV:
+	var b := _buf(0.32)
+	var ph := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var f := 330.0 + 520.0 * exp(-t * 14.0) + 14.0 * sin(TAU * 38.0 * t)
+		ph += TAU * f / MIX_RATE
+		var env := minf(t * 300.0, 1.0) * exp(-t * 9.0)
+		b[i] = (sin(ph) * 0.65 + sin(ph * 2.0) * 0.2 + sin(ph * 3.01) * 0.08) * env * 0.85
+	return _wav(b)
+
+
+## Aviso do vapor: um chiado que cresce, curto.
+static func _steam_warn() -> AudioStreamWAV:
+	var b := _buf(0.45)
+	var rng := _rng(117)
+	var hp := 0.0
+	for i in b.size():
+		var t := float(i) / float(b.size())
+		var n := rng.randf_range(-1.0, 1.0)
+		hp = n - hp * 0.6
+		b[i] = hp * 0.5 * smoothstep(0.0, 0.8, t) * (1.0 - smoothstep(0.85, 1.0, t)) * 0.8
+	return _wav(b)
+
+
+## O jato abre: sopro forte que decai, com um estalo de válvula no começo.
+static func _steam_burst() -> AudioStreamWAV:
+	var b := _buf(0.6)
+	var rng := _rng(118)
+	var lp := 0.0
+	var hp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var n := rng.randf_range(-1.0, 1.0)
+		lp += (n - lp) * 0.5
+		hp = lp - hp * 0.35
+		var v := hp * 0.8 * exp(-t * 3.2) * minf(t * 120.0, 1.0)
+		v += sin(TAU * 130.0 * t) * exp(-t * 40.0) * 0.5
+		b[i] = tanh(v * 1.4) * 0.8
+	return _wav(b)
+
+
+## Ventilador, em loop de 1 s: sopro grave e um zumbido de pás (frequências inteiras: fecha o ciclo).
+static func fan_loop() -> AudioStreamWAV:
+	var n := MIX_RATE
+	var raw := PackedFloat32Array()
+	raw.resize(n + n / 4)
+	var rng := _rng(119)
+	var lp := 0.0
+	var lp2 := 0.0
+	for i in raw.size():
+		var t := float(i) / MIX_RATE
+		lp += (rng.randf_range(-1.0, 1.0) - lp) * 0.12
+		lp2 += (lp - lp2) * 0.4
+		raw[i] = lp2 * 1.6 + sin(TAU * 58.0 * t) * 0.12 * (0.7 + 0.3 * sin(TAU * 9.0 * t))
+	var b := PackedFloat32Array()
+	b.resize(n)
+	var fade := n / 4
+	for i in n:
+		var v := raw[i]
+		if i < fade:
+			var k := float(i) / float(fade)
+			v = v * k + raw[i + n] * (1.0 - k)
+		b[i] = tanh(v) * 0.7
+	return _wav(b, true)
+
+
+## Esteira, em loop de 1 s: batidas surdas e regulares (8 por segundo) com um zumbido baixo.
+static func belt_loop() -> AudioStreamWAV:
+	var n := MIX_RATE
+	var b := PackedFloat32Array()
+	b.resize(n)
+	var rng := _rng(120)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var tk := fmod(t, 0.125)
+		var v := sin(TAU * 76.0 * tk) * exp(-tk * 55.0) * 0.55 + rng.randf_range(-1.0, 1.0) * exp(-tk * 140.0) * 0.25
+		v += sin(TAU * 52.0 * t) * 0.1
+		b[i] = tanh(v * 1.2) * 0.7
+	return _wav(b, true)
 
 
 ## Ronco da placa, em loop de 1 s: grave contínuo e ruído grave. O começo e o fim se emendam.

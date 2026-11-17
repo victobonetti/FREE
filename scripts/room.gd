@@ -214,6 +214,19 @@ var crushers: Array = []
 # {"off": Rect2i, "on": Rect2i, "r": Rect2i (atual), "pf": Vector2, "ch", "speed", "spikes", "fx"}
 var movers: Array = []
 var mover_state := {}    # canal -> true (peças em "on")
+# Peças dinâmicas de plataforma (campos de sala; cada uma é uma lista de objetos, veja _init_dynamics):
+#   "conveyors" esteira sobre uma fileira de parede; carrega o coelho e as caixas em cima dela
+#   "springs"   mola: lança quem toca
+#   "fans"      ventilador: corrente de ar numa área (força no coelho e, para cima, nas caixas)
+#   "vents"     jato de vapor: perigo periódico, com aviso
+var conveyors: Array = []
+var springs: Array = []
+var fans: Array = []
+var vents: Array = []
+var belt_acc := {}       # corpo -> resto fracionário do carregamento da esteira
+var fan_gain := 0.0      # 0 a 1: o quanto há ventilador perto do coelho (som)
+var belt_gain := 0.0     # idem para esteiras
+var _base := Transform2D()
 var cycle_t := 0         # quadros de simulação desde o início: os conectores em ciclo seguem este relógio
 var plate_on := {}       # canal -> true enquanto um botão de pressão dele está apertado
 # Botões de pressão (campo "plates": {"rect": [coluna, linha, largura] em tiles, "ch": canal, "mode":
@@ -361,6 +374,13 @@ func reset() -> void:
 	mover_pending.clear()
 	plate_on.clear()
 	plates.clear()
+	conveyors.clear()
+	springs.clear()
+	fans.clear()
+	vents.clear()
+	belt_acc.clear()
+	fan_gain = 0.0
+	belt_gain = 0.0
 	cycle_t = 0
 	crumbles.clear()
 	danger = 0.0
@@ -410,6 +430,7 @@ func reset() -> void:
 	_parse(rows, water_tiles)
 	_init_crushers()
 	_init_movers()
+	_init_dynamics()
 	for pd in def.get("plates", []):
 		var pr: Array = pd["rect"]
 		plates.append({"rect": Rect2i(int(pr[0]) * TILE, int(pr[1]) * TILE, int(pr[2]) * TILE, TILE),
@@ -652,6 +673,320 @@ func _mover_launch(m: Dictionary) -> void:
 			"pos": feet + Vector2(randf_range(-6.0, 6.0), 0), "vel": Vector2(randf_range(-40.0, 40.0), randf_range(10.0, 50.0)),
 			"life": randi_range(10, 18), "col": C_PAINT, "grav": 200.0,
 		})
+
+
+# ---------------------------------------------------------------- esteiras, molas, ventiladores e vapor
+
+const BELT_TOP_SKIP := 0
+const SPRING_CD := 10
+const VENT_WARN := 30           # quadros de aviso antes de o jato abrir
+const FAN_BOX_LIFT := 0.85      # fração da velocidade do coelho com que o ar sobe uma caixa
+const DIR_VEC := [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)]
+
+
+func _tile_rect(a: Array) -> Rect2i:
+	return Rect2i(int(a[0]) * TILE, int(a[1]) * TILE, int(a[2]) * TILE, (int(a[3]) if a.size() > 3 else 1) * TILE)
+
+
+## "conveyors": [{"rect": [coluna, linha, largura], "dir": 1 (direita) ou 3 (esquerda), "speed": px/s,
+##   "ch": canal que inverte o sentido (opcional), "cycle": s entre inversões (opcional)}].
+##   A esteira vai por cima de tiles de parede: a superfície é o alto da fileira.
+## "springs": [{"rect": [coluna, linha, largura], "power": px/s (padrão 280), "dir": 0}]
+##   A mola fica no tile em cima do chão; quem a toca é lançado no sentido de "dir".
+## "fans": [{"rect": [coluna, linha, largura, altura], "dir": 0, "accel": px/s² (1500), "cap": px/s (70)}]
+## "vents": [{"rect": [coluna, linha, largura, altura], "dir": 0, "period": s, "on": s, "phase": s}]
+##   O jato abre nos últimos "on" segundos de cada período; os 0,5 s antes dele são o aviso.
+func _init_dynamics() -> void:
+	for d in def.get("conveyors", []):
+		conveyors.append({
+			"rect": _tile_rect(d["rect"]), "dir": posmod(int(d.get("dir", 1)), 4), "speed": float(d.get("speed", 40.0)),
+			"ch": int(d.get("ch", -1)), "cycle": roundi(float(d.get("cycle", 0.0)) * 60.0), "phase": 0.0,
+		})
+	for d in def.get("springs", []):
+		springs.append({
+			"rect": _tile_rect(d["rect"]), "power": float(d.get("power", 280.0)), "dir": posmod(int(d.get("dir", 0)), 4),
+			"k": 0.0, "cd": 0,
+		})
+	for d in def.get("fans", []):
+		fans.append({
+			"rect": _tile_rect(d["rect"]), "dir": posmod(int(d.get("dir", 0)), 4),
+			"accel": float(d.get("accel", 1500.0)), "cap": float(d.get("cap", 70.0)), "spin": 0.0,
+		})
+	for d in def.get("vents", []):
+		vents.append({
+			"rect": _tile_rect(d["rect"]), "dir": posmod(int(d.get("dir", 0)), 4),
+			"period": maxi(roundi(float(d.get("period", 3.0)) * 60.0), 10), "on": maxi(roundi(float(d.get("on", 1.0)) * 60.0), 1),
+			"phase": roundi(float(d.get("phase", 0.0)) * 60.0), "active": false, "warn": false,
+		})
+
+
+## Sentido atual de uma esteira: -1, +1 (só vale na horizontal) e 0 se está de lado.
+func belt_sign(c: Dictionary) -> int:
+	if c["dir"] % 2 == 0:
+		return 0
+	var sg := 1 if c["dir"] == 1 else -1
+	var rev := false
+	if c["ch"] >= 0:
+		rev = mover_state.get(c["ch"], false) or plate_on.get(c["ch"], false)
+	if c["cycle"] > 0 and (cycle_t / c["cycle"]) % 2 == 1:
+		rev = not rev
+	return -sg if rev else sg
+
+
+func _update_conveyors() -> void:
+	belt_gain = 0.0
+	if conveyors.is_empty():
+		return
+	var bodies: Array = [rabbit]
+	bodies.append_array(boxes)
+	for c in conveyors:
+		var sg := belt_sign(c)
+		var cr: Rect2i = c["rect"]
+		c["phase"] = fposmod(c["phase"] + sg * float(c["speed"]) * DT, 8.0)
+		var dist := Vector2(cr.get_center()).distance_to(Vector2(rabbit.pos) + Vector2(6, 6))
+		belt_gain = maxf(belt_gain, clampf(1.0 - dist / 140.0, 0.0, 1.0))
+		if sg == 0:
+			continue
+		for b in bodies:
+			var br: Rect2i = b.rect
+			if br.end.y != cr.position.y or br.end.x <= cr.position.x or br.position.x >= cr.end.x:
+				continue
+			if b == rabbit:
+				if not rabbit.on_ground or rabbit.rope != null:
+					continue
+			elif not b.settled:
+				continue
+			var acc: float = belt_acc.get(b, 0.0) + sg * float(c["speed"]) * DT
+			while absf(acc) >= 1.0:
+				var st := Vector2i(1 if acc > 0.0 else -1, 0)
+				var nxt := Rect2i(b.pos + st, b.rect.size)
+				var blocked := not _body_can_move(b, st, Rect2i())
+				if b != rabbit and overlaps(nxt, rabbit.rect):
+					blocked = true
+				if blocked:
+					acc = 0.0
+					break
+				b.pos += st
+				acc -= float(st.x)
+			belt_acc[b] = acc
+
+
+func _update_springs() -> void:
+	for sp in springs:
+		sp["k"] = maxf(sp["k"] - 0.12, 0.0)
+		sp["cd"] = maxi(sp["cd"] - 1, 0)
+		if sp["cd"] > 0 or rabbit.rope != null:
+			continue
+		var dv: Vector2 = DIR_VEC[sp["dir"]]
+		if overlaps(rabbit.rect, sp["rect"]) and rabbit.vel.dot(dv) < sp["power"] * 0.5:
+			sp["cd"] = SPRING_CD
+			sp["k"] = 1.0
+			rabbit.vel = rabbit.vel * (Vector2.ONE - dv.abs()) + dv * float(sp["power"])
+			rabbit.var_jump = 0
+			rabbit.on_ground = false
+			rabbit.coyote = 0
+			rabbit.jumping = true
+			rabbit.air_rot = true
+			rabbit.squash = Vector2(0.7, 1.35)
+			sfx.emit("spring")
+			shake = maxf(shake, 0.6)
+			var c := Vector2(sp["rect"].get_center())
+			particles.append({"pos": c, "vel": Vector2.ZERO, "life": 10, "col": C_PAINT, "grav": 0.0, "ring": 3.0})
+
+
+## O ventilador age no coelho antes de ele se mover (rabbit.ext), e nas caixas dentro do campo dele.
+func _update_fans() -> void:
+	rabbit.ext = Vector2.ZERO
+	fan_gain = 0.0
+	if fans.is_empty():
+		return
+	var center := Vector2(rabbit.pos) + Vector2(6, 6)
+	for f in fans:
+		var fr: Rect2i = f["rect"]
+		f["spin"] += 0.35
+		fan_gain = maxf(fan_gain, clampf(1.0 - Vector2(fr.get_center()).distance_to(center) / 150.0, 0.0, 1.0))
+		if rabbit.rope == null and overlaps(rabbit.rect, fr):
+			var dv: Vector2 = DIR_VEC[f["dir"]]
+			rabbit.ext = dv * float(f["accel"])
+			rabbit.ext_dir = dv
+			rabbit.ext_cap = float(f["cap"])
+		# poeira de ar subindo, só o que está na tela
+		if frame % 3 == 0 and Vector2(fr.get_center()).distance_to(cam) < VIEW.length() * 0.75:
+			var dv2: Vector2 = DIR_VEC[f["dir"]]
+			var along: Vector2 = dv2 * randf() * (fr.size.y if f["dir"] % 2 == 0 else fr.size.x)
+			var across := Vector2(dv2.y, -dv2.x) * (randf() - 0.5) * (fr.size.x if f["dir"] % 2 == 0 else fr.size.y)
+			var origin := Vector2(fr.get_center()) - dv2 * (fr.size.y if f["dir"] % 2 == 0 else fr.size.x) / 2.0
+			particles.append({"pos": origin + along + across, "vel": dv2 * 30.0, "life": randi_range(10, 18), "col": Color(C_PAINT, 0.5), "grav": 0.0})
+
+
+## Caixa no campo de um ventilador que sopra para cima: sobe, no lugar de cair.
+func box_fan_lift(b) -> Dictionary:
+	for f in fans:
+		if f["dir"] == 0 and overlaps(b.rect, f["rect"]):
+			return f
+	return {}
+
+
+func _update_vents() -> void:
+	for v in vents:
+		var t: int = (cycle_t + v["phase"]) % v["period"]
+		var open_at: int = v["period"] - v["on"]
+		var was_active: bool = v["active"]
+		var was_warn: bool = v["warn"]
+		v["active"] = t >= open_at
+		v["warn"] = not v["active"] and t >= open_at - VENT_WARN
+		var near: bool = Vector2(v["rect"].get_center()).distance_to(cam) < VIEW.length() * 0.8
+		if near and v["warn"] and not was_warn:
+			sfx.emit("steam_warn")
+		if near and v["active"] and not was_active:
+			sfx.emit("steam_burst")
+			shake = maxf(shake, 0.5)
+		if (v["active"] or v["warn"]) and frame % 2 == 0 and near:
+			var dv: Vector2 = DIR_VEC[v["dir"]]
+			var vr: Rect2i = v["rect"]
+			var long: float = vr.size.y if v["dir"] % 2 == 0 else vr.size.x
+			var wide: float = vr.size.x if v["dir"] % 2 == 0 else vr.size.y
+			var origin := Vector2(vr.get_center()) - dv * long / 2.0 + Vector2(dv.y, -dv.x) * (randf() - 0.5) * wide * 0.8
+			var sp := 90.0 if v["active"] else 20.0
+			particles.append({"pos": origin, "vel": dv * sp * (0.6 + randf() * 0.8), "life": randi_range(8, 16), "col": Color(1, 1, 1, 0.55), "grav": 0.0})
+
+
+## Põe o desenho no referencial da peça: origem no centro, "para cima" no sentido de `dir`.
+func _local_begin(center: Vector2, dir: int) -> void:
+	draw_set_transform_matrix(_base * Transform2D(dir * PI / 2.0, center))
+
+
+func _local_end() -> void:
+	draw_set_transform_matrix(_base)
+
+
+func _on_screen(r: Rect2i, margin := 24.0) -> bool:
+	return (Vector2(r.get_center()) - cam).length() <= VIEW.length() / 2.0 + margin + float(maxi(r.size.x, r.size.y)) / 2.0
+
+
+func _draw_conveyors() -> void:
+	for c in conveyors:
+		var r := Rect2(c["rect"])
+		if not _on_screen(c["rect"]):
+			continue
+		var sg := belt_sign(c)
+		var col: Color = C_CHANNEL[c["ch"] % C_CHANNEL.size()] if c["ch"] >= 0 else C_STEEL_LIGHT
+		draw_rect(r, C_SEAM)
+		draw_rect(r.grow(-1.0), C_STEEL[2])
+		if sg == 0:
+			# de lado (a sala girou): só as listras, sem movimento
+			for i in range(0, int(maxf(r.size.x, r.size.y)), 4):
+				var o := Vector2(0, i) if r.size.x < r.size.y else Vector2(i, 0)
+				draw_rect(Rect2(r.position + o, Vector2(r.size.x, 1) if r.size.x < r.size.y else Vector2(1, r.size.y)), Color(col, 0.3))
+			continue
+		# a esteira de cima: tira escura com setas correndo no sentido dela
+		draw_rect(Rect2(r.position + Vector2(1, 1), Vector2(r.size.x - 2, 4)), C_SEAM)
+		var ph: float = c["phase"]
+		var x := r.position.x - 8.0 + ph
+		while x < r.end.x:
+			var cx := x
+			if cx >= r.position.x + 1 and cx + 3 <= r.end.x - 1:
+				var tip := cx + (3.0 if sg > 0 else 0.0)
+				var back := cx + (0.0 if sg > 0 else 3.0)
+				draw_line(Vector2(back, r.position.y + 1.5), Vector2(tip, r.position.y + 3.0), col, 1.0)
+				draw_line(Vector2(tip, r.position.y + 3.0), Vector2(back, r.position.y + 4.5), col, 1.0)
+			x += 8.0
+		draw_rect(Rect2(r.position + Vector2(1, 5), Vector2(r.size.x - 2, 1)), Color(col, 0.35))
+		# roletes nas pontas
+		draw_circle(Vector2(r.position.x + 2.5, r.position.y + 3.0), 2.5, C_STEEL_LIGHT)
+		draw_circle(Vector2(r.end.x - 2.5, r.position.y + 3.0), 2.5, C_STEEL_LIGHT)
+		draw_circle(Vector2(r.position.x + 2.5, r.position.y + 3.0), 0.9, C_SEAM)
+		draw_circle(Vector2(r.end.x - 2.5, r.position.y + 3.0), 0.9, C_SEAM)
+
+
+func _draw_springs() -> void:
+	for sp in springs:
+		var r: Rect2i = sp["rect"]
+		if not _on_screen(r):
+			continue
+		var lw: float = r.size.x if sp["dir"] % 2 == 0 else r.size.y
+		var lh: float = TILE
+		_local_begin(Vector2(r.get_center()), sp["dir"])
+		var k: float = sp["k"]
+		var half_w := lw / 2.0
+		var base_y := lh / 2.0
+		var pad_y := -lh / 2.0 + 1.0 + 3.0 * k          # a mola comprime ao ser pisada
+		# base de aço, mola em zigue-zague, tampa âmbar
+		draw_rect(Rect2(-half_w, base_y - 2, lw, 2), C_SEAM)
+		draw_rect(Rect2(-half_w + 1, base_y - 2, lw - 2, 1), C_STEEL_LIGHT)
+		var n := maxi(int(lw / 6.0), 1)
+		for i in n:
+			var cx := -half_w + lw * (i + 0.5) / n
+			var pts := PackedVector2Array()
+			var steps := 5
+			for j in steps + 1:
+				var yy := lerpf(pad_y + 2.0, base_y - 2.0, float(j) / steps)
+				pts.append(Vector2(cx + (2.0 if j % 2 == 0 else -2.0), yy))
+			draw_polyline(pts, C_RIVET, 1.0)
+		draw_rect(Rect2(-half_w, pad_y, lw, 2), C_BAT)
+		draw_rect(Rect2(-half_w, pad_y, lw, 1), Color(1, 1, 1, 0.5))
+		_local_end()
+
+
+func _draw_fans() -> void:
+	for f in fans:
+		var r: Rect2i = f["rect"]
+		if not _on_screen(r):
+			continue
+		var lw: float = r.size.x if f["dir"] % 2 == 0 else r.size.y
+		var ll: float = r.size.y if f["dir"] % 2 == 0 else r.size.x
+		_local_begin(Vector2(r.get_center()), f["dir"])
+		# a coluna de ar e as listras correndo para cima
+		draw_rect(Rect2(-lw / 2.0, -ll / 2.0, lw, ll), Color(C_PAINT, 0.08))
+		draw_rect(Rect2(-lw / 2.0, -ll / 2.0, 1, ll), Color(C_PAINT, 0.12))
+		draw_rect(Rect2(lw / 2.0 - 1, -ll / 2.0, 1, ll), Color(C_PAINT, 0.12))
+		for i in int(lw / 6.0):
+			var sx := -lw / 2.0 + 3.0 + i * 6.0
+			var off := fposmod(float(frame) * 1.6 + i * 9.0, ll)
+			draw_rect(Rect2(sx, ll / 2.0 - off, 1, 5), Color(C_PAINT, 0.28))
+		# caixa do ventilador na base, com as pás vistas de lado
+		var by := ll / 2.0
+		draw_rect(Rect2(-lw / 2.0, by - 6, lw, 6), C_SEAM)
+		draw_rect(Rect2(-lw / 2.0 + 1, by - 5, lw - 2, 4), C_STEEL[1])
+		var bl := absf(cos(f["spin"]))
+		var cx := 0.0
+		draw_line(Vector2(cx - (lw / 2.0 - 3.0) * bl, by - 3), Vector2(cx + (lw / 2.0 - 3.0) * bl, by - 3), C_STEEL_LIGHT, 2.0)
+		draw_rect(Rect2(-1, by - 4, 2, 2), C_RIVET)
+		for q in [-lw / 2.0 + 2.0, lw / 2.0 - 3.0]:
+			draw_rect(Rect2(q, by - 5, 1, 1), C_RIVET)
+		_local_end()
+
+
+func _draw_vents() -> void:
+	for v in vents:
+		var r: Rect2i = v["rect"]
+		if not _on_screen(r):
+			continue
+		var lw: float = r.size.x if v["dir"] % 2 == 0 else r.size.y
+		var ll: float = r.size.y if v["dir"] % 2 == 0 else r.size.x
+		_local_begin(Vector2(r.get_center()), v["dir"])
+		var by := ll / 2.0
+		if v["active"]:
+			# a coluna de vapor: faixas brancas que ondulam
+			var w := lw - 2.0
+			draw_rect(Rect2(-w / 2.0, -ll / 2.0, w, ll), Color(1, 1, 1, 0.34))
+			for i in 4:
+				var wob := sin(frame * 0.4 + i * 1.7) * 1.5
+				draw_rect(Rect2(-w / 2.0 + 1 + wob, -ll / 2.0 + i * ll / 4.0, w - 2, ll / 4.0 - 2), Color(1, 1, 1, 0.22))
+		# bocal na base, com uma luz de aviso: pisca no aviso, vermelha enquanto aberto
+		draw_rect(Rect2(-lw / 2.0 - 1, by - 5, lw + 2, 5), C_SEAM)
+		draw_rect(Rect2(-lw / 2.0, by - 4, lw, 3), C_STEEL[1])
+		for i in int(lw / 4.0):
+			draw_rect(Rect2(-lw / 2.0 + 1 + i * 4, by - 4, 2, 3), C_BAT if i % 2 == 0 else C_SEAM)   # listras de aviso
+		var lamp := Color("5a4034")
+		if v["active"]:
+			lamp = C_SPIKE
+		elif v["warn"] and (frame / 4) % 2 == 0:
+			lamp = C_BAT
+		draw_rect(Rect2(-1, by - 7, 2, 2), lamp)
+		if v["warn"] and (frame / 4) % 2 == 0:
+			draw_circle(Vector2(0, by - 6), 4.0, Color(C_BAT, 0.18))
+		_local_end()
 
 
 # ---------------------------------------------------------------- botões de pressão
@@ -930,9 +1265,14 @@ func _crusher_eat(c: Dictionary, all: bool) -> void:
 	platforms = platforms.filter(func(p): return not overlaps(hurt, p["rect"]))
 	drains = drains.filter(func(d): return not overlaps(hurt, d["rect"]))
 	movers = movers.filter(func(m): return not overlaps(hurt, m["r"]))
-	var nc := crumbles.size()
+	var nc := crumbles.size() + plates.size() + conveyors.size() + springs.size() + fans.size() + vents.size()
 	crumbles = crumbles.filter(func(cr): return not overlaps(hurt, cr["rect"]))
-	if nc != crumbles.size():
+	plates = plates.filter(func(pl): return not overlaps(hurt, pl["rect"]))
+	conveyors = conveyors.filter(func(o): return not overlaps(hurt, o["rect"]))
+	springs = springs.filter(func(o): return not overlaps(hurt, o["rect"]))
+	fans = fans.filter(func(o): return not overlaps(hurt, o["rect"]))
+	vents = vents.filter(func(o): return not overlaps(hurt, o["rect"]))
+	if nc != crumbles.size() + plates.size() + conveyors.size() + springs.size() + fans.size() + vents.size():
 		changed = true
 	boxes = boxes.filter(func(b): return not overlaps(hurt, b.rect))
 	if n != spikes.size() + platforms.size() + drains.size() + boxes.size() + movers.size():
@@ -1181,6 +1521,10 @@ func _rotate_logic(dir: int) -> void:
 		c["rect"] = _rot_rect(c["rect"], dir)
 	for p in plates:
 		p["rect"] = _rot_rect(p["rect"], dir)
+	for o in conveyors + springs + fans + vents:
+		o["rect"] = _rot_rect(o["rect"], dir)
+		o["dir"] = posmod(o["dir"] + dir, 4)
+	belt_acc.clear()
 	for c in crushers:
 		c["lane"] = _rot_rect(c["lane"], dir)
 		c["dir"] = posmod(c["dir"] + dir, 4)
@@ -1442,6 +1786,7 @@ func step(inp: Dictionary) -> void:
 	_update_movers()
 	if state != "play":
 		return
+	_update_fans()
 	rabbit.update(self, inp)
 	if state != "play":
 		return
@@ -1469,6 +1814,9 @@ func step(inp: Dictionary) -> void:
 	_update_boxes()
 	if state != "play":
 		return
+	_update_conveyors()
+	_update_springs()
+	_update_vents()
 	_update_plates()
 	_update_batteries()
 	for a in actors:
@@ -1540,6 +1888,24 @@ func _box_impact(b, dist: int) -> void:
 
 
 func _box_step(b) -> void:
+	# ventilador: no ar soprado para cima, a caixa sobe em vez de ficar parada ou cair
+	var fan := box_fan_lift(b)
+	if not fan.is_empty():
+		b.settled = false
+		b.vel_y = move_toward(b.vel_y, -float(fan["cap"]) * FAN_BOX_LIFT, float(fan["accel"]) * DT)
+		b.rem_y += b.vel_y * DT
+		var up := int(-b.rem_y)
+		b.rem_y += up
+		while up > 0:
+			var nx := Rect2i(b.pos + Vector2i(0, -1), Vector2i(Box.SIZE, Box.SIZE))
+			if _box_blocked(b, nx):
+				b.vel_y = 0.0
+				b.rem_y = 0.0
+				break
+			b.pos.y -= 1
+			up -= 1
+		b.fall_dist = 0
+		return
 	if _box_supported(b):
 		if b.fall_dist >= IMPACT_MIN_DIST:
 			_box_impact(b, b.fall_dist)
@@ -2408,6 +2774,10 @@ func _check_hazards() -> void:
 				if overlaps(rr, _spike_hurt(cell, m["spikes"])):
 					kill()
 					return
+	for v in vents:
+		if v["active"] and overlaps(rr, Rect2i(v["rect"]).grow(-1)):
+			kill()
+			return
 	for c in crushers:
 		# 2 px de folga na ponta dos dentes
 		if c["adv"] > 0.0 and overlaps(rr, _crusher_rect(c, 0, int(c["adv"]) + CRUSH_SPIKE - 2)):
@@ -2588,6 +2958,7 @@ func _draw() -> void:
 	var jolt := Vector2(0.0, roundf(jolt_amp * sin(jolt_phase)))
 	var base := Transform2D(0.0, jolt) * Transform2D(view_angle, Vector2.ZERO) * Transform2D(0.0, -cam.round() + jitter)
 	draw_set_transform_matrix(base)
+	_base = base
 	var room_rect := Rect2(0, 0, pw, ph)
 
 	draw_rect(room_rect, C_BG)
@@ -2605,8 +2976,12 @@ func _draw() -> void:
 		_draw_door_beam()
 
 	_draw_walls()
+	_draw_conveyors()
 	_draw_gates()
 	_draw_platforms()
+	_draw_springs()
+	_draw_fans()
+	_draw_vents()
 	_draw_movers()
 	_draw_crumbles()
 	_draw_plates()

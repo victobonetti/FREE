@@ -39,6 +39,7 @@ func _init() -> void:
 	test_acid()
 	test_battery_lever()
 	test_mover_triggers()
+	test_dynamic_parts()
 	test_reload_params()
 	test_rope()
 	test_water()
@@ -2557,3 +2558,131 @@ func test_mover_triggers() -> void:
 	check(_msgs(ok, true) == "", "e uma sala sem esses objetos continua válida")
 	var gat: RefCounted = LevelData.from_json(FileAccess.get_file_as_string("res://levels/wip/gatsby.json"))
 	check(gat.validate().is_empty(), "a fase do Gatsby valida sem erros nem avisos")
+
+
+# ------------------------------------------------------------ esteira, mola, ventilador e vapor (D76)
+
+func test_dynamic_parts() -> void:
+	print("esteira")
+	# o chão (linhas 14 e 15) é de parede; a esteira cobre a fileira de cima (linha 14)
+	var belt := {"rect": [3, 14, 20], "dir": 1, "speed": 40.0}
+	load_def(_mover_def([], true, {"conveyors": [belt]}))
+	idle(20)
+	var x0: int = room.rabbit.pos.x
+	idle(60)
+	var d1: int = room.rabbit.pos.x - x0
+	check(d1 >= 34 and d1 <= 46, "parado em cima da esteira, o coelho é levado (%d px em 1 s a 40 px/s)" % d1)
+	var bx0: int = room.boxes[0].pos.x
+	idle(60)
+	check(room.boxes[0].pos.x > bx0 or room.boxes[0].pos.x >= 20 * 8 - 16, "a caixa em cima também anda")
+	room.rabbit.pos = Vector2i(12 * 8, 100)
+	var xs: int = room.rabbit.pos.x
+	for i in 60:
+		tick({"move": -1.0})
+	check(room.rabbit.pos.x < xs - 20 and room.rabbit.pos.x > xs - 72, "andando contra a esteira, vai mais devagar que no chão (%d px em 1 s)" % (xs - room.rabbit.pos.x))
+	var rev := {"rect": [3, 14, 20], "dir": 1, "speed": 40.0, "ch": 4}
+	load_def(_mover_def([], false, {"conveyors": [rev]}))
+	idle(20)
+	check(room.belt_sign(room.conveyors[0]) == 1, "o sentido é o de 'dir'")
+	room.mover_toggle(4, true)
+	check(room.belt_sign(room.conveyors[0]) == -1, "o canal inverte o sentido")
+	load_def(_mover_def([], false, {"conveyors": [{"rect": [3, 14, 20], "dir": 1, "speed": 40.0, "cycle": 1.0}]}))
+	idle(70)
+	check(room.belt_sign(room.conveyors[0]) == -1, "'cycle' inverte sozinha a cada meio ciclo")
+	var dirv: int = room.conveyors[0]["dir"]
+	for i in 4:
+		room._rotate_logic(1)
+	check(room.conveyors[0]["dir"] == dirv and room.conveyors[0]["rect"] == Rect2i(24, 112, 160, 8), "a esteira gira com a sala (quatro giros restauram)")
+	room._rotate_logic(1)
+	check(room.belt_sign(room.conveyors[0]) == 0, "de lado (a sala girou), ela não carrega")
+
+	print("mola")
+	load_def(_mover_def([], false, {"springs": [{"rect": [8, 13, 2], "power": 280.0}]}))
+	idle(20)
+	var got: Array = []
+	room.sfx.connect(func(n): got.append(n))
+	var y_ground: int = room.rabbit.pos.y
+	var top := y_ground
+	for i in 90:
+		tick({"move": 1.0})
+		top = mini(top, room.rabbit.pos.y)
+	check(got.has("spring"), "pisar na mola faz o som dela")
+	check(y_ground - top >= 36, "a mola lança bem mais alto que um pulo comum (%d px; o pulo comum sobe ~30)" % (y_ground - top))
+	check(room.springs[0]["cd"] >= 0 and room.state == "play", "e o coelho segue vivo")
+	load_def(_mover_def([], false, {"springs": [{"rect": [8, 13, 2], "power": 200.0}]}))
+	idle(20)
+	var top2: int = room.rabbit.pos.y
+	for i in 90:
+		tick({"move": 1.0})
+		top2 = mini(top2, room.rabbit.pos.y)
+	check(y_ground - top > y_ground - top2, "mais 'power', mais alto")
+
+	print("ventilador")
+	load_def(_mover_def([], true, {"fans": [{"rect": [5, 4, 3, 10], "dir": 0}]}))
+	room.rabbit.pos = Vector2i(5 * 8 + 6, 100)
+	idle(30)
+	check(room.rabbit.pos.y < 100 - 20, "dentro do ar soprado, o coelho sobe do chão (y=%d)" % room.rabbit.pos.y)
+	idle(120)
+	check(room.rabbit.pos.y <= 4 * 8 + 2 and room.state == "play", "e sobe até o alto da coluna, sem atravessar o teto")
+	room.rabbit.pos = Vector2i(5 * 8 + 6, 100)
+	room.rabbit.vel = Vector2.ZERO
+	var spd := 0.0
+	for i in 40:
+		tick()
+		spd = maxf(spd, -room.rabbit.vel.y)
+	check(spd <= 72.5, "a velocidade de subida tem teto ('cap' 70 px/s: %.0f)" % spd)
+	load_def(_mover_def([], true, {"fans": [{"rect": [10, 3, 2, 11], "dir": 0}]}))
+	idle(5)
+	var by0: int = room.boxes[0].pos.y
+	check(room.boxes[0].pos.x >= 80 and room.boxes[0].pos.x < 96, "a caixa está na coluna de ar")
+	idle(120)
+	check(room.boxes[0].pos.y < by0 - 30, "a caixa também sobe no ar soprado (y %d -> %d)" % [by0, room.boxes[0].pos.y])
+	idle(240)
+	var hover: int = room.boxes[0].pos.y
+	check(hover >= 3 * 8 - 16 - 2 and hover <= 3 * 8 - 16 + 3, "e paira no alto da coluna de ar, com a base na borda dela (y=%d)" % hover)
+	check(room.fans.size() == 1 and room.fan_gain >= 0.0, "o ventilador gira com a sala")
+	var fr: Rect2i = room.fans[0]["rect"]
+	for i in 4:
+		room._rotate_logic(1)
+	check(room.fans[0]["rect"] == fr and room.fans[0]["dir"] == 0, "quatro giros restauram o ventilador")
+	room._rotate_logic(1)
+	check(room.fans[0]["dir"] == 1, "e um giro vira o sopro para o lado")
+
+	print("jato de vapor")
+	# período de 3 s, aberto nos últimos 1 s; o jato fica em cima do chão
+	load_def(_mover_def([], false, {"vents": [{"rect": [20, 8, 2, 6], "dir": 0, "period": 3.0, "on": 1.0}]}))
+	room.rabbit.pos = Vector2i(2 * 8, 100)
+	var got2: Array = []
+	room.sfx.connect(func(n): got2.append(n))
+	idle(60)
+	var v: Dictionary = room.vents[0]
+	check(not v["active"] and not v["warn"], "no começo do período o jato está fechado")
+	idle(45)
+	check(v["warn"] and not v["active"] and got2.has("steam_warn"), "meio segundo antes de abrir ele avisa, com chiado")
+	idle(30)
+	check(v["active"] and got2.has("steam_burst"), "depois do aviso ele abre, com um sopro")
+	room.rabbit.pos = Vector2i(20 * 8 + 2, 100)
+	room.rabbit.vel = Vector2.ZERO
+	var died := false
+	for i in 30:
+		tick()
+		if room.state == "dead":
+			died = true
+			break
+	check(died, "o vapor aberto mata o coelho")
+	load_def(_mover_def([], false, {"vents": [{"rect": [20, 8, 2, 6], "dir": 0, "period": 3.0, "on": 1.0}]}))
+	room.rabbit.pos = Vector2i(20 * 8 + 2, 100)
+	idle(60)
+	check(room.state == "play", "com o jato fechado dá para atravessar")
+	var vr: Rect2i = room.vents[0]["rect"]
+	for i in 4:
+		room._rotate_logic(1)
+	check(room.vents[0]["rect"] == vr, "o jato gira com a sala (quatro giros restauram)")
+	room.reset()
+	idle(3)
+	check(room.cycle_t == 3 and not room.vents[0]["active"], "morrer reinicia o relógio do vapor")
+	print("peças dinâmicas na placa de espinhos")
+	load_def(_mover_def([], false, {"springs": [{"rect": [20, 13, 2]}], "crushers": [{"rect": [1, 1, 28, 13], "dir": 1, "speed": 60.0, "delay": 0.0}]}))
+	room.rabbit.pos = Vector2i(27 * 8, 100)   # longe: a placa ainda não o alcançou
+	idle(150)
+	check(room.state == "play" and room.springs.is_empty(), "a placa de espinhos destrói a mola")

@@ -52,6 +52,10 @@ var was_ground := false
 var coyote := 0
 var jump_buf := 0
 var var_jump := 0
+# Força externa (ventilador): a sala põe antes de cada update; vale só neste quadro.
+var ext := Vector2.ZERO
+var ext_dir := Vector2.ZERO
+var ext_cap := 0.0
 var air_rot := true  # um giro no ar por pulo
 var pushing := false
 var impact := 0.0
@@ -189,6 +193,12 @@ func update(room, inp: Dictionary) -> void:
 		if not on_ground and absf(wet - FLOAT_FRAC) < 0.06 and absf(vel.y) < 10.0 and var_jump == 0:
 			vel.y = 0.0
 			rem.y = 0.0
+
+	if ext != Vector2.ZERO:
+		vel += ext * DT
+		var along := vel.dot(ext_dir)
+		if along > ext_cap:
+			vel -= ext_dir * (along - ext_cap)
 
 	if var_jump > 0:
 		if jump_held:
