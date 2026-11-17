@@ -193,7 +193,20 @@ Medido pelos testes: pulo longo 30 px, pulo curto 8 px. Degraus de até 3 tiles 
 - O campo fica em `LevelData.extra` (entra no hash da verificação). **O editor ainda não mostra nem edita a placa**: ela é escrita à mão no JSON.
 - `_draw_walls` passou a recortar as paredes à tela também durante a animação do giro (um círculo com a meia diagonal da tela em volta da câmera), para salas gigantes.
 
+## Componentes da corrida (D75)
+
+- **Conectores** (os blocos motorizados, campo `movers`): `mover_toggle(ch)` agora avisa antes: os dois encaixes piscam por `MOVER_WARN` (16) quadros, com o som `mover_warn`, e só então o canal muda (`_mover_flip`). `mover_toggle(ch, true)` muda na hora. `mover_warning(ch)` diz se o canal está no aviso. Sons: `mover_go` ao partir, `mover_dock` ao encaixar.
+- **Catapulta:** campo `launch` (px/s) num conector. Se a peça chega ao encaixe subindo com o coelho em cima, ele sai com essa velocidade para cima (`_mover_launch`). Só para cima (na orientação atual). A peça ganha duas setas pintadas.
+- **Chapas soltas** (campo `crumbles`: lista de `[coluna, linha, largura, altura]`): sólidas; `CRUMBLE_FRAMES` (26) quadros depois de o coelho pisar, desabam e não voltam até reiniciar. Giram com a sala e são destruídas pela placa. Entram em `solid_static` e `_body_can_move`.
+- **Perigo:** `room.danger` (0 a 1, suavizado) e `room.danger_dir` saem da placa ligada mais próxima (`DANGER_FAR` 150 px → 0, `DANGER_NEAR` 30 px → 1). A sala desenha o brilho vermelho na borda; `main._update_danger_audio` ajusta o ronco em loop e o alarme.
+- **Sons** (`scripts/sfx_factory.gd`): todos gerados em código. `ONE_SHOTS` lista nome, volume e variação de tom; `main.gd` cria um tocador para cada um e toca quando a sala emite `sfx` com o nome. `rumble()` é o loop do ronco. Nomes: `lever`, `mover_warn`, `mover_go`, `mover_dock`, `launch`, `crumble_warn`, `crumble`, `crunch`, `crusher_wake`, `alarm`, `gatsby_dash`, `gatsby_laugh`.
+- **Fase e prova:** `tools/gatsby_level.py` escreve `levels/wip/gatsby.json`; `tools/gatsby_robot.gd` joga a fase com um plano de comandos (correr até x, pular, esperar, girar) e grava `tests/fixtures/gatsby-route.json`, que `test_gatsby_route` roda. Mudou a fase: rode os dois, nessa ordem. `levels/wip/` entra no pacote exportado; `--play=<id>` e `?play=<id>` jogam um rascunho do jogador ou, se não houver, a fase de `levels/wip`.
+
 ## Gatsby (`boss_gatsby.gd`, D74)
+
+- **Movimento (D75, substitui a órbita):** `_orbit` puxa a cápsula por uma mola para um ponto à frente do coelho no rumo da corrida (`_race_dir`: do coelho para a próxima área `when` do roteiro), numa elipse mais larga que alta, com balanço lateral por humor (`LEAD`). Se o ponto cai dentro de uma parede (`_in_wall`), tenta ângulos ao lado. `_keep_clear` roda em toda fase menos `gone`: abaixo de `KEEP_AWAY` (66 px) ele é empurrado e pode dar um arranque; abaixo de `KEEP_MIN` (50 px) a posição é corrigida na hora. `min_gap` guarda a menor distância desde o reset (os testes conferem).
+- **Sinal do canal:** `_pull` guarda `sig_ch`/`sig_t`; o desenho acende a antena e o punho na cor do canal e traça um raio até cada peça dele.
+- **Cutscene com vários passos:** a cena só termina quando o passo seguinte não é `cut` (antes, o segundo passo de cena acontecia na hora, sem a animação da alavanca).
 
 - Ator da sala, como o Jeffrey. Não tem colisão e não machuca. Segue o roteiro do campo `gatsby` da sala: `{"start": [coluna, linha], "script": [passos]}`. O formato dos passos está no topo do arquivo (`when`, `mood`, `fly`, `lever`, `crusher`, `speed`, `rotate`, `wait`, `flee`, `cut`).
 - O roteiro avança pelo **avanço do coelho** (`when` é uma área em tiles), não pelo relógio. Fases: `when` → `fly` → `lever` → `wait` → passo seguinte; `flee` no fim.

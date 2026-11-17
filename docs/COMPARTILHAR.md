@@ -13,6 +13,8 @@ Cada push na `main` exporta e publica a versão web sozinho (`.github/workflows/
 
 Configuração, uma vez só: no GitHub, **Settings → Pages → Source: GitHub Actions**. No plano grátis o repositório precisa ser público. Para publicar de novo sem mudar nada: aba **Actions → Deploy web → Run workflow**.
 
+Para jogar a fase do Gatsby (em obras, fora da história): `https://victobonetti.github.io/FREE/?play=gatsby`; no PC, `./run.ps1 -Play gatsby`.
+
 Para testar um nível direto, sem passar pelos anteriores: acrescente `?level=N` ao link, por exemplo `https://victobonetti.github.io/FREE/?level=17` (o boss).
 
 No celular: abra o link, deite o aparelho e toque na tela. O jogo entra em tela cheia e os controles aparecem nas laterais. No iPhone, o Safari não deixa entrar em tela cheia; use **Compartilhar → Adicionar à Tela de Início** e abra pelo ícone.

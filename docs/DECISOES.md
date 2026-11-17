@@ -566,3 +566,15 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **O giro dele fica** e é independente do limitador: o giro do coelho continua sendo desfeito aos 2,5 s; o do Gatsby, não.
 - **A carinha gira com a sala** (é tinta na placa), ao contrário da primeira versão, que ficava em pé e seguia o coelho.
 - **Ele atravessa paredes** ao voar em linha reta entre os pontos do roteiro; quem desenha a fase escolhe pontos que evitem isso.
+
+### D75 — Gatsby: a fuga vira corrida (fase refeita, componentes, sons, movimento)
+- **Autor:** Victor (fase mais frenética, senso de urgência na escalada, corrida dinâmica, refazer o design inteiro, efeitos sonoros, movimento melhor, o Gatsby nunca encosta no coelho, conectores coloridos reaproveitáveis); Claude (o desenho e as escolhas abaixo).
+- **Princípio do desenho:** o que o Gatsby faz para atrapalhar é o que leva o coelho adiante (o pistão que esmagaria vira catapulta; o giro dele vira uma queda de 34 tiles). Cada trecho usa uma mecânica, é curto, e a seguinte chega antes de dar tempo de respirar. Tabela no GDD, 8c.
+- **O giro com limitador entra de verdade:** dois trechos do poço não têm onde pular; só se passa correndo pela parede. As plataformas por orientação (`=`) seguram o coelho quando o giro se desfaz: é a combinação de duas mecânicas que o jogo já ensinou.
+- **Componentes novos, da sala e não do Gatsby:** chapas soltas (`crumbles`), catapulta (`launch` no conector), aviso dos conectores (`MOVER_WARN`), medidor de perigo (`danger`). Servem a qualquer fase.
+- **Conectores:** o aviso (encaixes piscando + bipes) vale para todos, sempre. Sem ele, peças acionadas fora da tela ou no meio de uma corrida matam sem deixa. O raio na cor do canal mostra quem acionou o quê.
+- **Urgência sem injustiça:** guia curta (a placa nunca sai da tela) com velocidade base baixa. Na travessia plana do poço a placa desacelera (8 px/s), porque ali o coelho não ganha altura.
+- **Movimento do Gatsby:** à frente, não em volta. Em volta, ele cruzava o caminho do coelho e encostava nele. A distância mínima é garantia por código (50 px entre os centros), não por ajuste de mola.
+- **Fase em `levels/wip/`:** ainda não é da campanha (falta a música e o replay do Victor), mas precisa ser jogável no celular; daí `?play=gatsby`.
+- **Escolhas minhas, abertas a revisão:** os saltos de 3 tiles com vão de 3 (exigem pular da beirada); 0,43 s para a chapa cair; a queda do corredor não tem perigo no caminho de quem cai rente ao chão (é espetáculo e respiro); sem checkpoint (D73).
+- **Descartado:** esteiras; uma balsa lenta (parar numa corrida é o contrário do que se quer); espinhos na pista da parede (ficam para uma segunda versão, se a pista se mostrar fácil).

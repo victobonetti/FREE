@@ -35,6 +35,7 @@ func _init() -> void:
 	test_movers()
 	test_gatsby()
 	test_gatsby_route()
+	test_race_components()
 	test_reload_params()
 	test_rope()
 	test_water()
@@ -882,7 +883,7 @@ func test_movers() -> void:
 	check(y0 == 84, "o coelho está em cima dela (y=%d)" % y0)
 	idle(30)
 	check(room.rabbit.pos.x == x0 and not room.mover_docked(m) == false, "sem o canal ligado, ela não se mexe")
-	room.mover_toggle(0)
+	room.mover_toggle(0, true)
 	idle(60)
 	check(absi(room.rabbit.pos.x - x0 - 60) <= 2 and room.rabbit.pos.y == y0, "quem está em cima vai junto (andou %d px)" % [room.rabbit.pos.x - x0])
 	idle(200)
@@ -951,18 +952,19 @@ func test_movers() -> void:
 	check(room.movers.is_empty(), "a placa de espinhos destrói as peças no caminho")
 
 
-## A fase do Gatsby (tests/fixtures/gatsby-teste.json) tem solução: a rota gravada por um robô
+## A fase do Gatsby (levels/wip/gatsby.json) tem solução: a rota gravada por um robô
 ## (tests/fixtures/gatsby-route.json, quadro a quadro) vence a fase sem morrer, e o Gatsby sai de
 ## cena antes de o coelho chegar à porta. Se mudar a fase, a rota precisa ser refeita.
 func test_gatsby_route() -> void:
 	print("fase do Gatsby: rota gravada")
-	var def: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/gatsby-teste.json"))
+	var def: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://levels/wip/gatsby.json"))
 	var route: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/gatsby-route.json"))
 	var Gatsby = load("res://scripts/boss_gatsby.gd")
 	Gatsby.intro_seen = false
 	load_def(def)
 	var g = room.actors[0]
 	var died := false
+	var touched := false
 	var fled_at := -1
 	var won_at := -1
 	var n := 0
@@ -974,6 +976,9 @@ func test_gatsby_route() -> void:
 			n += 1
 			if room.state == "dead":
 				died = true
+			# a cápsula inteira (antena, casco, propulsor e chama) contra a caixa do coelho
+			if g.phase != "gone" and room.overlaps(room.rabbit.rect, Rect2i(Vector2i(g.pos.round()) + Vector2i(-19, -21), Vector2i(38, 62))):
+				touched = true
 			if fled_at < 0 and (g.phase == "flee" or g.phase == "gone"):
 				fled_at = n
 			if won_at < 0 and won():
@@ -986,6 +991,8 @@ func test_gatsby_route() -> void:
 		if won():
 			won_at = n
 	check(not died, "a rota não morre")
+	check(g.min_gap >= Gatsby.KEEP_MIN - 0.01, "o Gatsby nunca chega perto do coelho (menor distância entre os centros: %.0f px)" % g.min_gap)
+	check(not touched, "a cápsula nunca encosta no coelho, quadro a quadro")
 	check(won_at > 0, "a rota chega à porta (quadro %d de %d)" % [won_at, int(route["frames"])])
 	check(fled_at > 0 and fled_at < won_at - 120, "o Gatsby sai de cena bem antes do fim (saiu no quadro %d, a porta no %d)" % [fled_at, won_at])
 	check(room.crushers[1]["adv"] > 0.0 and room.crusher_gap(room.crushers[1]) > 60.0, "a placa triste não alcançou o coelho")
@@ -2145,3 +2152,102 @@ func test_campaign_proof() -> void:
 		else:
 			check(BOT_IDS.has(id), "%s: tem replay ou bot" % id)
 	print("  %d de %d fases com replay; as outras ainda com bot" % [with_replay, Levels.count()])
+
+
+# ------------------------------------------------------------ componentes da corrida (D75)
+
+func test_race_components() -> void:
+	print("conectores: aviso e catapulta")
+	var lift := {"ch": 1, "off": [3, 12, 5, 1], "on": [3, 6], "speed": 240.0, "launch": 300.0}
+	load_def(_mover_def([lift]))
+	idle(10)
+	var m: Dictionary = room.movers[0]
+	var y0: int = room.rabbit.pos.y
+	room.mover_toggle(1)
+	idle(room.MOVER_WARN - 1)
+	check(room.mover_warning(1) and not room.mover_wants_on(m) and m["r"].position.y == 96, "no aviso, o canal ainda não mudou e a peça não saiu")
+	idle(2)
+	check(room.mover_wants_on(m) and not room.mover_warning(1), "depois do aviso, o canal muda")
+	var top := y0
+	for i in 120:
+		tick()
+		top = mini(top, room.rabbit.pos.y)
+	check(y0 - top > 48 + 15, "a catapulta arremessa o coelho acima do encaixe (subiu %d px; o encaixe fica a 48)" % (y0 - top))
+	check(room.state == "play" and room.rabbit.on_ground and room.rabbit.pos.y == 6 * 8 - 12, "e ele cai de volta em cima da peça")
+	var plain := {"ch": 1, "off": [3, 12, 5, 1], "on": [3, 6], "speed": 240.0}
+	load_def(_mover_def([plain]))
+	idle(10)
+	room.mover_toggle(1, true)
+	top = room.rabbit.pos.y
+	for i in 120:
+		tick()
+		top = mini(top, room.rabbit.pos.y)
+	check(top == 6 * 8 - 12, "sem 'launch', a peça só leva o coelho")
+	var side := {"ch": 1, "off": [3, 12, 5, 1], "on": [20, 12], "speed": 240.0, "launch": 300.0}
+	load_def(_mover_def([side]))
+	idle(10)
+	y0 = room.rabbit.pos.y
+	room.mover_toggle(1, true)
+	top = y0
+	for i in 120:
+		tick()
+		top = mini(top, room.rabbit.pos.y)
+	check(top == y0, "a catapulta só arremessa para cima")
+
+	print("chapas soltas")
+	load_def(_mover_def([], false, {"crumbles": [[3, 12, 5, 1]]}))
+	idle(10)
+	y0 = room.rabbit.pos.y
+	check(room.rabbit.on_ground and y0 == 84 and room.crumbles[0]["t"] >= 0, "a chapa segura o coelho e começa a contar quando pisada")
+	idle(room.CRUMBLE_FRAMES - 12)
+	check(room.rabbit.pos.y == y0 and room.crumbles.size() == 1, "ainda firme antes do tempo")
+	idle(40)
+	check(room.crumbles.is_empty() and room.rabbit.pos.y > y0, "depois de %d quadros ela desaba e o coelho cai" % room.CRUMBLE_FRAMES)
+	room.reset()
+	check(room.crumbles.size() == 1, "reiniciar a sala devolve a chapa")
+	load_def(_mover_def([], false, {"crumbles": [[20, 8, 3, 1]]}))
+	idle(60)
+	check(room.crumbles.size() == 1 and room.crumbles[0]["t"] < 0, "sem pisar, a chapa não cai")
+	var r0: Rect2i = room.crumbles[0]["rect"]
+	for i in 4:
+		rot(1)
+	check(room.crumbles[0]["rect"] == r0, "a chapa gira com a sala (quatro giros restauram)")
+	load_def(_mover_def([], false, {"crumbles": [[20, 12, 3, 1]], "crushers": [{"rect": [1, 1, 28, 13], "dir": 0, "speed": 60.0}]}))
+	idle(90)
+	check(room.crumbles.is_empty(), "a placa de espinhos destrói as chapas")
+
+	print("perigo (placa perto)")
+	load_def(_mover_def([], false, {"crushers": [{"rect": [1, 1, 28, 13], "dir": 2, "speed": 20.0}]}))
+	room.rabbit.pos = Vector2i(40, 100)
+	idle(20)
+	check(room.danger < 0.6, "com a placa longe, pouco perigo (%.2f)" % room.danger)
+	var peak := 0.0
+	for i in 400:
+		tick()
+		if room.state == "play":
+			peak = maxf(peak, room.danger)
+	check(peak > 0.9 and room.danger_dir == 2, "com a placa chegando, o perigo vai a 1 e aponta o lado de onde ela vem (%.2f)" % peak)
+	load_def(FLAT)
+	idle(5)
+	check(room.danger == 0.0, "sem placa, perigo zero")
+
+	print("Gatsby: nunca encosta no coelho")
+	Gatsby_script().intro_seen = true
+	load_def(JSON.parse_string(FileAccess.get_file_as_string("res://levels/wip/gatsby.json")))
+	var g = room.actors[0]
+	idle(30)
+	var worst := 1e9
+	# o coelho é posto em cima dele, várias vezes, de vários lados
+	for k in 40:
+		room.rabbit.pos = Vector2i(g.pos.round()) + Vector2i(-6 + (k % 5) * 3 - 6, 2 + (k % 3) * 4 - 4)
+		room.rabbit.vel = Vector2.ZERO
+		tick()
+		if room.state != "play":
+			break
+		worst = minf(worst, (g.pos + g.BODY - (Vector2(room.rabbit.pos) + Vector2(6, 6))).length())
+	check(worst >= g.KEEP_MIN - 1.5, "posto em cima dele, no quadro seguinte ele já está a %d px ou mais (pior caso: %.0f)" % [int(g.KEEP_MIN), worst])
+	Gatsby_script().intro_seen = false
+
+
+func Gatsby_script() -> Script:
+	return load("res://scripts/boss_gatsby.gd")

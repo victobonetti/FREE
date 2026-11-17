@@ -295,7 +295,33 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 
 ## 8c. Boss 2 — Gatsby, o texugo (conceito; D72)
 
-**Estado: protótipo (D74).** Existem a placa de espinhos, o Gatsby (cápsula, roteiro, alavanca, oito expressões, giro da sala, cutscene de entrada, fuga) e uma fase de teste. Faltam os blocos motorizados, a fase de verdade, som e música próprios.
+**Estado: fase jogável (D75).** A fase está em `levels/wip/gatsby.json` (gerada por `tools/gatsby_level.py`) e se joga com `./run.ps1 -Play gatsby` ou, na web, `?play=gatsby`. Um robô (`tools/gatsby_robot.gd`) a vence em 40,6 s, e os testes rodam a rota dele. **Ninguém jogou ainda.** Falta a música (Victor) e o editor editar placas, conectores, chapas e roteiro.
+
+**A corrida, trecho a trecho (D75).** A ideia de design: cada trecho usa uma mecânica de um jeito só, curto, e o que o Gatsby faz para atrapalhar é o que leva o coelho para cima.
+
+| Trecho | O que acontece | Mecânica |
+|---|---|---|
+| Cena | O Gatsby puxa a alavanca; a placa feliz acorda sob o chão e o come em uns 6 s | placa |
+| Poço 1 | Três patamares em zigue-zague | pulo |
+| Poço 2 | Escada de chapas soltas: cada uma desaba 0,4 s depois de pisada | chapas soltas |
+| Poço 3 | O Gatsby dispara um pistão para esmagar o coelho; o pistão o arremessa 12 tiles | catapulta (conector laranja) |
+| Poço 4 | Nada para pular: girar no sentido horário e correr pela parede da direita; ao desfazer, o coelho cai numa plataforma que só é chão com a sala em pé | giro com limitador + plataforma por orientação |
+| Poço 5 | Travessia no plano sobre chapas soltas (a placa desacelera aqui) | chapas soltas |
+| Poço 6 | A mesma corrida, na parede da esquerda (giro anti-horário) | giro com limitador |
+| Poço 7 | Um varredor de espinhos corre pelo patamar: pular por cima | conector rosa, em ritmo |
+| Poço 8 | Segunda catapulta, para dentro do corredor | conector ciano |
+| Corredor 1 | A placa triste acorda. Ponte de chapas soltas sobre espinhos, com dois vãos | chapas soltas |
+| Corredor 2 | Três estampadores alternados | conectores verdes, em ritmo |
+| Corredor 3 | O Gatsby gira a sala: o corredor vira um poço e o coelho cai 34 tiles até um degrau; ele desgira | giro do Gatsby |
+| Corredor 4 | Ponte final que desaba; o Gatsby entra em pânico e foge; a porta | chapas soltas |
+
+**Urgência (D75):**
+- A placa tem a guia curta (88 px no poço): quem sobe rápido não a deixa para trás; ela fica sempre na borda da tela. A velocidade base é baixa (8 a 12 px/s), para a pressão vir de vê-la, não de ser impossível.
+- **Perigo** (`room.danger`, 0 a 1): com a placa perto, a borda da tela de onde ela vem pulsa em vermelho, o ronco dela cresce e sobe de tom, e um alarme toca cada vez mais depressa.
+- A placa faz barulho ao mastigar a sala e ruge ao acordar.
+- As chapas soltas não deixam parar; os conectores avisam antes de se mexer (os encaixes piscam e bipam por 0,27 s), o que deixa o ritmo legível mesmo correndo.
+
+**O Gatsby (D75):** voa **à frente** do coelho, no rumo da próxima área do roteiro, com um balanço de lado, e prefere o ar livre a ficar dentro das paredes. **Nunca encosta no coelho:** a distância entre os centros nunca fica abaixo de 50 px (a cápsula inteira, com a chama, cabe em 35), em qualquer fase do roteiro; se o coelho vem para cima, ele dá um arranque. Ao puxar a alavanca, a antena e o punho acendem na cor do canal e um raio dessa cor liga a nave às peças acionadas. Ri quando o coelho morre.
 
 **Quem é:** um texugo extremamente inteligente, que opera engenhocas de dentro de uma cápsula voadora. O propulsor fica embaixo da cápsula e se inclina no sentido oposto ao do movimento. As alavancas ficam **dentro da nave**; só ele as usa. É a estrela da fase e um chefe para o futuro: aqui o jogador **nunca o alcança**.
 

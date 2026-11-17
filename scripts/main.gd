@@ -3,6 +3,7 @@ extends Node2D
 ## Também cuida da barra de recarga do giro e do som dela.
 
 const Replay := preload("res://scripts/replay.gd")
+const SfxFactory := preload("res://scripts/sfx_factory.gd")
 const Levels := preload("res://scripts/levels.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const InputSetup := preload("res://scripts/input_setup.gd")
@@ -62,6 +63,9 @@ var ui_layer: CanvasLayer
 var editor_layer: CanvasLayer
 var in_editor_window := false   # janela na escala do editor: o layout de toque não mexe nela
 var editor: Control
+var extra_sfx := {}         # nome -> AudioStreamPlayer (efeitos de scripts/sfx_factory.gd)
+var rumble_player: AudioStreamPlayer
+var alarm_t := 0
 var rec_runs: Array = []    # comandos gravados no teste do editor (replay)
 var rec_state := {}         # estado de partida dos atores, para o replay
 var custom := ""            # "", "editor" (teste a partir do editor) ou "list" (fase da lista)
@@ -81,6 +85,7 @@ func _ready() -> void:
 	# atalho de teste: "-- --level=11" na linha de comando, ou "?level=11" no link da versão web,
 	# abre direto no nível 11 (pula a abertura)
 	var lv := 0
+	var play_id := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--level="):
 			lv = int(a.trim_prefix("--level="))
@@ -88,14 +93,24 @@ func _ready() -> void:
 			open_editor()
 		elif a.begins_with("--play="):
 			# joga direto um rascunho de "Minhas fases" (user://levels/<id>.json); Esc volta à lista
-			var lvl = LevelStore.load_level(a.trim_prefix("--play="))
-			if lvl != null:
-				custom = "list"
-				_spawn_room(lvl.to_def(), -1, "")
+			play_id = a.trim_prefix("--play=")
 	if OS.has_feature("web"):
 		var q = JavaScriptBridge.eval("new URLSearchParams(location.search).get('level') || ''")
 		if q is String and q.is_valid_int():
 			lv = int(q)
+		var pq = JavaScriptBridge.eval("new URLSearchParams(location.search).get('play') || ''")
+		if pq is String and pq.is_valid_filename():
+			play_id = pq
+	if play_id != "":
+		# joga direto uma fase avulsa: um rascunho de "Minhas fases" (user://levels/<id>.json) ou,
+		# se não houver, uma fase em obras do projeto (res://levels/wip/<id>.json). Esc volta à lista.
+		var lvl = LevelStore.load_level(play_id)
+		if lvl == null and FileAccess.file_exists("res://levels/wip/%s.json" % play_id):
+			lvl = LevelData.from_json(FileAccess.get_file_as_string("res://levels/wip/%s.json" % play_id))
+		if lvl != null:
+			custom = "list"
+			_spawn_room(lvl.to_def(), -1, "")
+			return
 	if lv > 0:
 		_load_room(lv - 1)
 
@@ -207,6 +222,17 @@ func _hint_for(def: Dictionary) -> String:
 # ---------------------------------------------------------------- áudio
 
 func _make_audio() -> void:
+	# efeitos da fuga (alavanca, conectores, placa...): um tocador por nome
+	for sfx_name in SfxFactory.ONE_SHOTS:
+		var pl := AudioStreamPlayer.new()
+		pl.stream = SfxFactory.make(sfx_name)
+		pl.volume_db = SfxFactory.ONE_SHOTS[sfx_name][0]
+		add_child(pl)
+		extra_sfx[sfx_name] = pl
+	rumble_player = AudioStreamPlayer.new()
+	rumble_player.stream = SfxFactory.rumble()
+	rumble_player.volume_db = -60.0
+	add_child(rumble_player)
 	charge_player = AudioStreamPlayer.new()
 	charge_player.stream = _make_charge_tone()
 	charge_player.volume_db = -25.0
@@ -501,6 +527,12 @@ func _start_music_now(path: String) -> void:
 
 
 func _play_sfx(sfx_name: String) -> void:
+	if extra_sfx.has(sfx_name):
+		var pl: AudioStreamPlayer = extra_sfx[sfx_name]
+		var vary: float = SfxFactory.ONE_SHOTS[sfx_name][1]
+		pl.pitch_scale = randf_range(1.0 - vary, 1.0 + vary) if vary > 0.0 else 1.0
+		pl.play()
+		return
 	if sfx_name == "falling":
 		_start_music_now(FALL_MUSIC)
 		return
@@ -621,6 +653,28 @@ func _make_ready_blip() -> AudioStreamWAV:
 	s.stereo = false
 	s.data = data
 	return s
+
+
+## Som do perigo: o ronco da placa cresce e sobe de tom conforme ela chega perto, e um alarme
+## toca cada vez mais depressa. Tudo sai de `room.danger` (0 a 1).
+func _update_danger_audio() -> void:
+	var d: float = room.danger if room != null and room.state == "play" and not finished else 0.0
+	if d <= 0.0:
+		if rumble_player.playing:
+			rumble_player.stop()
+		alarm_t = 0
+		return
+	if not rumble_player.playing:
+		rumble_player.play()
+	rumble_player.volume_db = lerpf(-34.0, -9.0, d)
+	rumble_player.pitch_scale = lerpf(0.8, 1.35, d)
+	if d > 0.5:
+		alarm_t -= 1
+		if alarm_t <= 0:
+			_play_sfx("alarm")
+			alarm_t = roundi(lerpf(46.0, 14.0, (d - 0.5) * 2.0))
+	else:
+		alarm_t = 0
 
 
 func _update_rotation_hud() -> void:
@@ -763,6 +817,7 @@ func _physics_process(_delta: float) -> void:
 	touch.hide_ui = intro != null
 	_tick()
 	_update_rotation_hud()
+	_update_danger_audio()
 
 
 func _tick() -> void:

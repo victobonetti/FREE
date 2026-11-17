@@ -65,6 +65,10 @@ const BOX_WATER_FALL := 45.0
 const CRUSH_SPIKE := 6          # altura dos dentes da placa de espinhos (px)
 const CRUSH_CATCHUP := 5.0      # com "leash": vezes a velocidade enquanto o coelho está longe demais
 const CRUSH_FACE_MIN := 44      # avanço (px) a partir do qual a carinha pichada cabe na placa
+const MOVER_WARN := 16          # quadros de aviso (encaixes piscando) antes de um canal mudar
+const CRUMBLE_FRAMES := 26      # quadros entre pisar numa chapa solta e ela desabar
+const DANGER_FAR := 150.0       # px: a esta distância da placa o perigo é 0
+const DANGER_NEAR := 30.0       # px: a esta distância o perigo é 1
 const CRUSH_BEAM := 6           # viga da frente, onde os dentes estão presos (px)
 
 const Rabbit := preload("res://scripts/rabbit.gd")
@@ -199,6 +203,13 @@ var crushers: Array = []
 # {"off": Rect2i, "on": Rect2i, "r": Rect2i (atual), "pf": Vector2, "ch", "speed", "spikes", "fx"}
 var movers: Array = []
 var mover_state := {}    # canal -> true (peças em "on")
+var mover_pending: Array = []   # trocas de canal avisadas e ainda não feitas: [canal, quadros]
+# Chapas soltas (campo "crumbles"): chão que desaba pouco depois de o coelho pisar. Não voltam
+# (só ao reiniciar a sala). {"rect": Rect2i, "t" (-1 parada; senão quadros desde o pisão)}
+var crumbles: Array = []
+var danger := 0.0        # 0 a 1: o quanto a placa de espinhos mais próxima está perto do coelho
+var danger_dir := -1     # de que lado da tela ela vem (o "dir" dela), ou -1
+var crunch_cd := 0       # intervalo mínimo entre dois sons de mastigada
 # Água: modelo de colunas. Cada coluna de 1 px tem "vãos" (trechos verticais livres entre
 # sólidos); cada vão guarda uma altura de água (fracionária) apoiada no fundo dele. Vãos
 # ligados trocam água até igualar o nível; por cima disso, a superfície tem ondas.
@@ -318,6 +329,10 @@ func reset() -> void:
 	crushers.clear()
 	movers.clear()
 	mover_state.clear()
+	mover_pending.clear()
+	crumbles.clear()
+	danger = 0.0
+	danger_dir = -1
 	boxes.clear()
 	sockets.clear()
 	socket_group.clear()
@@ -357,6 +372,8 @@ func reset() -> void:
 	_parse(rows, water_tiles)
 	_init_crushers()
 	_init_movers()
+	for cr in def.get("crumbles", []):
+		crumbles.append({"rect": Rect2i(int(cr[0]) * TILE, int(cr[1]) * TILE, int(cr[2]) * TILE, int(cr[3]) * TILE), "t": -1})
 	_water_build()
 	for t in water_tiles:
 		for dx in TILE:
@@ -470,16 +487,34 @@ func _init_movers() -> void:
 			"off": off, "on": on, "r": off, "pf": Vector2(off.position),
 			"ch": int(d.get("ch", 0)), "speed": float(d.get("speed", 40.0)),
 			"spikes": int(d.get("spikes", -1)), "fx": 0,
+			"launch": float(d.get("launch", 0.0)), "last": Vector2i.ZERO,
 		})
 
 
-## Liga ou desliga um canal: as peças dele correm para o outro encaixe.
-func mover_toggle(ch: int) -> void:
+## Liga ou desliga um canal: os encaixes piscam por MOVER_WARN quadros (o aviso) e então as
+## peças dele correm para o outro encaixe. `instant`: sem aviso.
+func mover_toggle(ch: int, instant := false) -> void:
+	if instant:
+		_mover_flip(ch)
+		return
+	mover_pending.append([ch, MOVER_WARN])
+	sfx.emit("mover_warn")
+
+
+func _mover_flip(ch: int) -> void:
 	mover_state[ch] = not mover_state.get(ch, false)
-	sfx.emit("platform")
+	sfx.emit("mover_go")
 	for m in movers:
 		if m["ch"] == ch:
 			m["fx"] = 0
+
+
+## O canal está no aviso (vai mudar em instantes)?
+func mover_warning(ch: int) -> bool:
+	for p in mover_pending:
+		if p[0] == ch:
+			return true
+	return false
 
 
 func mover_wants_on(m: Dictionary) -> bool:
@@ -493,6 +528,11 @@ func mover_docked(m: Dictionary) -> bool:
 
 
 func _update_movers() -> void:
+	for p in mover_pending:
+		p[1] -= 1
+		if p[1] <= 0:
+			_mover_flip(p[0])
+	mover_pending = mover_pending.filter(func(p): return p[1] > 0)
 	for m in movers:
 		if m["fx"] >= 0:
 			m["fx"] += 1
@@ -509,6 +549,7 @@ func _update_movers() -> void:
 				if not _mover_step(m, st):
 					m["pf"] = Vector2(m["r"].position)
 					break
+				m["last"] = st
 				d -= st
 				if state != "play":
 					return
@@ -517,7 +558,83 @@ func _update_movers() -> void:
 				m["pf"] = Vector2(tgt.position)
 				m["fx"] = 0
 				shake = maxf(shake, 0.5)
-				sfx.emit("sensor_on")
+				sfx.emit("mover_dock")
+				_mover_launch(m)
+
+
+## Catapulta ("launch": px/s): a peça que chega ao encaixe subindo arremessa o coelho que
+## está em cima dela. É o jeito rápido de subir: a pressa de quem as aciona vira carona.
+func _mover_launch(m: Dictionary) -> void:
+	if m["launch"] <= 0.0 or m["last"] != Vector2i(0, -1):
+		return
+	var rr: Rect2i = rabbit.rect
+	if not overlaps(Rect2i(rr.position.x, rr.end.y, rr.size.x, 1), m["r"]):
+		return
+	rabbit.vel.y = -float(m["launch"])
+	rabbit.var_jump = 0
+	rabbit.on_ground = false
+	rabbit.coyote = 0
+	rabbit.squash = Vector2(0.7, 1.35)
+	sfx.emit("launch")
+	shake = maxf(shake, 1.5)
+	var feet := Vector2(rr.position.x + 6, rr.end.y)
+	particles.append({"pos": feet, "vel": Vector2.ZERO, "life": 12, "col": C_CHANNEL[m["ch"] % C_CHANNEL.size()], "grav": 0.0, "ring": 3.0})
+	for i in 8:
+		particles.append({
+			"pos": feet + Vector2(randf_range(-6.0, 6.0), 0), "vel": Vector2(randf_range(-40.0, 40.0), randf_range(10.0, 50.0)),
+			"life": randi_range(10, 18), "col": C_PAINT, "grav": 200.0,
+		})
+
+
+# ---------------------------------------------------------------- chapas soltas
+
+func _update_crumbles() -> void:
+	if crumbles.is_empty():
+		return
+	var rr: Rect2i = rabbit.rect
+	var feet := Rect2i(rr.position.x, rr.end.y, rr.size.x, 1)
+	var fell := false
+	for c in crumbles:
+		if c["t"] < 0:
+			if rabbit.on_ground and overlaps(feet, c["rect"]):
+				c["t"] = 0
+				sfx.emit("crumble_warn")
+		else:
+			c["t"] += 1
+			if c["t"] >= CRUMBLE_FRAMES:
+				fell = true
+				var r: Rect2i = c["rect"]
+				for i in maxi(r.size.x / 4, 2):
+					particles.append({
+						"pos": Vector2(r.position.x + randf() * r.size.x, r.position.y + randf() * r.size.y),
+						"vel": Vector2(randf_range(-25.0, 25.0), randf_range(-10.0, 40.0)),
+						"life": randi_range(16, 28), "col": C_RUST if i % 2 == 0 else C_STEEL_LIGHT, "grav": 420.0,
+					})
+	if fell:
+		crumbles = crumbles.filter(func(c): return c["t"] < CRUMBLE_FRAMES)
+		sfx.emit("crumble")
+		shake = maxf(shake, 0.8)
+
+
+# ---------------------------------------------------------------- perigo (placa perto)
+
+## 0 a 1 conforme a placa mais próxima (já ligada) chega perto do coelho. O jogo usa para o
+## som (ronco e alarme) e para o brilho vermelho na borda da tela de onde ela vem.
+func _update_danger() -> void:
+	crunch_cd = maxi(crunch_cd - 1, 0)
+	var best := 0.0
+	var bdir := -1
+	for c in crushers:
+		if c["wait"] != 0 or c["adv"] <= 0.0 or c["adv"] >= float(_crusher_len(c)):
+			continue
+		var d := clampf((DANGER_FAR - crusher_gap(c)) / (DANGER_FAR - DANGER_NEAR), 0.0, 1.0)
+		if d > best:
+			best = d
+			bdir = c["dir"]
+	danger = lerpf(danger, best, 0.15)
+	danger_dir = bdir if best > 0.0 else danger_dir
+	if danger < 0.01:
+		danger = 0.0
 
 
 ## Anda a peça 1 px. Quem está em cima vai junto; quem estava no caminho é empurrado, e é
@@ -562,6 +679,9 @@ func _body_can_move(b, st: Vector2i, ignore_rect: Rect2i) -> bool:
 			return false
 	for o in movers:
 		if overlaps(nxt, o["r"]) and o["r"] != ignore_rect and not overlaps(b.rect, o["r"]):
+			return false
+	for c in crumbles:
+		if overlaps(nxt, c["rect"]):
 			return false
 	return box_at(nxt, b) == null
 
@@ -618,6 +738,9 @@ func actor_rotate(dir: int) -> void:
 ## Um ator liga a placa `i` (as que têm "delay" negativo esperam por isto).
 func crusher_start(i: int) -> void:
 	if i >= 0 and i < crushers.size():
+		if crushers[i]["wait"] != 0:
+			sfx.emit("crusher_wake")
+			shake = maxf(shake, 3.0)
 		crushers[i]["wait"] = 0
 
 
@@ -695,6 +818,10 @@ func _crusher_eat(c: Dictionary, all: bool) -> void:
 	platforms = platforms.filter(func(p): return not overlaps(hurt, p["rect"]))
 	drains = drains.filter(func(d): return not overlaps(hurt, d["rect"]))
 	movers = movers.filter(func(m): return not overlaps(hurt, m["r"]))
+	var nc := crumbles.size()
+	crumbles = crumbles.filter(func(cr): return not overlaps(hurt, cr["rect"]))
+	if nc != crumbles.size():
+		changed = true
 	boxes = boxes.filter(func(b): return not overlaps(hurt, b.rect))
 	if n != spikes.size() + platforms.size() + drains.size() + boxes.size() + movers.size():
 		changed = true
@@ -713,6 +840,9 @@ func _crusher_eat(c: Dictionary, all: bool) -> void:
 	if changed:
 		if not all:
 			shake = maxf(shake, 0.8)
+			if crunch_cd == 0:
+				crunch_cd = 9
+				sfx.emit("crunch")
 		if water_vol > 0.0:
 			water_dirty = true
 
@@ -920,6 +1050,8 @@ func _rotate_logic(dir: int) -> void:
 		m["pf"] = Vector2(m["r"].position)
 		if m["spikes"] >= 0:
 			m["spikes"] = posmod(m["spikes"] + dir, 4)
+	for c in crumbles:
+		c["rect"] = _rot_rect(c["rect"], dir)
 	for c in crushers:
 		c["lane"] = _rot_rect(c["lane"], dir)
 		c["dir"] = posmod(c["dir"] + dir, 4)
@@ -1078,6 +1210,9 @@ func solid_static(r: Rect2i) -> bool:
 	for m in movers:
 		if overlaps(r, m["r"]):
 			return true
+	for c in crumbles:
+		if overlaps(r, c["rect"]):
+			return true
 	return false
 
 
@@ -1209,7 +1344,9 @@ func step(inp: Dictionary) -> void:
 		a.step(self)
 	if state != "play":
 		return
+	_update_crumbles()
 	_update_crushers()
+	_update_danger()
 	_update_water()
 	_update_sockets()
 	_update_camera()
@@ -2128,6 +2265,7 @@ func _draw() -> void:
 	_draw_gates()
 	_draw_platforms()
 	_draw_movers()
+	_draw_crumbles()
 	_draw_drains()
 	_draw_ropes()
 
@@ -2184,6 +2322,25 @@ func _draw() -> void:
 		var f := float(timer) / float(DEATH_FRAMES)
 		draw_rect(room_rect, Color(1, 1, 1, 0.35 * f * f))
 
+	# perigo: brilho vermelho pulsando na borda da tela de onde a placa vem
+	if danger > 0.02 and danger_dir >= 0 and not rotating:
+		draw_set_transform_matrix(Transform2D())
+		var pulse := 0.55 + 0.45 * sin(frame * (0.12 + 0.22 * danger))
+		var half := VIEW / 2.0
+		for k in 5:
+			var w := 4.0 + k * 4.0
+			var col := Color(C_SPIKE, 0.11 * danger * pulse)
+			match danger_dir:
+				0:
+					draw_rect(Rect2(-half.x, half.y - w, VIEW.x, w), col)
+				1:
+					draw_rect(Rect2(-half.x, -half.y, w, VIEW.y), col)
+				2:
+					draw_rect(Rect2(-half.x, -half.y, VIEW.x, w), col)
+				_:
+					draw_rect(Rect2(half.x - w, -half.y, w, VIEW.y), col)
+		draw_set_transform_matrix(base)
+
 
 ## Blocos motorizados e os encaixes deles: trilho, moldura em cada ponta (acende quando a peça
 ## está encaixada), a peça de aço com a borda na cor do canal e rebites; espinhos se tiver.
@@ -2212,8 +2369,36 @@ func _draw_movers() -> void:
 			var fx: float = 0.0
 			if lit and m["fx"] >= 0 and m["fx"] < 14:
 				fx = 1.0 - float(m["fx"]) / 14.0
+			# no aviso, os dois encaixes piscam: é a deixa de que este canal vai mudar
+			if mover_warning(m["ch"]) and (frame / 3) % 2 == 0:
+				lit = true
+				fx = maxf(fx, 0.8)
 			_draw_dock(Rect2(dock), col, lit, fx)
 		_draw_mover_body(m, col)
+		if m["launch"] > 0.0:
+			# catapulta: duas setas para cima pintadas na peça
+			var mr := Rect2(m["r"])
+			for q in 2:
+				var cx := mr.position.x + mr.size.x * (0.3 + 0.4 * q)
+				draw_polyline(PackedVector2Array([Vector2(cx - 2, mr.position.y + mr.size.y - 2), Vector2(cx, mr.position.y + mr.size.y - 4), Vector2(cx + 2, mr.position.y + mr.size.y - 2)]), C_PAINT, 1.0)
+
+
+## Chapas soltas: aço fino enferrujado, com uma trinca; tremem depois de pisadas.
+func _draw_crumbles() -> void:
+	for c in crumbles:
+		var r := Rect2(c["rect"])
+		if (r.get_center() - cam).length() > VIEW.length() / 2.0 + 40.0:
+			continue
+		if c["t"] >= 0:
+			r.position += Vector2(float((frame / 2) % 2) * 2.0 - 1.0, float(c["t"]) / float(CRUMBLE_FRAMES) * 2.0)
+		draw_rect(r, C_SEAM)
+		draw_rect(r.grow(-1.0), C_RUST)
+		draw_rect(Rect2(r.position + Vector2(1, 1), Vector2(r.size.x - 2, 1)), C_STEEL_LIGHT)
+		# trinca em zigue-zague no meio, e um rebite em cada ponta
+		var mx := r.position.x + r.size.x / 2.0
+		draw_polyline(PackedVector2Array([Vector2(mx - 1, r.position.y + 1), Vector2(mx + 1, r.position.y + r.size.y / 2.0), Vector2(mx - 1, r.end.y - 1)]), C_SEAM, 1.0)
+		draw_rect(Rect2(r.position + Vector2(2, r.size.y / 2.0 - 0.5), Vector2(1, 1)), C_RIVET)
+		draw_rect(Rect2(Vector2(r.end.x - 3, r.position.y + r.size.y / 2.0 - 0.5), Vector2(1, 1)), C_RIVET)
 
 
 func _draw_dock(d: Rect2, col: Color, lit: bool, fx: float) -> void:

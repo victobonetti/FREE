@@ -3,10 +3,12 @@ extends Node2D
 ## step(room) a cada quadro de jogo, on_reset(room) quando reinicia e on_rotate(room, dir)
 ## quando gira.
 ##
-## Esta fase é uma fuga: o Gatsby nunca é alcançado e não machuca. Ele flutua numa cápsula em
-## volta do coelho, sem respeitar paredes, e segue um roteiro (campo "gatsby" da sala), que
-## avança conforme o coelho avança. A alavanca fica dentro da nave: ele a puxa de onde estiver.
-## Quem chega perto dele o vê se afastar; ele só sai de cena no passo "flee".
+## Esta fase é uma corrida: o Gatsby nunca é alcançado e não machuca. Ele voa numa cápsula À
+## FRENTE do coelho, no rumo da próxima área do roteiro (campo "gatsby" da sala), olhando para
+## trás, sem respeitar paredes. O roteiro avança conforme o coelho avança. A alavanca fica dentro
+## da nave: ele a puxa de onde estiver, e um raio na cor do canal liga a nave às peças acionadas.
+## Ele NUNCA encosta no coelho: há uma distância mínima garantida a cada quadro (KEEP_MIN), em
+## qualquer fase do roteiro; se o coelho vem para cima dele, ele dá um arranque para longe.
 ##
 ##   "gatsby": {"start": [coluna, linha], "script": [passo, passo, ...]}
 ##
@@ -35,16 +37,19 @@ const FLEE_ACCEL := 520.0
 const LEVER_FRAMES := 36      # duração do gesto de puxar a alavanca
 const LEVER_HIT := 18         # quadro em que a alavanca vira e os efeitos acontecem
 const JOLT_FRAMES := 45       # jogado dentro da cápsula depois de um giro
-# Flutuar em volta do coelho: uma mola que puxa a cápsula para um ponto que gira ao redor dele.
-const ORBIT_K := 15.0         # força da mola
-const ORBIT_C := 5.2          # amortecimento (menor que o crítico: ele balança)
-const ORBIT_MAX := 170.0      # px/s
-const KEEP_AWAY := 34.0       # chegando mais perto que isto, ele é empurrado para longe
-const KEEP_MIN := 26.0        # e nunca fica mais perto que isto
-# raio (px) e velocidade angular (rad/quadro) por humor
-const ORBIT := {
-	"bored": [60.0, 0.009], "smug": [56.0, 0.013], "amused": [52.0, 0.017], "annoyed": [48.0, 0.023],
-	"furious": [44.0, 0.034], "nervous": [58.0, 0.029], "panic": [64.0, 0.040], "smirk": [54.0, 0.015],
+# Voar à frente do coelho: uma mola puxa a cápsula para um ponto adiante dele, no rumo da corrida.
+const ORBIT_K := 22.0         # força da mola
+const ORBIT_C := 7.5          # amortecimento (um pouco abaixo do crítico: ele balança de leve)
+const ORBIT_MAX := 420.0      # px/s: mais rápido que o coelho em qualquer situação (queda, catapulta)
+const BODY := Vector2(0, 8)   # centro do corpo da cápsula em relação a `pos` (o centro da cúpula)
+const KEEP_AWAY := 66.0       # coelho mais perto que isto: ele é empurrado para longe
+const KEEP_MIN := 50.0        # distância mínima garantida entre os centros (a cápsula inteira, com
+                              # a chama, cabe num raio de 35 px; o coelho, num de 9)
+const DASH_CD := 40           # quadros entre dois arranques
+# distância à frente (px), balanço lateral (px) e velocidade do balanço (rad/quadro) por humor
+const LEAD := {
+	"bored": [78.0, 5.0, 0.03], "smug": [76.0, 7.0, 0.04], "amused": [74.0, 9.0, 0.06], "annoyed": [72.0, 8.0, 0.09],
+	"furious": [70.0, 6.0, 0.16], "nervous": [80.0, 10.0, 0.13], "panic": [86.0, 12.0, 0.20], "smirk": [78.0, 6.0, 0.05],
 }
 
 const C_GLASS := Color("9fd4ff")
@@ -89,7 +94,13 @@ var lever_on := false     # lado da alavanca (só desenho)
 var jolt := 0
 var anim := 0
 var nozzle := 0.0         # ângulo do propulsor, suavizado
-var theta := 0.0          # onde ele está na volta em torno do coelho
+var theta := 0.0          # fase do balanço
+var lead := Vector2(0.6, -0.8)   # rumo da corrida (unitário), suavizado
+var dash_cd := 0
+var dash_fx := 0          # quadros de chama forte depois de um arranque
+var sig_ch := -1          # canal do último acionamento (a cor do raio e da luz da antena)
+var sig_t := 0            # quadros restantes do raio
+var min_gap := 1e9        # menor distância ao coelho desde o reset (os testes conferem)
 var pulses: Array = []    # repetições em andamento: {"at": quadros até a alavanca virar, "src", "left", "gap"}
 var lever_vis := 0        # quadros de gesto da alavanca (para o desenho, também nas repetições)
 
@@ -121,6 +132,12 @@ func on_reset(r) -> void:
 	jolt = 0
 	nozzle = 0.0
 	theta = -1.2
+	lead = Vector2(0.6, -0.8)
+	dash_cd = 0
+	dash_fx = 0
+	sig_ch = -1
+	sig_t = 0
+	min_gap = 1e9
 	pulses.clear()
 	lever_vis = 0
 	phase = "when" if not steps.is_empty() else "idle"
@@ -142,6 +159,7 @@ func on_rotate(r, dir: int) -> void:
 		var pts: Array = e["path"]
 		for i in pts.size():
 			pts[i] = r._rot_point(pts[i], dir)
+	lead = Vector2(-lead.y, lead.x) if dir > 0 else Vector2(lead.y, -lead.x)
 	jolt = JOLT_FRAMES
 
 
@@ -149,6 +167,9 @@ func step(r) -> void:
 	room = r
 	anim += 1
 	jolt = maxi(jolt - 1, 0)
+	dash_cd = maxi(dash_cd - 1, 0)
+	dash_fx = maxi(dash_fx - 1, 0)
+	sig_t = maxi(sig_t - 1, 0)
 	lever_vis = maxi(lever_vis - 1, 0)
 	_update_pulses()
 	match phase:
@@ -185,6 +206,8 @@ func step(r) -> void:
 				phase = "gone"
 		_:
 			_orbit()
+	if phase != "gone":
+		_keep_clear()
 	if cut:
 		r.cam_focus = pos.lerp(Vector2(r.rabbit.pos) + Vector2(6, 6), 0.4)
 	nozzle = lerpf(nozzle, clampf(vel.x / FLY_SPEED, -1.0, 1.0) * 0.9, 0.2)
@@ -237,8 +260,12 @@ func _pause() -> void:
 ## A alavanca vira: o gesto, o som, as faíscas e os efeitos do passo.
 func _pull(src: Dictionary) -> void:
 	lever_on = not lever_on
-	room.sfx.emit("platform")
+	room.sfx.emit("lever")
 	room.shake = maxf(room.shake, 1.0)
+	if src.has("toggle"):
+		var tg = src["toggle"]
+		sig_ch = int(tg[0] if tg is Array else tg)
+		sig_t = 22
 	_sparks()
 	_effects(src)
 
@@ -275,7 +302,9 @@ func _effects(s: Dictionary = {}) -> void:
 
 func _next() -> void:
 	var s: Dictionary = steps[si]["src"]
-	if cut:
+	# a cutscene só termina quando o passo seguinte já não é de cena (uma cena pode ter vários passos)
+	var more_cut: bool = si + 1 < steps.size() and steps[si + 1]["src"].get("cut", false) and not s.get("flee", false)
+	if cut and not more_cut:
 		cut = false
 		intro_seen = true
 		room.input_lock = false
@@ -287,26 +316,80 @@ func _next() -> void:
 	phase = "when" if si < steps.size() else "idle"
 
 
-## Flutua em volta do coelho: não olha paredes e não deixa ninguém encostar nele.
+## O rumo da corrida: do coelho para a próxima área do roteiro.
+func _race_dir() -> Vector2:
+	var c := Vector2(room.rabbit.pos) + Vector2(6, 6)
+	for k in range(si, steps.size()):
+		var z = steps[k]["zone"]
+		if z != null:
+			var d: Vector2 = Vector2(z.position) + Vector2(z.size) / 2.0 - c
+			if d.length() > 24.0:
+				return d.normalized()
+	return lead
+
+
+## Voa à frente do coelho, no rumo da próxima área, com um balanço de lado. Não olha paredes.
 func _orbit() -> void:
 	var c := Vector2(room.rabbit.pos) + Vector2(6, 6)
-	var mo: Array = ORBIT.get(mood, [54.0, 0.015])
-	theta += float(mo[1])
-	var rad: float = float(mo[0]) * (1.0 + 0.12 * sin(anim * 0.011))
-	var tgt := c + Vector2(cos(theta) * rad * 1.25, sin(theta) * rad * 0.72 - 8.0)
+	var mo: Array = LEAD.get(mood, [76.0, 7.0, 0.05])
+	lead = lead.slerp(_race_dir(), 0.035).normalized()
+	theta += float(mo[2])
+	var side := Vector2(-lead.y, lead.x)
+	# elipse: mais longe na horizontal (a tela é larga) do que na vertical
+	var ahead := Vector2(lead.x * float(mo[0]) * 1.15, lead.y * float(mo[0]) * 0.82)
+	var tgt := c + ahead + side * sin(theta) * float(mo[1]) - BODY
+	# prefere o ar livre: se o ponto à frente cai dentro de uma parede, procura um ao lado
+	if _in_wall(tgt):
+		for off in [0.6, -0.6, 1.2, -1.2, 1.9, -1.9, 2.6, -2.6, PI]:
+			var d2 := lead.rotated(off)
+			var cand := c + Vector2(d2.x * float(mo[0]) * 1.15, d2.y * float(mo[0]) * 0.82) - BODY
+			if not _in_wall(cand):
+				tgt = cand
+				break
 	vel += ((tgt - pos) * ORBIT_K - vel * ORBIT_C) * DT
-	var away := pos - c
-	var dist := away.length()
-	if dist < 0.5:
-		away = Vector2(0, -1)
-		dist = 1.0
-	if dist < KEEP_AWAY:
-		vel += away / dist * (KEEP_AWAY - dist) * 22.0 * DT * 6.0
 	if vel.length() > ORBIT_MAX:
 		vel = vel.normalized() * ORBIT_MAX
 	pos += vel * DT
-	if pos.distance_to(c) < KEEP_MIN:
-		pos = c + (pos - c).normalized() * KEEP_MIN
+
+
+## A cápsula, centrada em `p`, ficaria com o corpo dentro de uma parede?
+func _in_wall(p: Vector2) -> bool:
+	return room.tile_solid_rect(Rect2i(Vector2i(p.round()) + Vector2i(-13, -10), Vector2i(26, 32)))
+
+
+## A garantia de que ele nunca encosta no coelho, em qualquer fase: se o coelho chega perto,
+## ele arranca para longe; e a distância entre os centros nunca fica abaixo de KEEP_MIN.
+func _keep_clear() -> void:
+	var c := Vector2(room.rabbit.pos) + Vector2(6, 6)
+	var away := pos + BODY - c
+	var dist := away.length()
+	if dist < 0.5:
+		away = -lead if lead.length() > 0.1 else Vector2(0, -1)
+		dist = 1.0
+	var n := away / dist
+	if dist < KEEP_AWAY and phase != "flee":
+		# arranque: para longe do coelho, puxando para o rumo da corrida
+		var push := (n + lead * 0.6).normalized()
+		vel += push * (KEEP_AWAY - dist) * 30.0 * DT
+		if dash_cd == 0 and dist < KEEP_AWAY - 6.0:
+			dash_cd = DASH_CD
+			dash_fx = 14
+			vel += push * 120.0
+			room.sfx.emit("gatsby_dash")
+	if dist < KEEP_MIN:
+		pos = c + n * KEEP_MIN - BODY
+		# tira a parte da velocidade que vai na direção do coelho
+		var into := vel.dot(-n)
+		if into > 0.0:
+			vel += n * into
+		dist = KEEP_MIN
+	min_gap = minf(min_gap, dist)
+
+
+## A sala chama quando o coelho morre: ele ri. Nunca absorve a morte.
+func absorb_kill(r) -> bool:
+	r.sfx.emit("gatsby_laugh")
+	return false
 
 
 ## Para onde ele foge: para longe do coelho, e para cima.
@@ -384,9 +467,29 @@ func _draw() -> void:
 	elif m == "amused":
 		shake = Vector2(0, (anim / 5) % 2)
 
+	# o raio do acionamento: da antena até cada peça do canal, na cor dele
+	if sig_t > 0 and sig_ch >= 0:
+		draw_set_transform_matrix(base)
+		var col := Color(_sig_color(), float(sig_t) / 22.0)
+		var from := pos + Vector2(-14, -19)
+		for mv in room.movers:
+			if mv["ch"] != sig_ch:
+				continue
+			var to: Vector2 = Vector2(mv["r"].position) + Vector2(mv["r"].size) / 2.0
+			if to.distance_to(from) > 420.0:
+				continue
+			var pts := PackedVector2Array([from])
+			var segs := 6
+			var nrm := (to - from).orthogonal().normalized()
+			for k in range(1, segs):
+				var jit := sin(float(anim * 3 + k * 7)) * 5.0
+				pts.append(from.lerp(to, float(k) / segs) + nrm * jit)
+			pts.append(to)
+			draw_polyline(pts, col, 1.0)
+
 	# propulsor: gira contra o movimento
 	draw_set_transform_matrix(cap * Transform2D(nozzle, Vector2(0, 19)))
-	var fl := 6.0 + float((anim / 2) % 3) * 2.0 + clampf(-vel.y / 30.0, -2.0, 4.0)
+	var fl := 6.0 + float((anim / 2) % 3) * 2.0 + clampf(-vel.y / 30.0, -2.0, 4.0) + (4.0 if dash_fx > 0 else 0.0)
 	draw_colored_polygon(PackedVector2Array([Vector2(-3, 6), Vector2(0, 6 + fl), Vector2(3, 6)]), C_FLAME)
 	draw_colored_polygon(PackedVector2Array([Vector2(-1.5, 6), Vector2(0, 6 + fl * 0.55), Vector2(1.5, 6)]), C_FLAME_CORE)
 	draw_rect(Rect2(-4, 0, 9, 3), C_HULL_LIGHT)
@@ -404,7 +507,7 @@ func _draw() -> void:
 	# alavanca dentro da nave
 	var knob := Vector2(12, -1) if lever_on else Vector2(7, -1)
 	draw_line(Vector2(9.5, 6), knob + Vector2(0.5, 1), C_RIVET, 1.0)
-	draw_rect(Rect2(knob - Vector2(1, 1), Vector2(3, 3)), C_KNOB)
+	draw_rect(Rect2(knob - Vector2(1, 1), Vector2(3, 3)), _sig_color() if sig_t > 0 else C_KNOB)
 	if phase == "lever" or lever_vis > 0:
 		draw_rect(Rect2(knob + Vector2(-3, 1), Vector2(3, 2)), C_FUR)   # a pata na alavanca
 	draw_arc(Vector2(0, -3), 13.0, PI * 0.95, PI * 2.05, 24, Color(C_GLASS, 0.85), 1.0)
@@ -434,8 +537,16 @@ func _draw() -> void:
 	draw_rect(Rect2(-18, 9, 4, 3), C_HULL_DARK)
 	draw_rect(Rect2(15, 9, 4, 3), C_HULL_DARK)
 	draw_line(Vector2(-11.5, -11), Vector2(-14.5, -19), C_RIVET, 1.0)
-	_px(Vector2(-15, -20), C_KNOB if (anim / 20) % 2 == 0 else C_HULL_DARK)
+	if sig_t > 0:
+		draw_rect(Rect2(-16, -21, 3, 3), _sig_color())   # a antena acende na cor do canal acionado
+	else:
+		_px(Vector2(-15, -20), C_KNOB if (anim / 20) % 2 == 0 else C_HULL_DARK)
 	draw_set_transform_matrix(Transform2D())
+
+
+func _sig_color() -> Color:
+	var pal: Array = room.C_CHANNEL
+	return pal[maxi(sig_ch, 0) % pal.size()]
 
 
 ## Texugo: cabeça clara com duas faixas escuras (os olhos brilham dentro delas), pelo espetado.

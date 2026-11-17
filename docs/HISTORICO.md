@@ -390,6 +390,18 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 
 ---
 
+## Rodada 34 — Gatsby: a corrida (17/11/2026)
+
+**Entrada do Victor:** fase mais frenética, com urgência na escalada; refazer o design inteiro para o melhor uso das mecânicas; corrida dinâmica; efeitos sonoros; melhorar o movimento do Gatsby, que não pode encostar no coelho; rever os componentes (conectores coloridos, que serão reaproveitados).
+
+**Feito (D75):** fase nova em `levels/wip/gatsby.json` (13 trechos: chapas soltas, duas catapultas, duas corridas pela parede, varredor, estampadores, a queda); componentes novos na sala (chapas soltas, catapulta, aviso dos conectores, perigo); 12 efeitos sonoros e o ronco da placa em `sfx_factory.gd`; Gatsby voando à frente, com distância mínima garantida e raio na cor do canal; gerador da fase e robô que grava a rota; `?play=gatsby` na web. Testes novos; todos passam.
+
+**Conferido:** o robô vence em 40,6 s (menor folga para a placa: 48 px no poço, 80 no corredor); a cápsula não encosta no coelho em nenhum quadro da rota; 22 capturas ao longo da rota. **Não jogado por ninguém:** dificuldade, ritmo e volume dos sons são palpites.
+
+**Falta:** música; jogar e ajustar; o editor editar placas, conectores, chapas e roteiro; checkpoint (em aberto desde D73).
+
+---
+
 ## Pendências gerais
 
 | Item | Estado |
