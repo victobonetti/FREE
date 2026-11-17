@@ -16,7 +16,7 @@ func setup(g: String) -> void:
 
 func _draw() -> void:
 	var inner := Rect2(Vector2(4, 4), size - Vector2(8, 8))
-	if glyph == "P" or glyph == "B" or glyph == "S" or "abcdefghi".contains(glyph):
+	if "PBSLH".contains(glyph) or "abcdefghi".contains(glyph):
 		GlyphDraw.draw_block(self, glyph, inner)
 	elif glyph == "D":
 		GlyphDraw.draw(self, "D", inner)

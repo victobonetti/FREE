@@ -9,6 +9,7 @@ extends RefCounted
 ##  - tudo que muda a grade entra no histórico como um traço.
 
 const LevelData := preload("res://scripts/level_data.gd")
+const Objects := preload("res://scripts/editor/objects.gd")
 
 const CW := {"^": ">", ">": "v", "v": "<", "<": "^", "=": "}", "}": "_", "_": "{", "{": "=", "|": "-", "-": "|"}
 const CCW := {">": "^", "v": ">", "<": "v", "^": "<", "}": "=", "_": "}", "{": "_", "=": "{", "-": "|", "|": "-"}
@@ -124,8 +125,11 @@ func redo() -> bool:
 
 
 func _apply(e: Dictionary, backwards: bool) -> void:
+	if e.has("extra_before"):
+		data.extra = (e["extra_before"] if backwards else e["extra_after"]).duplicate(true)
 	if e.has("rows_before"):
 		data.rows = (e["rows_before"] if backwards else e["rows_after"]).duplicate()
+	if e.has("rows_before") or e.has("extra_before"):
 		return
 	var cells: Array = e["cells"]
 	for i in cells.size():
@@ -415,12 +419,81 @@ static func mirror_clip(clip: Array) -> Array:
 
 # ---------------------------------------------------------------- a sala inteira
 
-func _snapshot_change(new_rows: Array) -> void:
+## Troca a grade inteira (e, se `new_extra` vem, os objetos junto) como uma entrada do histórico.
+func _snapshot_change(new_rows: Array, new_extra: Variant = null) -> void:
 	var before: Array = data.rows.duplicate()
+	var extra_before: Dictionary = data.extra.duplicate(true)
 	data.rows = new_rows
-	if before == new_rows:
+	if new_extra is Dictionary:
+		data.extra = new_extra
+	if before == new_rows and (not (new_extra is Dictionary) or extra_before == new_extra):
 		return
-	_push({"rows_before": before, "rows_after": new_rows.duplicate()})
+	var e := {"rows_before": before, "rows_after": new_rows.duplicate()}
+	if new_extra is Dictionary:
+		e["extra_before"] = extra_before
+		e["extra_after"] = new_extra.duplicate(true)
+	_push(e)
+
+
+# ---------------------------------------------------------------- objetos (placas, conectores, chapas...)
+
+func objects_of(kind: String) -> Array:
+	return data.extra.get(kind, [])
+
+
+## Troca a lista inteira de um tipo, como uma entrada do histórico.
+func set_objects(kind: String, list: Array) -> void:
+	var before: Dictionary = data.extra.duplicate(true)
+	var after: Dictionary = data.extra.duplicate(true)
+	if list.is_empty():
+		after.erase(kind)
+	else:
+		after[kind] = list.duplicate(true)
+	if before == after:
+		return
+	data.extra = after
+	_push({"extra_before": before, "extra_after": after.duplicate(true)})
+
+
+func add_object(kind: String, obj: Variant) -> int:
+	var list: Array = objects_of(kind).duplicate(true)
+	list.append(obj)
+	set_objects(kind, list)
+	return list.size() - 1
+
+
+func remove_object(kind: String, i: int) -> void:
+	var list: Array = objects_of(kind).duplicate(true)
+	if i < 0 or i >= list.size():
+		return
+	list.remove_at(i)
+	set_objects(kind, list)
+
+
+## Muda um campo de um objeto (ou o retângulo inteiro, nos tipos em que o item é o retângulo).
+func set_object_field(kind: String, i: int, key: String, value: Variant) -> void:
+	var list: Array = objects_of(kind).duplicate(true)
+	if i < 0 or i >= list.size():
+		return
+	if Objects.is_scalar(kind):
+		list[i] = value
+	else:
+		list[i][key] = value
+	set_objects(kind, list)
+
+
+## Muda um valor solto da fase em `extra` (tema, roteiro...). `null` apaga.
+func set_extra_value(key: String, value: Variant) -> void:
+	var before: Dictionary = data.extra.duplicate(true)
+	var after: Dictionary = data.extra.duplicate(true)
+	if value == null or (value is String and value == ""):
+		after.erase(key)
+	else:
+		after[key] = value
+	if before == after:
+		return
+	data.extra = after
+	_push({"extra_before": before, "extra_after": after.duplicate(true)})
 
 
 ## Gira a sala inteira 90° (dir > 0 horário). As peças com direção giram junto.
@@ -433,11 +506,11 @@ func rotate_room(dir: int) -> void:
 	var rot := rotate_clip(full, dir)
 	if rot.size() > LevelData.MAX_H or (rot.size() > 0 and String(rot[0]).length() > LevelData.MAX_W):
 		return
-	_snapshot_change(rot)
+	_snapshot_change(rot, Objects.rotate(data.extra, dir, w, h))
 
 
 func mirror_room() -> void:
-	_snapshot_change(mirror_clip(data.rows))
+	_snapshot_change(mirror_clip(data.rows), Objects.mirror(data.extra, data.width()))
 
 
 ## Muda o tamanho mantendo o chão (canto inferior esquerdo). Cresce para cima e para a direita.
@@ -460,4 +533,4 @@ func resize(new_w: int, new_h: int) -> void:
 			var sc := c
 			line += data.cell(sc, sr) if (sr > 0 and sr < old_h - 1 and sc > 0 and sc < old_w - 1) else "."
 		out.append(line)
-	_snapshot_change(out)
+	_snapshot_change(out, Objects.shift_rows(data.extra, new_h - old_h))

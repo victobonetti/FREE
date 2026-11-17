@@ -432,8 +432,7 @@ func reset() -> void:
 	_init_movers()
 	_init_dynamics()
 	for pd in def.get("plates", []):
-		var pr: Array = pd["rect"]
-		plates.append({"rect": Rect2i(int(pr[0]) * TILE, int(pr[1]) * TILE, int(pr[2]) * TILE, TILE),
+		plates.append({"rect": _tile_rect(pd["rect"]),
 			"ch": int(pd.get("ch", 0)), "once": str(pd.get("mode", "hold")) == "once", "down": false, "latched": false, "k": 0.0})
 	for cr in def.get("crumbles", []):
 		crumbles.append({"rect": Rect2i(int(cr[0]) * TILE, int(cr[1]) * TILE, int(cr[2]) * TILE, int(cr[3]) * TILE), "t": -1})

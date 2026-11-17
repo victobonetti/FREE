@@ -10,6 +10,7 @@ const Replay := preload("res://scripts/replay.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const EditModel := preload("res://scripts/editor/edit_model.gd")
 const EditTools := preload("res://scripts/editor/edit_tools.gd")
+const Objects := preload("res://scripts/editor/objects.gd")
 
 var failures := 0
 
@@ -27,6 +28,7 @@ func _initialize() -> void:
 	test_inverse_in_editor()
 	test_time_params()
 	test_extra_fields()
+	test_objects()
 	test_campaign_store()
 	test_replay()
 	await test_flow()
@@ -780,3 +782,99 @@ func test_time_params() -> void:
 	room.setup(d.to_def())
 	check(room.reload_frames == 180 and room.limiter_frames == 60, "a sala lê os dois tempos")
 	room.free()
+
+
+# ------------------------------------------------------------ objetos no editor (D76)
+
+func _obj_model() -> RefCounted:
+	var d: RefCounted = LevelData.blank(30, 16)
+	return EditModel.new(d)
+
+
+func test_objects() -> void:
+	print("objetos: criar, editar, desfazer")
+	var m: RefCounted = _obj_model()
+	for kind in Objects.ORDER:
+		var o: Variant = Objects.make_default(kind, 5, 8)
+		m.add_object(kind, o)
+	check(m.objects_of("movers").size() == 1 and m.objects_of("crumbles").size() == 1, "cada tipo ganha seu objeto")
+	var probs := ""
+	for e in m.data.validate():
+		if e["erro"]:
+			probs += String(e["msg"]) + " | "
+	check(probs == "", "os objetos padrão são válidos (erros: %s)" % probs)
+	var rt := LevelData.from_json(m.data.to_json())
+	check(rt.extra.has("fans") and rt.extra["vents"][0]["period"] == 3.0, "tudo vai para o JSON e volta")
+	var room: Node2D = RoomScript.new()
+	var def: Dictionary = m.data.to_def()
+	room.setup(def)
+	check(room.conveyors.size() == 1 and room.springs.size() == 1 and room.fans.size() == 1 and room.vents.size() == 1 and room.movers.size() == 1 and room.crumbles.size() == 1 and room.plates.size() == 1 and room.crushers.size() == 1, "o jogo lê todos os objetos criados pelo editor")
+	room.free()
+	var n_undo: int = m.undo_stack.size()
+	m.set_object_field("springs", 0, "power", 350.0)
+	check(m.objects_of("springs")[0]["power"] == 350.0, "editar um campo muda o objeto")
+	m.set_object_field("crumbles", 0, "rect", [7, 7, 4, 1])
+	check(m.objects_of("crumbles")[0] == [7, 7, 4, 1], "nas chapas o item é o próprio retângulo")
+	check(m.undo(), "desfazer")
+	check(m.objects_of("crumbles")[0] == [5, 8, 3, 1], "desfazer devolve a chapa")
+	m.undo()
+	check(m.objects_of("springs")[0]["power"] == 280.0, "e a força da mola")
+	m.redo()
+	check(m.objects_of("springs")[0]["power"] == 350.0, "refazer")
+	m.remove_object("vents", 0)
+	check(m.objects_of("vents").is_empty() and not m.data.extra.has("vents"), "apagar o último tira a chave inteira")
+	m.undo()
+	check(m.objects_of("vents").size() == 1, "e dá para desfazer")
+	check(m.undo_stack.size() > n_undo, "cada edição entra no histórico")
+	m.set_extra_value("theme", "industrial")
+	check(m.data.extra["theme"] == "industrial", "o tema vai para os campos extras")
+	m.set_extra_value("theme", null)
+	check(not m.data.extra.has("theme"), "e null o tira")
+
+	print("objetos: girar, espelhar e redimensionar a sala")
+	var g: RefCounted = LevelData.blank(30, 16)
+	var gm: RefCounted = EditModel.new(g)
+	gm.add_object("movers", {"ch": 2, "off": [4, 8, 3, 1], "on": [4, 3], "speed": 40.0, "spikes": 0})
+	gm.add_object("springs", {"rect": [10, 12, 2, 1], "power": 280.0, "dir": 0})
+	gm.add_object("conveyors", {"rect": [14, 14, 6, 1], "dir": 1, "speed": 40.0})
+	gm.add_object("crumbles", [20, 5, 3, 1])
+	g.extra["spin_block"] = [9, 4, 4]
+	var rows0: Array = g.rows.duplicate()
+	var extra0: Dictionary = g.extra.duplicate(true)
+	for i in 4:
+		gm.rotate_room(1)
+	check(g.rows == rows0 and g.extra == extra0, "quatro giros devolvem a grade e os objetos")
+	for i in 4:
+		gm.rotate_room(-1)
+	check(g.extra == extra0, "quatro giros ao contrário também")
+	gm.rotate_room(1)
+	check(g.width() == 16 and g.height() == 30, "um giro troca largura e altura (%dx%d)" % [g.width(), g.height()])
+	var sp: Dictionary = g.extra["springs"][0]
+	check(sp["rect"] == [16 - 1 - 12, 10, 1, 2] or sp["rect"] == [3, 10, 1, 2], "a mola vai para o lugar certo depois de girar (%s)" % str(sp["rect"]))
+	check(sp["dir"] == 1, "e a direção dela gira junto (de cima para a direita)")
+	check(g.extra["conveyors"][0]["dir"] == 2, "a esteira fica vertical (sentido 2)")
+	var cr: Array = g.extra["crumbles"][0]
+	check(cr[2] == 1 and cr[3] == 3, "a chapa troca largura e altura")
+	var mv: Dictionary = g.extra["movers"][0]
+	check(mv["spikes"] == 1 and mv["on"].size() == 2, "os espinhos do conector giram junto")
+	check(g.extra["spin_block"][2] == 4, "o bloco giratório continua quadrado")
+	# o jogo e o editor concordam: o objeto girado no editor cai onde a sala girada em jogo põe
+	var gdef: Dictionary = LevelData.blank(30, 16).to_def()
+	gdef["springs"] = [{"rect": [10, 12, 2, 1], "power": 280.0, "dir": 0}]
+	var rr: Node2D = RoomScript.new()
+	rr.setup(gdef)
+	rr._rotate_logic(1)
+	var game_rect: Rect2i = rr.springs[0]["rect"]
+	rr.free()
+	var ed_rect: Array = g.extra["springs"][0]["rect"]
+	check(game_rect == Rect2i(ed_rect[0] * 8, ed_rect[1] * 8, ed_rect[2] * 8, ed_rect[3] * 8), "o editor gira o objeto como o jogo gira a sala")
+	gm.undo()
+	check(g.width() == 30 and g.extra == extra0, "desfazer o giro devolve a grade e os objetos")
+	gm.mirror_room()
+	var mc: Array = g.extra["conveyors"][0]["rect"]
+	check(mc == [10, 14, 6, 1] and g.extra["conveyors"][0]["dir"] == 3, "espelhar leva a esteira para o outro lado e inverte o sentido")
+	gm.undo()
+	gm.resize(30, 20)
+	check(g.extra["springs"][0]["rect"] == [10, 16, 2, 1], "redimensionar mantém o chão: tudo desce junto")
+	gm.undo()
+	check(g.extra == extra0, "e desfaz")

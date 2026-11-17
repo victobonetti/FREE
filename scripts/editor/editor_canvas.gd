@@ -6,6 +6,10 @@ extends Control
 const GlyphDraw := preload("res://scripts/editor/glyph_draw.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const EditTools := preload("res://scripts/editor/edit_tools.gd")
+const Objects := preload("res://scripts/editor/objects.gd")
+
+## Siglas dos objetos, no canto de cada contorno.
+const TAGS := {"crushers": "PL", "movers": "CN", "crumbles": "CH", "plates": "BT", "conveyors": "ES", "springs": "ML", "fans": "VT", "vents": "VP"}
 
 signal hovered(cell: Vector2i)
 signal problem_clicked(index: int)
@@ -20,6 +24,7 @@ var offset := Vector2(40, 40)
 var show_grid := true
 var auto_fit := true        # enquadra sozinho até o jogador dar zoom ou mover
 var problems: Array = []
+var overlay_sel: Array = ["", -1]   # [tipo, índice] do objeto escolhido na janela de objetos
 
 var _last_version := -1
 var _origins := {}          # célula -> canto da peça de 2x2
@@ -54,6 +59,39 @@ func fit() -> void:
 	cell_size = clampf(floorf(minf((size.x - 24.0) / w, (size.y - 24.0) / h)), MIN_CELL, MAX_CELL)
 	offset = ((size - Vector2(w, h) * cell_size) * 0.5).floor()
 	queue_redraw()
+
+
+## Contorno colorido de cada objeto (placas, conectores, chapas, botões...), com a sigla e o número;
+## o escolhido na janela de objetos fica mais forte. O encaixe "ligado" do conector é tracejado.
+func _draw_objects() -> void:
+	var font := ThemeDB.fallback_font
+	for kind in Objects.ORDER:
+		var list: Array = model.data.extra.get(kind, [])
+		var col: Color = Objects.TYPES[kind]["color"]
+		for i in list.size():
+			var o: Variant = list[i]
+			var r := Objects.rect_of(kind, o)
+			if r.is_empty():
+				continue
+			var chosen: bool = overlay_sel[0] == kind and int(overlay_sel[1]) == i
+			var rr := Rect2(offset + Vector2(r[0], r[1]) * cell_size, Vector2(r[2], r[3]) * cell_size)
+			draw_rect(rr, Color(col, 0.2 if chosen else 0.09))
+			draw_rect(rr, Color(col, 1.0 if chosen else 0.65), false, 2.5 if chosen else 1.5)
+			draw_string(font, rr.position + Vector2(3, 12), "%s%d" % [TAGS[kind], i + 1], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(col, 1.0))
+			if kind == "movers" and (o as Dictionary).get("on", null) is Array:
+				var on: Array = o["on"]
+				var onr := Rect2(offset + Vector2(int(on[0]), int(on[1])) * cell_size, Vector2(r[2], r[3]) * cell_size)
+				for q in 4:
+					var pts: Array = [onr.position, onr.position + Vector2(onr.size.x, 0), onr.end, onr.position + Vector2(0, onr.size.y)]
+					draw_dashed_line(pts[q], pts[(q + 1) % 4], Color(col, 1.0 if chosen else 0.65), 1.5, 5.0)
+				draw_line(rr.get_center(), onr.get_center(), Color(col, 0.5), 1.0)
+			# seta do sentido, quando o objeto tem um
+			if not Objects.is_scalar(kind) and (o as Dictionary).has("dir"):
+				var dv: Vector2 = [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][posmod(int(o["dir"]), 4)]
+				var c := rr.get_center()
+				var tip := c + dv * minf(cell_size * 0.9, 14.0)
+				var side := Vector2(dv.y, -dv.x) * minf(cell_size * 0.4, 6.0)
+				draw_colored_polygon(PackedVector2Array([tip, c - dv * 3.0 + side, c - dv * 3.0 - side]), Color(col, 0.9))
 
 
 func cell_at(p: Vector2) -> Vector2i:
@@ -135,6 +173,7 @@ func _draw() -> void:
 		var corners: Array[Vector2] = [br.position, br.position + Vector2(br.size.x, 0), br.end, br.position + Vector2(0, br.size.y)]
 		for k in 4:
 			draw_dashed_line(corners[k], corners[(k + 1) % 4], col, 2.0, 6.0)
+	_draw_objects()
 	if show_grid and cell_size >= 10.0:
 		var gc := Color(1, 1, 1, 0.06)
 		for c in range(w + 1):

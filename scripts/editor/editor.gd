@@ -8,6 +8,7 @@ const LevelStore := preload("res://scripts/level_store.gd")
 const Levels := preload("res://scripts/levels.gd")
 const CampaignStore := preload("res://scripts/campaign_store.gd")
 const Replay := preload("res://scripts/replay.gd")
+const ObjectsPanel := preload("res://scripts/editor/objects_panel.gd")
 const EditModel := preload("res://scripts/editor/edit_model.gd")
 const EditTools := preload("res://scripts/editor/edit_tools.gd")
 const EditorCanvas := preload("res://scripts/editor/editor_canvas.gd")
@@ -41,6 +42,8 @@ var _glyph_buttons := {}
 var _name_edit: LineEdit
 var _hint_edit: LineEdit
 var _hint_touch_edit: LineEdit
+var _theme_opt: OptionButton
+var objects_panel: Window
 var _boss_option: OptionButton
 var _spin_label: Label
 var _rotate_check: CheckBox
@@ -124,6 +127,8 @@ func _build() -> void:
 	var play := _btn(top, "▶ Jogar", _on_play)
 	play.tooltip_text = "Testa a fase (P). Vencer uma vez marca a fase como verificada."
 	top.add_child(VSeparator.new())
+	var obj_btn := _btn(top, "Objetos…", _show_objects)
+	obj_btn.tooltip_text = "Placas de espinhos, conectores, chapas soltas, botões, esteiras, molas, ventiladores e vapor."
 	_btn(top, "Exportar código", _on_export)
 	_btn(top, "Importar código", _on_import)
 	if OS.is_debug_build():
@@ -241,6 +246,22 @@ func _build_right(right: VBoxContainer) -> void:
 	_name_edit = _line(right, "Nome", func(t): _prop("name", t))
 	_hint_edit = _line(right, "Dica de texto", func(t): _prop("hint", t))
 	_hint_touch_edit = _line(right, "Dica no celular", func(t): _extra("hint_touch", t))
+	var tr := HBoxContainer.new()
+	right.add_child(tr)
+	var tl := Label.new()
+	tl.text = "Tema"
+	tl.add_theme_font_size_override("font_size", 12)
+	tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tr.add_child(tl)
+	_theme_opt = OptionButton.new()
+	_theme_opt.focus_mode = Control.FOCUS_NONE
+	_theme_opt.add_item("Padrão")
+	_theme_opt.add_item("Industrial")
+	_theme_opt.item_selected.connect(func(i):
+		if not _syncing:
+			model.set_extra_value("theme", "industrial" if i == 1 else null)
+			objects_changed())
+	tr.add_child(_theme_opt)
 	var br := HBoxContainer.new()
 	right.add_child(br)
 	var bl := Label.new()
@@ -444,6 +465,7 @@ func _sync_props() -> void:
 	_open_check.button_pressed = d.door_open
 	_rot_spin.value = d.start_rot
 	_hint_touch_edit.text = str(d.extra.get("hint_touch", ""))
+	_theme_opt.select(1 if str(d.extra.get("theme", "")) == "industrial" else 0)
 	var boss_i := 0
 	for k in BOSSES.size():
 		if BOSSES[k].has("actors") and d.extra.get("actors", []) == BOSSES[k]["actors"]:
@@ -518,6 +540,12 @@ func _process(delta: float) -> void:
 	if model.version != _last_version:
 		_last_version = model.version
 		_refresh_problems()
+		if objects_panel != null:
+			objects_panel.refresh_if_changed()
+		_syncing = true
+		_theme_opt.select(1 if str(model.data.extra.get("theme", "")) == "industrial" else 0)
+		_syncing = false
+		canvas.refresh()
 		_undo_btn.disabled = not model.can_undo()
 		_redo_btn.disabled = not model.can_redo()
 		_syncing = true
@@ -750,6 +778,20 @@ func _build_campaign_dialog() -> void:
 	_campaign_info.custom_minimum_size = Vector2(520, 0)
 	box.add_child(_campaign_info)
 	add_child(_dialog_campaign)
+
+
+func _show_objects() -> void:
+	if objects_panel == null:
+		objects_panel = ObjectsPanel.new()
+		add_child(objects_panel)
+		objects_panel.setup(self)
+	objects_panel.open()
+
+
+## Os objetos (ou o tema) mudaram: marca a fase como alterada e redesenha a grade.
+func objects_changed() -> void:
+	model.dirty = true
+	canvas.refresh()
 
 
 func _show_campaign() -> void:
