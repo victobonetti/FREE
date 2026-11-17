@@ -287,7 +287,8 @@ var batteries: Array = []
 var bat_got := 0
 var lever = null     # {"rect": Rect2i, "t": -1 parada; senão quadros desde o disparo, "pulled": bool}
 var chute = null     # {"rect": Rect2i, "open": quadros desde que abriu (0 = fechada)}
-var theme := ""      # "", "industrial" ou um trecho do subsolo (SUBSOIL): só muda o desenho
+var theme := ""      # "", "industrial", "transicao" ou um trecho do subsolo (SUBSOIL): só muda o desenho
+var soil := ""       # a paleta de terra em uso ("" sem terra; na transição, a da despensa)
 # Amortecedores: nas salas com limitador, a peça que puxa a sala de volta (cristal vermelho no
 # subsolo, estabilizador na fábrica). Só desenho; giram com a sala. {"rect": Rect2i, "facing": 0..3}
 var anchors: Array = []
@@ -450,6 +451,7 @@ func reset() -> void:
 	lever = null
 	chute = null
 	theme = str(def.get("theme", ""))
+	soil = theme if SUBSOIL.has(theme) else ("despensa" if theme == "transicao" else "")
 	_parse(rows, water_tiles)
 	_find_anchors()
 	anchor_fx = 0
@@ -3052,6 +3054,8 @@ func _draw() -> void:
 	draw_rect(room_rect, C_BG)
 	if theme == "industrial":
 		_draw_industrial_back()
+	elif theme == "transicao":
+		_draw_transition_back()
 	elif SUBSOIL.has(theme):
 		_draw_subsoil_back()
 
@@ -3399,7 +3403,18 @@ func _draw_spin_block(base: Transform2D) -> void:
 	var half := Vector2(spin_rect.size) / 2.0
 	draw_rect(Rect2(spin_rect).grow(1.0), C_BG)
 	draw_set_transform_matrix(base * Transform2D(spin_dir * PI / 2.0 * t, c))
-	draw_rect(Rect2(-half, half * 2.0), C_WALL)
+	# o bloco gira com a textura do tema (tile a tile, em volta do centro)
+	var ci := Vector2i(c.round())
+	for ty in range(spin_rect.position.y, spin_rect.end.y, TILE):
+		for tx in range(spin_rect.position.x, spin_rect.end.x, TILE):
+			var lx := tx - ci.x
+			var ly := ty - ci.y
+			if theme == "industrial" or (theme == "transicao" and _metal_frac(Vector2(tx, ty)) > 0.5):
+				_draw_steel_tile(tx / TILE, ty / TILE, lx, ly, true)
+			elif soil != "":
+				_draw_soil_tile(tx / TILE, ty / TILE, lx, ly)
+			else:
+				draw_rect(Rect2(lx, ly, TILE, TILE), C_WALL)
 	draw_rect(Rect2(-half, half * 2.0), C_EDGE, false, 1.0)
 	for s in spikes:
 		if s.get("block", false):
@@ -3434,9 +3449,14 @@ func _draw_walls() -> void:
 				continue
 			var x := c * TILE
 			var y := r * TILE
-			if theme == "industrial":
+			var metal := theme == "industrial"
+			if theme == "transicao":
+				# terra virando metal: chapas aparecem soltas na terra e tomam conta
+				var hm := absi((c * 19349663) ^ (r * 83492791)) % 100
+				metal = _metal_frac(Vector2(x + 4, y + 4)) * 100.0 > 25.0 + hm * 0.5
+			if metal:
 				_draw_steel_tile(c, r, x, y)
-			elif SUBSOIL.has(theme):
+			elif soil != "":
 				_draw_soil_tile(c, r, x, y)
 			else:
 				draw_rect(Rect2(x, y, TILE, TILE), C_WALL)
@@ -3448,14 +3468,14 @@ func _draw_walls() -> void:
 				draw_rect(Rect2(x, y, 1, TILE), C_EDGE)
 			if c < gw - 1 and tiles[r * gw + c + 1] == 0:
 				draw_rect(Rect2(x + TILE - 1, y, 1, TILE), C_EDGE)
-			if SUBSOIL.has(theme):
+			if soil != "" and (theme != "transicao" or _metal_frac(Vector2(x + 4, y + 4)) < 0.55):
 				_draw_soil_decor(c, r, x, y)
 	_draw_anchors()
 
 
 ## Tema industrial: a parede vira chapas de aço de 2×2 tiles, com emendas, rebites nos cantos e,
 ## em algumas, um remendo enferrujado. A cor e o remendo saem de um hash da posição da chapa.
-func _draw_steel_tile(c: int, r: int, x: int, y: int) -> void:
+func _draw_steel_tile(c: int, r: int, x: int, y: int, loose := false) -> void:
 	var pc := c >> 1
 	var pr := r >> 1
 	var h := (pc * 73856093) ^ (pr * 19349663)
@@ -3464,9 +3484,9 @@ func _draw_steel_tile(c: int, r: int, x: int, y: int) -> void:
 	var lx := c & 1
 	var ly := r & 1
 	# emendas entre chapas (só onde há parede dos dois lados: a borda branca desenha o resto)
-	if lx == 1 and c < gw - 1 and tiles[r * gw + c + 1] != 0:
+	if lx == 1 and (loose or (c < gw - 1 and tiles[r * gw + c + 1] != 0)):
 		draw_rect(Rect2(x + TILE - 1, y, 1, TILE), C_SEAM)
-	if ly == 1 and r < gh - 1 and tiles[(r + 1) * gw + c] != 0:
+	if ly == 1 and (loose or (r < gh - 1 and tiles[(r + 1) * gw + c] != 0)):
 		draw_rect(Rect2(x, y + TILE - 1, TILE, 1), C_SEAM)
 	# rebites nos quatro cantos da chapa
 	var rx := x + (1 if lx == 0 else TILE - 2)
@@ -3551,7 +3571,7 @@ func _face_rect(x: int, y: int, u: Vector2i, a: float, b: float, w: float, h: fl
 ## Terra (raízes, despensa) ou pedra (caverna, lençol d'água): cor e pedrinhas por hash da posição
 ## atual do tile (ao girar, o padrão se refaz; com cores tão próximas, não se percebe).
 func _draw_soil_tile(c: int, r: int, x: int, y: int) -> void:
-	var pal: Array = C_SOIL[theme]
+	var pal: Array = C_SOIL[soil]
 	var h := absi((c * 73856093) ^ (r * 19349663))
 	draw_rect(Rect2(x, y, TILE, TILE), pal[1])
 	if h % 3 == 0:
@@ -3561,7 +3581,7 @@ func _draw_soil_tile(c: int, r: int, x: int, y: int) -> void:
 		draw_rect(Rect2(x + 1 + (h >> 4) % 5, y + 1 + (h >> 7) % 5, 2, 1), pal[2])
 	if h % 7 == 1:
 		draw_rect(Rect2(x + (h >> 5) % 7, y + (h >> 9) % 7, 1, 1), Color(pal[0], 1.0).darkened(0.35))
-	if theme == "caverna" and h % 23 == 3:
+	if soil == "caverna" and h % 23 == 3:
 		draw_rect(Rect2(x + 2, y + 3, 1, 1), Color(C_CRYSTAL, 0.5))   # veio de cristal na pedra
 
 
@@ -3570,45 +3590,45 @@ func _draw_soil_tile(c: int, r: int, x: int, y: int) -> void:
 func _draw_soil_decor(c: int, r: int, x: int, y: int) -> void:
 	var h := absi((c * 2654435761) ^ (r * 40503))
 	var up := _orig_up()
-	var moss: Color = C_MOSS[theme]
+	var moss: Color = C_MOSS[soil]
 	if _cell_empty(c + up.x, r + up.y):
 		for i in 4:
 			var hh := 1 + ((h >> (i * 3)) % 3)
-			if theme == "aquifero":
+			if soil == "aquifero":
 				hh = 1 + ((h >> (i * 3)) % 2)
 			draw_rect(_face_rect(x, y, up, i * 2 + ((h >> i) & 1), 0, 1, hh), moss if i % 2 == 0 else moss.darkened(0.25))
-		if theme == "caverna" and h % 9 == 0:
+		if soil == "caverna" and h % 9 == 0:
 			var col: Color = C_SHROOM[(h >> 4) % 2]
 			var pulse := 0.10 + 0.05 * sin(frame * 0.05 + h % 17)
 			var cap := _face_rect(x, y, up, 2, 2, 4, 1)
 			draw_circle(cap.get_center(), 5.0, Color(col, pulse))
 			draw_rect(_face_rect(x, y, up, 3, 0, 1, 2), Color("d8cfc0"))
 			draw_rect(cap, col)
-		elif theme == "despensa" and h % 6 == 0:
+		elif soil == "despensa" and h % 6 == 0:
 			var nut := _face_rect(x, y, up, 2 + (h >> 5) % 3, 0, 3, 2)
 			draw_rect(nut, C_NUT_DECOR)
 			draw_rect(Rect2(nut.position, Vector2(1, 1)), Color(C_NUT_DECOR, 1.0).lightened(0.3))
 	var dn := -up
 	if _cell_empty(c + dn.x, r + dn.y):
-		if (theme == "raizes" or theme == "despensa") and h % 3 == 0:
+		if (soil == "raizes" or soil == "despensa") and h % 3 == 0:
 			# raiz pendurada, balançando de leve
 			var n := 3 + (h >> 4) % 8
 			var a0 := 2.0 + float((h >> 2) % 4)
 			for i in n:
 				var sway := sin(frame * 0.03 + i * 0.5 + h % 13) * (float(i) / n) * 1.5
 				draw_rect(_face_rect(x, y, dn, a0 + roundf(sway + sin(i * 0.9) * 0.8), i, 1, 1), C_ROOT if i < n - 1 else C_ROOT.lightened(0.15))
-		elif (theme == "caverna" or theme == "aquifero") and h % 4 == 0:
+		elif (soil == "caverna" or soil == "aquifero") and h % 4 == 0:
 			var a1 := 2.0 + float((h >> 3) % 4)
-			draw_rect(_face_rect(x, y, dn, a1, 0, 3, 1), C_SOIL[theme][2])
-			draw_rect(_face_rect(x, y, dn, a1 + 1, 1, 1, 2), C_SOIL[theme][2])
-			if theme == "aquifero":
-				# um pingo que se forma, cai e some
-				var period := 90 + h % 60
-				var tt := (frame + h % 97) % period
-				var fall := float(tt - 30) * float(tt - 30) * 0.02 if tt > 30 else 0.0
-				if fall < 40.0:
-					draw_rect(_face_rect(x, y, dn, a1 + 1, 3 + fall, 1, 2), Color(C_DRIP, 0.7))
-	if theme == "caverna" and h % 19 == 5:
+			draw_rect(_face_rect(x, y, dn, a1, 0, 3, 1), C_SOIL[soil][2])
+			draw_rect(_face_rect(x, y, dn, a1 + 1, 1, 1, 2), C_SOIL[soil][2])
+	if soil == "aquifero" and h % 4 == 0 and _cell_empty(c, r + 1):
+		# um pingo que se forma e cai, sempre para baixo da tela (no teto de agora)
+		var period := 90 + h % 60
+		var tt := (frame + h % 97) % period
+		var fall := float(tt - 30) * float(tt - 30) * 0.02 if tt > 30 else 0.0
+		if fall < 40.0:
+			draw_rect(Rect2(x + 3 + (h >> 3) % 3, y + TILE + 2 + fall, 1, 2), Color(C_DRIP, 0.7))
+	if soil == "caverna" and h % 19 == 5:
 		for side in [Vector2i(-up.y, up.x), Vector2i(up.y, -up.x)]:
 			if _cell_empty(c + side.x, r + side.y):
 				var gl := 0.12 + 0.06 * sin(frame * 0.04 + h % 11)
@@ -3627,7 +3647,7 @@ func _draw_subsoil_back() -> void:
 	var x1 := mini(int(cam.x + half.x), pw)
 	var y0 := maxi(int(cam.y - half.y), 0)
 	var y1 := mini(int(cam.y + half.y), ph)
-	var pal: Array = C_SOIL[theme]
+	var pal: Array = C_SOIL[soil]
 	var band := Color(pal[2], 0.22)
 	# camadas de terra
 	var k0 := maxi(y0 / 64 - 1, 0)
@@ -3691,6 +3711,58 @@ func _draw_subsoil_back() -> void:
 				for j in 3 + hh % 3:
 					var q := Vector2(nx + j * 4 - (j / 3) * 8, ph - 10 - (j / 3) * 4)
 					draw_circle(q, 2.5, Color(C_NUT_DECOR, 0.18))
+
+
+## Na transição (corredor entre a terra e a fábrica): quanto de metal há neste ponto, de 0 (o começo
+## da fase como foi desenhada) a 1 (o fim). Segue a fase mesmo depois dos giros.
+func _metal_frac(p: Vector2) -> float:
+	match posmod(orientation, 4):
+		1:
+			return clampf(p.y / ph, 0.0, 1.0)
+		2:
+			return clampf(1.0 - p.x / pw, 0.0, 1.0)
+		3:
+			return clampf(1.0 - p.y / ph, 0.0, 1.0)
+	return clampf(p.x / pw, 0.0, 1.0)
+
+
+## Fundo da transição: as camadas de terra somem aos poucos e os canos da fábrica aparecem.
+func _draw_transition_back() -> void:
+	var half := VIEW / 2.0 + Vector2(24, 24)
+	var x0 := maxi(int(cam.x - half.x), 0)
+	var x1 := mini(int(cam.x + half.x), pw)
+	var y0 := maxi(int(cam.y - half.y), 0)
+	var y1 := mini(int(cam.y + half.y), ph)
+	var pal: Array = C_SOIL["despensa"]
+	x0 -= x0 % 8
+	y0 -= y0 % 8
+	# camadas de terra e canos, em pedaços de 8 px: cada pedaço com a mistura do lugar
+	for k in range(maxi(y0 / 64 - 1, 0), y1 / 64 + 2):
+		var by := k * 64 + absi(k * 7919) % 24
+		var py := k * 64 + 24 + absi(k * 2654435761) % 20
+		var xx := x0
+		while xx < x1:
+			var f := _metal_frac(Vector2(xx, by))
+			if by < ph - 12 and f < 0.85:
+				draw_rect(Rect2(xx, by + roundf(sin(xx * 0.035 + k * 1.7) * 4.0), 8, 3), Color(pal[2], 0.22 * (1.0 - f)))
+			var fp := _metal_frac(Vector2(xx, py))
+			if py < ph - 12 and fp > 0.3:
+				draw_rect(Rect2(xx, py, 8, 5), Color(C_STEEL_LIGHT, 0.16 * fp))
+				draw_rect(Rect2(xx, py, 8, 1), Color(C_STEEL_LIGHT, 0.22 * fp))
+			xx += 8
+	# raízes no começo, dutos verticais no fim
+	for i in range(int(x0 / 26), int(x1 / 26) + 1):
+		var hh := absi(i * 2654435761)
+		var rx := i * 26 + hh % 18
+		if rx < 10 or rx > pw - 12:
+			continue
+		var f := _metal_frac(Vector2(rx, 40))
+		if f < 0.45:
+			for yy in range(maxi(y0, 0), mini(30 + hh % 70, y1), 2):
+				draw_rect(Rect2(rx + roundf(sin(yy * 0.12 + i) * 2.0), yy, 1, 2), Color(C_ROOT, 0.35 * (1.0 - f / 0.45)))
+		elif f > 0.6 and i % 3 == 0:
+			draw_rect(Rect2(rx, y0, 6, y1 - y0), Color(C_STEEL_LIGHT, 0.10 * f))
+			draw_rect(Rect2(rx, y0, 1, y1 - y0), Color(C_STEEL_LIGHT, 0.16 * f))
 
 
 ## Amortecedores das salas com limitador: um por trecho do teto da fase como foi desenhada.

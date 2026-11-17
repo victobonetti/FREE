@@ -505,3 +505,6 @@ Sala 30×30 sem limitador e com setas para o que está fora da tela; mecha de 40
 
 ## Rodada 39: o subsolo, a batida de pata e o amortecedor
 As 17 fases do ato 1 ganharam tema (raízes, caverna, lençol d'água, despensa), com grama no "chão original" que denuncia o giro. O giro virou a batida de pata do coelho (som, poeira, onda azul), com o despertar na fase 3. As salas com barra vermelha mostram o amortecedor (cristal ou estabilizador). Tema e despertar saíram do hash; replays do ato 2 refeitos e conferidos. A história completa (cobaias, fuga) está registrada em `docs/HISTORIA.md` (D82).
+
+## Rodada 40: Passagem e dois acertos
+Fase 18 nova, "Passagem": corredor de transição em que a terra vira metal (tema `transicao`), canonizada depois do Jeffrey. Pingos do lençol d'água sempre caem para baixo; o bloco do Jeffrey mantém a textura ao girar (D83).

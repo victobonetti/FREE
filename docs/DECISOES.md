@@ -629,3 +629,9 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **O poder é do coelho** (pedido do Victor): a batida de pata, comportamento real de coelho assustado. Ele desperta na fase 3, encurralado. Na história completa (`docs/HISTORIA.md`), o poder foi implantado no laboratório (caminho 1).
 - **A barra vermelha ganhou corpo:** o amortecedor (cristal no subsolo, estabilizador na fábrica). É só desenho; a regra do limitador não mudou.
 - **História como registro:** o plot das cobaias e a fuga final ficam em `docs/HISTORIA.md`, sem nada no jogo por enquanto.
+
+### D83 — Passagem: o corredor da terra ao metal
+- **Pedido do Victor:** um grande corredor entre o Jeffrey e o ato 2, fazendo a transição. É a fase 18 (`passagem`), canonizada com a rota do robô; as fases do ato 2 passam a ser 19 a 23.
+- **Tema `transicao`:** a cada tile, sorteio (por hash) entre terra e aço, com a chance de aço crescendo ao longo da fase. `_metal_frac()` mede esse "ao longo" na direção da fase como foi desenhada, então a mistura não se embaralha com o giro.
+- **Respiro, mas com as peças do ato 2:** depois do boss, nada de quebra-cabeça; o jogador vê chapas soltas, esteira e estampador antes de precisar delas.
+- **Correções:** os pingos do lençol d'água caíam de lado depois de um giro (saíam do "teto original"); agora saem do teto de agora e caem para baixo da tela. O bloco do Jeffrey perdia a textura enquanto girava (era desenhado liso); agora gira tile a tile, com o tema.

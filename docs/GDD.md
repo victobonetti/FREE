@@ -188,11 +188,12 @@ O enredo completo (com spoiler) está em `docs/HISTORIA.md`. No jogo:
 - **Ato 1 = o subsolo embaixo do campo** (campo `theme` da sala; só aparência, fora do hash):
   - `raizes` (fases 1–2): terra marrom, raízes penduradas, feixe de luz fraco do buraco, torrões caindo;
   - `caverna` (3–10): pedra azulada, estalactites ao longe, cogumelos e cristais que brilham;
-  - `aquifero` (11–15): pedra molhada, musgo, pingos que se formam e caem;
+  - `aquifero` (11–15): pedra molhada, musgo, pingos que se formam e caem (sempre para baixo da tela, do teto de agora);
   - `despensa` (16–17): terra escura, raízes e nozes.
   Grama e musgo crescem no que era o chão quando a fase foi desenhada: depois de um giro, ficam na
   parede ou no teto, e isso mostra que o mundo virou. As peças de jogo (caixa, porta, espinho, água)
   não mudam de forma nem de cor. O editor escolhe o tema na lista "Tema".
+- **Passagem (fase 18, D83):** entre a despensa do Jeffrey e a fábrica, um corredor de 150×26 em que a terra vira metal (tema `transicao`: chapas de aço aparecem soltas na terra e tomam conta; no fundo, as camadas de terra somem e os canos aparecem; a mistura segue o comprimento da fase mesmo depois de um giro). Plataforming leve, de respiro: fossos de espinhos, ponte de chapas soltas, esteira contra e dois estampadores. Porta aberta, sem caixa, sem limitador.
 - **O giro é a batida de pata do coelho.** Cada giro do jogador tem um baque (som `thump`), poeira e
   uma onda azul nos pés, antes da cambalhota. Na fase 3 (campo `awaken`), o coelho se assusta ("!") e
   a primeira batida dá um clarão azul; só uma vez por sessão. A dica da fase diz "Bata a pata".
