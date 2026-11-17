@@ -203,11 +203,11 @@ func stamp(c: int, r: int, ch: String) -> bool:
 		for dy in 2:
 			for dx in 2:
 				_clear_owner(c + dx, r + dy)
-		# o coelho é único: o novo substitui o antigo
-		if ch == "P":
+		# o coelho, a alavanca e a calha são únicos: o novo substitui o antigo
+		if ch == "P" or ch == "L" or ch == "H":
 			for rr in data.height():
 				for cc in data.width():
-					if data.cell(cc, rr) == "P":
+					if data.cell(cc, rr) == ch:
 						_put(cc, rr, ".")
 		for dy in 2:
 			for dx in 2:

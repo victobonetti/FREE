@@ -37,6 +37,7 @@ func _init() -> void:
 	test_gatsby_route()
 	test_race_components()
 	test_acid()
+	test_battery_lever()
 	test_reload_params()
 	test_rope()
 	test_water()
@@ -2312,3 +2313,119 @@ func test_acid() -> void:
 	check(only_door, "uma sala só de ácido é válida (o único erro é a falta de porta da sala de teste)")
 	load_def(WATER_ROOM)
 	check(not room.fluid_acid, "a água continua água")
+
+
+# ------------------------------------------------------------ baterias, alavanca e calha (D76)
+
+func _lever_room(bats: int = 2, extra := {}) -> Dictionary:
+	var rows: Array = []
+	for r in 17:
+		var line := ""
+		for c in 30:
+			var ch := "."
+			if r == 0 or r == 16 or c == 0 or c == 29 or r == 14 or r == 15:
+				ch = "#"
+			line += ch
+		rows.append(line)
+	var put := func(c: int, r: int, t: String) -> void:
+		var l: String = rows[r]
+		rows[r] = l.substr(0, c) + t + l.substr(c + t.length())
+	put.call(1, 12, "PP"); put.call(1, 13, "PP")
+	put.call(18, 11, "LL"); put.call(18, 12, "LL")
+	put.call(26, 2, "HH"); put.call(26, 3, "HH")
+	put.call(26, 14, "SS"); put.call(26, 15, "SS")
+	put.call(22, 12, "DD"); put.call(22, 13, "DD")
+	var xs := [6, 11, 15]
+	for i in bats:
+		put.call(xs[i], 13, "+")
+	var d := {"name": "teste alavanca", "rotate": true, "start_rot": 0, "rows": rows}
+	d.merge(extra, true)
+	return d
+
+
+func test_battery_lever() -> void:
+	print("baterias, alavanca e calha")
+	load_def(_lever_room(2))
+	idle(10)
+	check(room.batteries.size() == 2 and room.lever != null and room.chute != null, "o jogo lê as baterias, a alavanca e a calha")
+	check(room.boxes.is_empty() and not room.door_open, "no começo não há caixa e a porta está fechada")
+	var got: Array = []
+	room.sfx.connect(func(n): got.append(n))
+	for i in 200:
+		tick({"move": 1.0})
+		if room.bat_got == 1:
+			break
+	check(room.bat_got == 1 and got.has("battery"), "pegar a primeira bateria faz barulho")
+	check(room.lever["t"] < 0 and not room.input_lock, "com uma só de duas, a alavanca não dispara")
+	for i in 200:
+		tick({"move": 1.0})
+		if room.bat_got == 2:
+			break
+	check(room.bat_got == 2 and room.lever["t"] >= 0 and got.has("charge"), "com todas as baterias a alavanca dispara sozinha")
+	check(room.input_lock, "a entrada fica travada durante a cena")
+	for i in 10:
+		tick({"move": 1.0})   # ainda desliza um pouco com a velocidade que tinha
+	var x0: int = room.rabbit.pos.x
+	for i in 50:
+		tick({"move": 1.0})
+	check(room.rabbit.pos.x == x0 and room.cam_focus != null, "o coelho não anda e a câmera vai para a alavanca")
+	var total: int = room.LEVER_PAN + room.LEVER_PULL + room.LEVER_WATCH
+	while room.lever["t"] < total - 1:
+		tick()
+	check(room.lever["pulled"] and room.chute["open"] > 0 and got.has("lever") and got.has("hatch"), "a alavanca vira e a calha abre")
+	tick()
+	tick()
+	check(not room.input_lock and room.cam_focus == null, "no fim da cena, a entrada e a câmera voltam")
+	check(room.boxes.size() == 1, "a calha soltou uma caixa")
+	idle(260)
+	check(room.group_filled(0) and room.door_open, "a caixa cai no compartimento e abre a porta")
+	var won := false
+	for i in 400:
+		tick({"move": 1.0})
+		if room.state == "won" or room.state == "done":
+			won = true
+			break
+	check(won, "o coelho chega à porta")
+
+	room.reset()
+	check(room.bat_got == 0 and room.lever["t"] < 0 and not room.lever["pulled"] and room.chute["open"] == 0 and room.boxes.is_empty(), "reiniciar a sala devolve as baterias, a alavanca e a calha")
+	check(room.batteries[0]["taken"] == false and not room.input_lock, "e destrava a entrada")
+
+	var r0: Rect2i = room.lever["rect"]
+	var b0: Rect2i = room.batteries[0]["rect"]
+	for i in 4:
+		room._rotate_logic(1)
+	check(room.lever["rect"] == r0 and room.batteries[0]["rect"] == b0, "quatro giros devolvem a alavanca e as baterias ao lugar")
+
+	print("baterias: validação")
+	check(LevelData.from_def(_lever_room(2)).errors().is_empty() or LevelData.from_def(_lever_room(2)).errors().size() == 0, "a sala de teste é válida (a calha conta como a caixa do compartimento)")
+	var no_lever: Dictionary = _lever_room(2)
+	var rows2: Array = []
+	for r in no_lever["rows"]:
+		rows2.append(String(r).replace("L", "."))
+	no_lever["rows"] = rows2
+	var msg := ""
+	for e in LevelData.from_def(no_lever).errors():
+		msg += String(e["msg"])
+	check(msg.contains("alavanca"), "sem alavanca, é erro")
+	var four: RefCounted = LevelData.from_def(_lever_room(3))
+	four.set_cell(20, 13, "+")
+	msg = ""
+	for e in four.errors():
+		msg += String(e["msg"])
+	check(msg.contains("1 a 3 baterias"), "mais de 3 baterias é erro")
+	var none: RefCounted = LevelData.from_def(_lever_room(1))
+	none.set_cell(6, 13, ".")
+	msg = ""
+	for e in none.errors():
+		msg += String(e["msg"])
+	check(msg.contains("1 a 3 baterias"), "alavanca sem baterias é erro")
+	var plain: RefCounted = LevelData.from_def(Levels.by_id("giro"))
+	check(plain.errors().is_empty(), "as fases sem esses itens continuam válidas")
+
+	print("tema industrial")
+	var th: Dictionary = _lever_room(1)
+	th["theme"] = "industrial"
+	load_def(th)
+	idle(30)
+	check(room.theme == "industrial" and room.state == "play", "o tema é lido e não muda a simulação")

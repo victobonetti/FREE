@@ -13,6 +13,7 @@ const ONE_SHOTS := {
 	"crumble": [-13.0, 0.1], "crunch": [-15.0, 0.18], "crusher_wake": [-9.0, 0.0],
 	"alarm": [-21.0, 0.0], "gatsby_dash": [-18.0, 0.1], "gatsby_laugh": [-15.0, 0.05],
 	"acid_burn": [-13.0, 0.06], "acid_splash": [-17.0, 0.1],
+	"battery": [-14.0, 0.04], "charge": [-14.0, 0.0], "hatch": [-13.0, 0.05],
 }
 
 
@@ -46,6 +47,12 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _acid_burn()
 		"acid_splash":
 			return _acid_splash()
+		"battery":
+			return _battery()
+		"charge":
+			return _charge()
+		"hatch":
+			return _hatch()
 	return null
 
 
@@ -300,6 +307,53 @@ static func _acid_splash() -> AudioStreamWAV:
 		var v := sin(TAU * lerpf(300.0, 120.0, minf(t * 5.0, 1.0)) * t) * exp(-t * 14.0) * 0.8
 		v += sin(TAU * 520.0 * t) * exp(-t * 30.0) * 0.3
 		v += rng.randf_range(-1.0, 1.0) * exp(-t * 45.0) * 0.3
+		b[i] = tanh(v * 1.3) * 0.75
+	return _wav(b)
+
+
+## Pegar uma bateria: dois "plins" metálicos subindo (uma quinta).
+static func _battery() -> AudioStreamWAV:
+	var b := _buf(0.3)
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var v := 0.0
+		for q in [[0.0, 880.0], [0.07, 1320.0]]:
+			var tk: float = t - float(q[0])
+			if tk >= 0.0:
+				var f: float = q[1]
+				v += (sin(TAU * f * tk) * 0.6 + sin(TAU * f * 2.01 * tk) * 0.18 + sin(TAU * f * 3.97 * tk) * 0.06) * exp(-tk * 16.0) * minf(tk * 400.0, 1.0)
+		b[i] = v * 0.75
+	return _wav(b)
+
+
+## Todas as baterias: a alavanca carrega. Zumbido que sobe e fecha com um estalo.
+static func _charge() -> AudioStreamWAV:
+	var b := _buf(0.7)
+	var rng := _rng(113)
+	var ph := 0.0
+	for i in b.size():
+		var t := float(i) / float(b.size())
+		ph += TAU * lerpf(110.0, 520.0, t * t) / MIX_RATE
+		var saw := fmod(ph / TAU, 1.0) * 2.0 - 1.0
+		var env := minf(t * 12.0, 1.0) * (1.0 - smoothstep(0.88, 1.0, t))
+		var v := (saw * 0.35 + sin(ph) * 0.35) * env
+		if t > 0.9:
+			v += rng.randf_range(-1.0, 1.0) * exp(-(t - 0.9) * 90.0) * 0.5
+		b[i] = tanh(v * 1.4) * 0.75
+	return _wav(b)
+
+
+## A calha abre: batida de metal e um sopro de ar.
+static func _hatch() -> AudioStreamWAV:
+	var b := _buf(0.4)
+	var rng := _rng(114)
+	var lp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		lp += (rng.randf_range(-1.0, 1.0) - lp) * 0.25
+		var v := sin(TAU * 98.0 * t) * exp(-t * 22.0) * 0.9
+		v += sin(TAU * 410.0 * t) * exp(-t * 28.0) * 0.25
+		v += lp * exp(-t * 7.0) * 0.45 * minf(t * 60.0, 1.0)
 		b[i] = tanh(v * 1.3) * 0.75
 	return _wav(b)
 

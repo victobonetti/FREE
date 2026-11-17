@@ -100,6 +100,14 @@ const C_WATER := Color("2f86e0")
 const C_WATER_TOP := Color("9fd4ff")
 const C_ACID := Color("5fd63a")
 const C_ACID_TOP := Color("d8ff7a")
+const C_BAT := Color("f0b428")
+const C_KNOB_LEVER := Color("e0657c")
+const C_BAT_DARK := Color("8a5a12")
+const BAT_PICK := 2             # folga (px) em volta da bateria para o coelho pegá-la
+const LEVER_PAN := 34           # quadros da câmera indo até a alavanca
+const LEVER_HIT := 20           # quadro (depois do PAN) em que a alavanca vira
+const LEVER_PULL := 40          # duração do gesto da alavanca
+const LEVER_WATCH := 52         # quadros da câmera acompanhando a caixa saindo da calha
 const ACID_TOUCH := 0.02        # fração do coelho dentro do ácido a partir da qual ele morre
 const C_DRAIN := Color("8d8d99")
 # Engenhocas do Gatsby (ato 2): aço em chapas remendadas, rebites, ferrugem e tinta de pichação.
@@ -238,6 +246,14 @@ var ripples := false       # há ondas na superfície
 # coelho ao toque. A sala tem um tipo de fluido só: se há "%" em qualquer lugar, todo o fluido é ácido
 # (o validador do editor recusa misturar "~" e "%").
 var fluid_acid := false
+# Baterias, alavanca e calha (glifos "+", "L" e "H"; 1 a MAX_BATTERIES baterias): com todas as
+# baterias coletadas a alavanca se puxa sozinha e a calha solta uma caixa, que abre a porta.
+# {"rect": Rect2i, "taken": bool, "fx": quadros do brilho do pegar}
+var batteries: Array = []
+var bat_got := 0
+var lever = null     # {"rect": Rect2i, "t": -1 parada; senão quadros desde o disparo, "pulled": bool}
+var chute = null     # {"rect": Rect2i, "open": quadros desde que abriu (0 = fechada)}
+var theme := ""      # "" ou "industrial": só muda o desenho
 var water_vol := 0.0       # volume total (px²)
 var water_calm := false    # parada: a simulação descansa
 var water_dirty := true    # os vãos precisam ser refeitos (comporta ou plataforma mudou)
@@ -377,6 +393,11 @@ func reset() -> void:
 	rabbit = Rabbit.new()
 	var water_tiles: Array = []
 	fluid_acid = false
+	batteries.clear()
+	bat_got = 0
+	lever = null
+	chute = null
+	theme = str(def.get("theme", ""))
 	_parse(rows, water_tiles)
 	_init_crushers()
 	_init_movers()
@@ -888,6 +909,8 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 				_add_spike(c, r, 2)
 			elif ch == "<":
 				_add_spike(c, r, 3)
+			elif ch == "+":
+				batteries.append({"rect": cell, "taken": false, "fx": 0})
 			elif ch == "~":
 				water_tiles.append(key)
 			elif ch == "%":
@@ -911,7 +934,7 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 				gate_cells[iid].append(cell)
 			elif PLATFORM_CHARS.contains(ch):
 				platforms.append({"rect": cell, "facing": PLATFORM_CHARS.find(ch), "solid": false, "fx": 0})
-			elif (ch == "P" or ch == "B" or ch == "S" or GATE_SOCKETS.contains(ch)) and not visited.has(key):
+			elif (ch == "P" or ch == "B" or ch == "S" or ch == "L" or ch == "H" or GATE_SOCKETS.contains(ch)) and not visited.has(key):
 				for dy in 2:
 					for dx in 2:
 						visited[Vector2i(c + dx, r + dy)] = true
@@ -920,6 +943,10 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 					rabbit.pos = origin + Vector2i(2, 2)  # hitbox 12x12 centrada no bloco 16x16
 				elif ch == "B":
 					boxes.append(Box.new(origin))
+				elif ch == "L":
+					lever = {"rect": Rect2i(origin, Vector2i(16, 16)), "t": -1, "pulled": false}
+				elif ch == "H":
+					chute = {"rect": Rect2i(origin, Vector2i(16, 16)), "open": 0}
 				else:
 					sockets.append(Rect2i(origin, Vector2i(16, 16)))
 					socket_group.append(0 if ch == "S" else GATE_SOCKETS.find(ch) + 1)
@@ -1054,6 +1081,12 @@ func _rotate_logic(dir: int) -> void:
 		rp["old"] = old
 	for d in drains:
 		d["rect"] = _rot_rect(d["rect"], dir)
+	for b in batteries:
+		b["rect"] = _rot_rect(b["rect"], dir)
+	if lever != null:
+		lever["rect"] = _rot_rect(lever["rect"], dir)
+	if chute != null:
+		chute["rect"] = _rot_rect(chute["rect"], dir)
 	for m in movers:
 		m["off"] = _rot_rect(m["off"], dir)
 		m["on"] = _rot_rect(m["on"], dir)
@@ -1351,6 +1384,7 @@ func step(inp: Dictionary) -> void:
 	_update_boxes()
 	if state != "play":
 		return
+	_update_batteries()
 	for a in actors:
 		a.step(self)
 	if state != "play":
@@ -2032,6 +2066,180 @@ func _water_push(x0: int, x1: int, strength: float) -> void:
 				ripples = true
 
 
+# ---------------------------------------------------------------- baterias, alavanca e calha
+
+func lever_ready() -> bool:
+	return lever != null and chute != null and not batteries.is_empty() and bat_got >= batteries.size()
+
+
+func _update_batteries() -> void:
+	for b in batteries:
+		if b["fx"] > 0:
+			b["fx"] -= 1
+		if not b["taken"] and overlaps(rabbit.rect, Rect2i(b["rect"]).grow(BAT_PICK)):
+			b["taken"] = true
+			b["fx"] = 16
+			bat_got += 1
+			sfx.emit("battery")
+			var c := Vector2(b["rect"].position) + Vector2(4, 4)
+			particles.append({"pos": c, "vel": Vector2.ZERO, "life": 12, "col": C_BAT, "grav": 0.0, "ring": 3.0})
+			for i in 8:
+				var a := TAU * i / 8.0
+				particles.append({"pos": c, "vel": Vector2(cos(a), sin(a)) * randf_range(30.0, 70.0), "life": randi_range(10, 18), "col": C_BAT, "grav": 60.0})
+			if lever_ready() and lever["t"] < 0:
+				_lever_fire()
+	if lever != null and lever["t"] >= 0:
+		_update_lever()
+
+
+## Todas as baterias: a câmera vai até a alavanca, ela se puxa sozinha, e a câmera segue a caixa
+## saindo da calha. A entrada fica travada durante a cena.
+func _lever_fire() -> void:
+	lever["t"] = 0
+	input_lock = true
+	sfx.emit("charge")
+
+
+func _update_lever() -> void:
+	var t: int = lever["t"]
+	var total := LEVER_PAN + LEVER_PULL + LEVER_WATCH
+	if t >= total:
+		return
+	var lc := Vector2(lever["rect"].position) + Vector2(8, 8)
+	var cc := Vector2(chute["rect"].position) + Vector2(8, 12)
+	cam_focus = lc if t < LEVER_PAN + LEVER_PULL else cc
+	if t == LEVER_PAN + LEVER_HIT:
+		lever["pulled"] = true
+		sfx.emit("lever")
+		shake = maxf(shake, 1.5)
+		for i in 6:
+			particles.append({"pos": lc + Vector2(4, -2), "vel": Vector2(randf_range(-50.0, 50.0), randf_range(-70.0, -10.0)), "life": randi_range(8, 16), "col": C_BAT, "grav": 260.0})
+	if t == LEVER_PAN + LEVER_PULL:
+		chute["open"] = 1
+		sfx.emit("hatch")
+		shake = maxf(shake, 1.0)
+		boxes.append(Box.new(chute["rect"].position))
+		for i in 8:
+			particles.append({"pos": cc + Vector2(randf_range(-6.0, 6.0), 0), "vel": Vector2(randf_range(-20.0, 20.0), randf_range(10.0, 40.0)), "life": randi_range(10, 18), "col": C_DUST, "grav": 120.0})
+	if chute["open"] > 0:
+		chute["open"] += 1
+	lever["t"] = t + 1
+	if t + 1 >= total:
+		input_lock = false
+		cam_focus = null
+
+
+func _draw_batteries() -> void:
+	for b in batteries:
+		var r: Rect2i = b["rect"]
+		if (Vector2(r.position) - cam).length() > VIEW.length() / 2.0 + 24.0:
+			continue
+		var p := Vector2(r.position)
+		if b["taken"]:
+			continue
+		var bob := roundf(sin(frame * 0.1 + float(r.position.x) * 0.3) * 1.2)
+		var pulse := 0.5 + 0.5 * sin(frame * 0.12 + float(r.position.y))
+		draw_circle(p + Vector2(4, 4 + bob), 5.5 + pulse, Color(C_BAT, 0.10 + 0.08 * pulse))
+		p.y += bob
+		draw_rect(Rect2(p + Vector2(1, 1), Vector2(6, 7)), C_SEAM)
+		draw_rect(Rect2(p + Vector2(2, 2), Vector2(4, 5)), C_BAT)
+		draw_rect(Rect2(p + Vector2(2, 5), Vector2(4, 2)), C_BAT_DARK)
+		draw_rect(Rect2(p + Vector2(3, 0), Vector2(2, 1)), C_RIVET)
+		draw_rect(Rect2(p + Vector2(2, 2), Vector2(1, 2)), Color(1, 1, 1, 0.7))
+
+
+func _draw_lever_and_chute() -> void:
+	if chute != null:
+		_draw_chute()
+	if lever != null:
+		_draw_lever()
+		# o raio da alavanca para a calha, no momento em que ela vira
+		var t: int = lever["t"]
+		var t0 := LEVER_PAN + LEVER_HIT
+		if t >= t0 and t < t0 + 26 and chute != null:
+			var a := 1.0 - float(t - t0) / 26.0
+			var from := Vector2(lever["rect"].position) + Vector2(8, 8)
+			var to := Vector2(chute["rect"].position) + Vector2(8, 8)
+			var pts := PackedVector2Array([from])
+			var nrm := (to - from).orthogonal().normalized()
+			for k in range(1, 7):
+				pts.append(from.lerp(to, float(k) / 7.0) + nrm * sin(float(frame * 3 + k * 7)) * 4.0)
+			pts.append(to)
+			draw_polyline(pts, Color(C_BAT, a), 1.0)
+
+
+func _draw_lever() -> void:
+	var r := Rect2(lever["rect"])
+	var n := batteries.size()
+	draw_rect(r, C_SEAM)
+	draw_rect(r.grow(-1.0), C_STEEL[1])
+	draw_rect(Rect2(r.position + Vector2(1, 1), Vector2(14, 1)), C_STEEL_LIGHT)
+	var ready: bool = lever_ready() and not lever["pulled"]
+	# as vagas das baterias, no alto: acesas conforme se pega
+	var w := 14.0 / maxf(n, 1.0)
+	for i in n:
+		var lit := i < bat_got
+		var sx := r.position.x + 1.0 + i * w
+		draw_rect(Rect2(sx + 1, r.position.y + 3, w - 2, 3), C_BAT if lit else C_SEAM)
+		if lit:
+			draw_rect(Rect2(sx + 1, r.position.y + 3, w - 2, 1), Color(1, 1, 1, 0.5))
+	# o trilho (com batentes claros nas pontas) e o cabo
+	draw_rect(Rect2(r.position.x + 6, r.position.y + 6, 4, 9), C_SEAM)
+	draw_rect(Rect2(r.position.x + 6, r.position.y + 6, 4, 1), C_STEEL_LIGHT)
+	draw_rect(Rect2(r.position.x + 6, r.position.y + 14, 4, 1), C_STEEL_LIGHT)
+	draw_rect(Rect2(r.position.x + 7, r.position.y + 7, 2, 7), Color(0, 0, 0, 0.8))
+	var pulled: bool = lever["pulled"]
+	var k := 0.0
+	if lever["t"] >= LEVER_PAN + LEVER_HIT - 6 or pulled:
+		k = clampf(float(lever["t"] - (LEVER_PAN + LEVER_HIT - 6)) / 12.0, 0.0, 1.0) if not pulled else 1.0
+	var hy := r.position.y + lerpf(8.5, 12.0, k)
+	draw_line(Vector2(r.position.x + 8, r.position.y + 8), Vector2(r.position.x + 8, hy), C_RIVET, 1.0)
+	draw_circle(Vector2(r.position.x + 8, hy), 2.4, C_KNOB_LEVER)
+	draw_rect(Rect2(r.position.x + 7, hy - 1.5, 1, 1), Color(1, 1, 1, 0.7))
+	for q in [Vector2(1, 14), Vector2(14, 14)]:
+		draw_rect(Rect2(r.position + q, Vector2(1, 1)), C_RIVET)
+	if ready:
+		var pulse := 0.4 + 0.4 * sin(frame * 0.3)
+		draw_rect(r.grow(1.0), Color(C_BAT, pulse), false, 1.0)
+
+
+func _draw_chute() -> void:
+	var r := Rect2(chute["rect"])
+	var open: int = chute["open"]
+	# caixa guardada, só a silhueta, até a calha abrir
+	if open == 0:
+		draw_rect(Rect2(r.position + Vector2(3, 2), Vector2(10, 9)), Color(C_BOX, 0.28))
+		draw_rect(Rect2(r.position + Vector2(3, 2), Vector2(10, 9)), Color(C_BOX, 0.5), false, 1.0)
+	# funil de aço
+	var funnel := PackedVector2Array([r.position, r.position + Vector2(16, 0), r.position + Vector2(13, 11), r.position + Vector2(3, 11)])
+	draw_polyline(PackedVector2Array([funnel[0], funnel[3], funnel[2], funnel[1]]), C_STEEL_LIGHT, 1.5)
+	draw_rect(Rect2(r.position + Vector2(0, 0), Vector2(16, 2)), C_STEEL[1])
+	draw_rect(Rect2(r.position + Vector2(0, 0), Vector2(16, 1)), C_STEEL_LIGHT)
+	# portinholas no fundo: fechadas (duas abas) ou abertas (caídas para os lados)
+	var k := clampf(float(open) / 8.0, 0.0, 1.0)
+	var y := r.position.y + 11.0
+	var col := C_RUST if open == 0 else C_STEEL[2]
+	draw_line(Vector2(r.position.x + 3, y), Vector2(r.position.x + 8 - 5 * k, y + 4 * k + 1), col, 2.0)
+	draw_line(Vector2(r.position.x + 13, y), Vector2(r.position.x + 8 + 5 * k, y + 4 * k + 1), col, 2.0)
+	if open == 0:
+		draw_rect(Rect2(r.position.x + 7, y - 1, 2, 3), C_BAT_DARK)
+
+
+## Marcador das baterias no alto da tela: um quadradinho por bateria da sala, aceso quando pega.
+func _draw_battery_hud() -> void:
+	var n := batteries.size()
+	if n == 0 or state == "won" or state == "done":
+		return
+	draw_set_transform_matrix(Transform2D())
+	var x0 := -float(n) * 7.0 / 2.0
+	for i in n:
+		var lit := i < bat_got
+		var q := Vector2(x0 + i * 7.0, -VIEW.y / 2.0 + 5.0)
+		draw_rect(Rect2(q - Vector2(1, 1), Vector2(6, 9)), Color(C_SEAM, 0.7))
+		draw_rect(Rect2(q, Vector2(4, 7)), C_BAT if lit else Color(1, 1, 1, 0.15))
+		draw_rect(Rect2(q + Vector2(1, -1), Vector2(2, 1)), C_RIVET if lit else Color(1, 1, 1, 0.2))
+
+
 ## O coelho tocou o ácido: chiado e fumaça verde.
 func _acid_burn() -> void:
 	if state != "play" or invuln > 0:
@@ -2297,6 +2505,8 @@ func _draw() -> void:
 	var room_rect := Rect2(0, 0, pw, ph)
 
 	draw_rect(room_rect, C_BG)
+	if theme == "industrial":
+		_draw_industrial_back()
 
 	# compartimentos (fundo)
 	for s in sockets:
@@ -2343,6 +2553,9 @@ func _draw() -> void:
 		draw_rect(Rect2(o + Vector2(14, 2), Vector2(2, 12)), col)
 		_draw_sensor_fx(s, i)
 
+	_draw_lever_and_chute()
+	_draw_batteries()
+
 	# coelho
 	if rabbit != null and (state == "play" or state == "won"):
 		_draw_rabbit(base)
@@ -2368,6 +2581,9 @@ func _draw() -> void:
 	if state == "dead":
 		var f := float(timer) / float(DEATH_FRAMES)
 		draw_rect(room_rect, Color(1, 1, 1, 0.35 * f * f))
+
+	_draw_battery_hud()
+	draw_set_transform_matrix(base)
 
 	# perigo: brilho vermelho pulsando na borda da tela de onde a placa vem
 	if danger > 0.02 and danger_dir >= 0 and not rotating:
@@ -2665,7 +2881,10 @@ func _draw_walls() -> void:
 				continue
 			var x := c * TILE
 			var y := r * TILE
-			draw_rect(Rect2(x, y, TILE, TILE), C_WALL)
+			if theme == "industrial":
+				_draw_steel_tile(c, r, x, y)
+			else:
+				draw_rect(Rect2(x, y, TILE, TILE), C_WALL)
 			if r > 0 and tiles[(r - 1) * gw + c] == 0:
 				draw_rect(Rect2(x, y, TILE, 1), C_EDGE)
 			if r < gh - 1 and tiles[(r + 1) * gw + c] == 0:
@@ -2674,6 +2893,70 @@ func _draw_walls() -> void:
 				draw_rect(Rect2(x, y, 1, TILE), C_EDGE)
 			if c < gw - 1 and tiles[r * gw + c + 1] == 0:
 				draw_rect(Rect2(x + TILE - 1, y, 1, TILE), C_EDGE)
+
+
+## Tema industrial: a parede vira chapas de aço de 2×2 tiles, com emendas, rebites nos cantos e,
+## em algumas, um remendo enferrujado. A cor e o remendo saem de um hash da posição da chapa.
+func _draw_steel_tile(c: int, r: int, x: int, y: int) -> void:
+	var pc := c >> 1
+	var pr := r >> 1
+	var h := (pc * 73856093) ^ (pr * 19349663)
+	h = absi(h)
+	draw_rect(Rect2(x, y, TILE, TILE), C_STEEL[h % 3])
+	var lx := c & 1
+	var ly := r & 1
+	# emendas entre chapas (só onde há parede dos dois lados: a borda branca desenha o resto)
+	if lx == 1 and c < gw - 1 and tiles[r * gw + c + 1] != 0:
+		draw_rect(Rect2(x + TILE - 1, y, 1, TILE), C_SEAM)
+	if ly == 1 and r < gh - 1 and tiles[(r + 1) * gw + c] != 0:
+		draw_rect(Rect2(x, y + TILE - 1, TILE, 1), C_SEAM)
+	# rebites nos quatro cantos da chapa
+	var rx := x + (1 if lx == 0 else TILE - 2)
+	var ry := y + (1 if ly == 0 else TILE - 2)
+	draw_rect(Rect2(rx, ry, 1, 1), C_RIVET)
+	# remendo enferrujado em uma a cada sete chapas, e um brilho de luz no alto de outras
+	if h % 7 == 0 and lx == 0 and ly == 0:
+		draw_rect(Rect2(x + 2, y + 2, 12, 11), Color(C_RUST, 0.55))
+	elif h % 5 == 0 and ly == 0:
+		draw_rect(Rect2(x, y, TILE, 1), Color(C_STEEL_LIGHT, 0.4))
+
+
+## Fundo do tema industrial: dutos e tubulações apagadas atrás de tudo, e manchas de luz âmbar.
+## Só o que está na tela, com contraste baixo para não atrapalhar a leitura das plataformas.
+func _draw_industrial_back() -> void:
+	var half := VIEW / 2.0 + Vector2(24, 24)
+	var x0 := int(cam.x - half.x)
+	var x1 := int(cam.x + half.x)
+	var y0 := int(cam.y - half.y)
+	var y1 := int(cam.y + half.y)
+	# tubulações horizontais: uma faixa a cada 12 tiles, em alturas variadas
+	var row0 := maxi(y0 / (12 * TILE) - 1, 0)
+	for k in range(row0, y1 / (12 * TILE) + 2):
+		var hy := absi(k * 2654435761) % (6 * TILE)
+		var y := k * 12 * TILE + 3 * TILE + hy
+		draw_rect(Rect2(x0, y, x1 - x0, 5), Color(C_STEEL_LIGHT, 0.16))
+		draw_rect(Rect2(x0, y, x1 - x0, 1), Color(C_STEEL_LIGHT, 0.22))
+		var bx0 := int(floor(float(x0) / (7 * TILE))) * 7 * TILE
+		for bx in range(bx0, x1 + 1, 7 * TILE):
+			draw_rect(Rect2(bx, y - 2, 3, 9), Color(C_STEEL_LIGHT, 0.2))
+	# dutos verticais: um a cada 16 tiles
+	var col0 := maxi(x0 / (16 * TILE) - 1, 0)
+	for k in range(col0, x1 / (16 * TILE) + 2):
+		var hx := absi(k * 40503) % (8 * TILE)
+		var x := k * 16 * TILE + 4 * TILE + hx
+		draw_rect(Rect2(x, y0, 6, y1 - y0), Color(C_STEEL_LIGHT, 0.10))
+		draw_rect(Rect2(x, y0, 1, y1 - y0), Color(C_STEEL_LIGHT, 0.16))
+	# manchas de luz âmbar, bem fracas
+	var lcol0 := maxi(x0 / (22 * TILE) - 1, 0)
+	for k in range(lcol0, x1 / (22 * TILE) + 2):
+		for j in range(maxi(y0 / (14 * TILE) - 1, 0), y1 / (14 * TILE) + 2):
+			var hh := absi(k * 92837111 ^ j * 689287499)
+			if hh % 3 != 0:
+				continue
+			var cx := k * 22 * TILE + hh % (14 * TILE) + 4 * TILE
+			var cy := j * 14 * TILE + (hh / 7) % (8 * TILE) + 2 * TILE
+			draw_circle(Vector2(cx, cy), 26.0, Color(C_BAT, 0.025))
+			draw_circle(Vector2(cx, cy), 14.0, Color(C_BAT, 0.03))
 
 
 ## Comporta: bloco escuro com barras. Ao abrir, as barras encolhem para o centro e somem.

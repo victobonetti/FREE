@@ -12,6 +12,8 @@ const NAMES := {
 	"_": "Plataforma: seta para baixo", "{": "Plataforma: seta para a esquerda",
 	"~": "Água", "%": "Ácido (mata ao toque)", "o": "Ralo", "|": "Corda vertical", "-": "Corda horizontal",
 	"P": "Coelho (2x2)", "B": "Caixa (2x2)", "S": "Compartimento da porta (2x2)", "D": "Porta",
+	"+": "Bateria (1 a 3 por fase)", "L": "Alavanca (2x2): puxa sozinha com todas as baterias",
+	"H": "Calha (2x2): solta a caixa quando a alavanca é puxada",
 }
 
 static var _art = null
@@ -69,6 +71,11 @@ static func draw(ci: CanvasItem, g: String, r: Rect2, ctx := {}) -> void:
 			ci.draw_rect(Rect2(r.position, Vector2(s, maxf(s * 0.15, 1))), Color(RoomScript.C_PLAT, a))
 			var ar := PackedVector2Array([Vector2(0.25, 0.75), Vector2(0.5, 0.3), Vector2(0.75, 0.75)])
 			ci.draw_colored_polygon(_xf(ar, f2, r), Color(RoomScript.C_PLAT, a * 0.9))
+		"+":
+			ci.draw_circle(r.get_center(), s * 0.46, Color(RoomScript.C_BAT, 0.14 * a))
+			ci.draw_rect(Rect2(r.position + r.size * Vector2(0.2, 0.14), r.size * Vector2(0.6, 0.76)), Color(RoomScript.C_SEAM, a))
+			ci.draw_rect(Rect2(r.position + r.size * Vector2(0.3, 0.26), r.size * Vector2(0.4, 0.5)), Color(RoomScript.C_BAT, a))
+			ci.draw_rect(Rect2(r.position + r.size * Vector2(0.36, 0.0), r.size * Vector2(0.28, 0.12)), Color(RoomScript.C_RIVET, a))
 		"~":
 			ci.draw_rect(r, Color(RoomScript.C_WATER, 0.6 * a))
 		"%":
@@ -131,6 +138,19 @@ static func draw_block(ci: CanvasItem, g: String, r: Rect2, alpha := 1.0) -> voi
 			ci.draw_rect(r, Color(RoomScript.C_SOCKET, alpha))
 			ci.draw_rect(r, Color(RoomScript.C_SOCKET_FRAME, alpha), false, maxf(s * 0.06, 1.0))
 			_label(ci, "S", r, Color(RoomScript.C_SOCKET_FRAME, alpha))
+		"L":
+			ci.draw_rect(r, Color(RoomScript.C_SEAM, alpha))
+			ci.draw_rect(r.grow(-s * 0.06), Color(RoomScript.C_STEEL[1], alpha))
+			ci.draw_rect(Rect2(r.position + r.size * Vector2(0.18, 0.16), r.size * Vector2(0.64, 0.14)), Color(RoomScript.C_BAT, alpha))
+			ci.draw_rect(Rect2(r.position + r.size * Vector2(0.44, 0.42), r.size * Vector2(0.12, 0.44)), Color(RoomScript.C_SEAM, alpha))
+			ci.draw_rect(Rect2(r.position + r.size * Vector2(0.36, 0.42), r.size * Vector2(0.28, 0.18)), Color(RoomScript.C_KNOB_LEVER, alpha))
+		"H":
+			var ln := Color(RoomScript.C_STEEL_LIGHT, alpha)
+			ci.draw_rect(Rect2(r.position + r.size * Vector2(0.2, 0.2), r.size * Vector2(0.6, 0.5)), Color(RoomScript.C_BOX, 0.3 * alpha))
+			ci.draw_polyline(PackedVector2Array([r.position, r.position + r.size * Vector2(0.18, 0.72), r.position + r.size * Vector2(0.82, 0.72), r.position + r.size * Vector2(1.0, 0.0)]), ln, maxf(s * 0.08, 1.0))
+			ci.draw_rect(Rect2(r.position, r.size * Vector2(1.0, 0.1)), ln)
+			ci.draw_line(r.position + r.size * Vector2(0.18, 0.76), r.position + r.size * Vector2(0.48, 0.92), Color(RoomScript.C_RUST, alpha), maxf(s * 0.1, 1.0))
+			ci.draw_line(r.position + r.size * Vector2(0.82, 0.76), r.position + r.size * Vector2(0.52, 0.92), Color(RoomScript.C_RUST, alpha), maxf(s * 0.1, 1.0))
 		_:
 			var col := Color(RoomScript.C_GATE, alpha)
 			ci.draw_rect(r, Color(RoomScript.C_SOCKET, alpha))

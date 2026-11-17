@@ -18,9 +18,10 @@ const MAX_TIME := 30.0
 const MIN_W := 6
 const MIN_H := 6
 const INVERSE_GATES := "¹²³⁴⁵⁶⁷⁸⁹"   # comporta inversa 1..9
-const GLYPHS := "#.PBSD123456789abcdefghi=}_{^>v<~%o|-¹²³⁴⁵⁶⁷⁸⁹"
-const BLOCK_GLYPHS := "PBSabcdefghi"   # peças de 2x2
+const GLYPHS := "#.PBSD123456789abcdefghi=}_{^>v<~%o|-+LH¹²³⁴⁵⁶⁷⁸⁹"
+const BLOCK_GLYPHS := "PBSLHabcdefghi"   # peças de 2x2
 const GATE_SOCKETS := "abcdefghi"
+const MAX_BATTERIES := 3
 
 var name := ""
 var hint := ""
@@ -279,6 +280,8 @@ func validate() -> Array:
 	var boxes := 0
 	var door_sockets := 0
 	var gate_sockets := {}
+	var levers := 0
+	var chutes := 0
 	for r in h:
 		for c in w:
 			var ch := cell(c, r)
@@ -300,6 +303,10 @@ func validate() -> Array:
 					boxes += 1
 				"S":
 					door_sockets += 1
+				"L":
+					levers += 1
+				"H":
+					chutes += 1
 				_:
 					gate_sockets[GATE_SOCKETS.find(ch) + 1] = true
 	if rabbits == 0:
@@ -338,6 +345,18 @@ func validate() -> Array:
 		if not gates.has(id):
 			out.append({"erro": false, "msg": "O compartimento '%s' não abre nenhuma comporta." % GATE_SOCKETS[id - 1], "pos": no_pos})
 	var sockets := door_sockets + gate_sockets.size()
+	# baterias, alavanca e calha: andam juntas. A calha solta uma caixa, que conta como caixa da sala.
+	var bats := 0
+	for line in rows:
+		bats += String(line).count("+")
+	if bats + levers + chutes > 0:
+		if levers != 1:
+			out.append({"erro": true, "msg": "Com baterias ou calha, a sala precisa de exatamente uma alavanca 'L' (há %d)." % levers, "pos": no_pos})
+		if chutes != 1:
+			out.append({"erro": true, "msg": "Com baterias ou alavanca, a sala precisa de exatamente uma calha 'H' (há %d)." % chutes, "pos": no_pos})
+		if bats < 1 or bats > MAX_BATTERIES:
+			out.append({"erro": true, "msg": "A alavanca precisa de 1 a %d baterias '+' (há %d)." % [MAX_BATTERIES, bats], "pos": no_pos})
+	boxes += chutes
 	if boxes < sockets:
 		out.append({"erro": true, "msg": "Há %d compartimentos e só %d caixas." % [sockets, boxes], "pos": no_pos})
 	# a sala tem um fluido só: água ou ácido
