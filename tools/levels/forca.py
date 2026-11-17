@@ -9,15 +9,15 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from levelkit import Level
 
-gatsby = {"start": [76, 6], "script": [
-    {"when": [68, 4, 4, 8], "mood": "smug", "cut": True, "lever": True, "crusher": 0, "wait": 0.3, "flee": True},
+gatsby = {"start": [118, 6], "script": [
+    {"when": [106, 4, 3, 8], "mood": "smug", "cut": True, "lever": True, "crusher": 0, "wait": 0.3, "flee": True},
 ]}
-lv = Level("forca", "Casa de força", 130, 50, rotate=False,
+lv = Level("forca", "Casa de força", 130, 50,
            hint="Pegue as três baterias",
            notes="Ato 2, fase 5 (D76). Hall em ziguezague (chapas soltas, esteiras, coluna de ar, vapor, mola, elevador) até a bateria 3 no "
-                 "alto; corredor final onde o Gatsby aparece rápido e liga a parede de espinhos (ensaio da fuga). A caixa viaja numa esteira.",
+                 "alto; corredor final onde o Gatsby só aparece no último segundo, junto da parede de espinhos de carinha feliz (ensaio da fuga). A caixa viaja numa esteira.",
            extra={"actors": ["res://scripts/boss_gatsby.gd"], "gatsby": gatsby,
-                  "crushers": [{"rect": [58, 4, 70, 8], "dir": 1, "speed": 36.0, "delay": -1, "face": "sad"}]})
+                  "crushers": [{"rect": [96, 4, 32, 8], "dir": 1, "speed": 44.0, "delay": -1, "face": "happy"}]})
 F = lv.floor_row  # 47
 xr = lv.xr
 cx = lv.cx
@@ -82,14 +82,14 @@ lv.mark("bateria 3")
 # --- a alavanca (hall), a calha (no corredor, sob o teto), a esteira da caixa e o compartimento
 lv.block(2, 28, "L")
 lv.block(66, 4, "H")
-lv.add("conveyors", {"rect": [62, 12, 57, 1], "dir": 1, "speed": 36.0})
+lv.add("conveyors", {"rect": [62, 12, 57, 1], "dir": 1, "speed": 60.0})
 lv.block(119, 12, "S")
 lv.put(124, 9, "DD")
 lv.put(124, 10, "DD")
 lv.put(124, 11, "DD")
 lv.step("wait_cutscene")
-lv.step("run_to", cx(70))                        # entra no corredor: o Gatsby aparece e liga a parede (atrás dele)
-lv.step("wait", 160)
+lv.step("run_to", cx(104))                       # corre o corredor inteiro; só no último trecho o Gatsby aparece e liga a parede
 lv.step("wait_until", "door_open", 2400)
 lv.step("to_door")
+lv.ceiling()   # teto de espinhos: girar sem pensar é arriscado
 lv.save()

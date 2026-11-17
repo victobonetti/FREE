@@ -42,6 +42,15 @@ static func record(runs: Array, inp: Dictionary) -> void:
 		runs.append([1, c])
 
 
+## Grava `n` quadros iguais de uma vez (para quem converte uma rota pronta em replay).
+static func record_n(runs: Array, n: int, inp: Dictionary) -> void:
+	var c := compact(inp)
+	if not runs.is_empty() and runs[-1][1] == c:
+		runs[-1][0] += n
+	else:
+		runs.append([n, c])
+
+
 ## Estado de partida dos atores da fase que vive fora da sala (ex.: o Jeffrey lembra se a
 ## abertura dele já foi vista). Um ator com esse estado tem as funções estáticas
 ## `replay_state() -> Dictionary` e `apply_replay_state(d)`.

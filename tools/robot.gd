@@ -19,6 +19,9 @@ extends SceneTree
 ##   ["wait_mover", i, "off"|"on", min_restante]   espera o conector i encaixado ali, com pelo menos
 ##                                       `min_restante` quadros até ele sair
 ##   ["wait_vent", i, min_fechado]       espera o jato i fechado, com pelo menos esse tempo até abrir
+##   ["wait_vent_future", i, em, janela] espera até o jato i estar fechado daqui a `em` quadros e
+##                                       continuar fechado por `janela` quadros (para uma subida que
+##                                       vai cruzar o jato mais tarde)
 ##   ["wait_cutscene"]                   espera a cena da alavanca acabar
 ##   ["wait_until", "box_settled"]       espera a caixa da calha pousar
 ##   ["push_box", x_alvo]                empurra a caixa (da esquerda) até a posição x_alvo (px do canto)
@@ -196,6 +199,9 @@ func _run_step(s: Array) -> void:
 			var m: Dictionary = room.movers[int(s[1])]
 			var want_on: bool = s[2] == "on"
 			until(func(): return room.mover_docked(m) and room.mover_wants_on(m) == want_on and _dock_left(m) >= int(s[3]), 1200, "conector %d em '%s'" % [s[1], s[2]])
+		"wait_vent_future":
+			var vf: Dictionary = room.vents[int(s[1])]
+			until(func(): return _vent_closed_at(vf, int(s[2]), int(s[3])), 1500, "jato %d fechado daqui a %d quadros" % [s[1], s[2]])
 		"wait_vent":
 			var v: Dictionary = room.vents[int(s[1])]
 			until(func(): return not v["active"] and not v["warn"] and _vent_closed_left(v) >= int(s[2]), 1200, "jato %d fechado" % s[1])
@@ -238,6 +244,13 @@ func _dock_left(m: Dictionary) -> int:
 	if P <= 0:
 		return 100000
 	return P - ((room.cycle_t + m["phase"]) % P)
+
+
+## O jato estará fechado entre daqui a `em` e `em + janela` quadros?
+func _vent_closed_at(v: Dictionary, em: int, janela: int) -> bool:
+	var t: int = (room.cycle_t + em + v["phase"]) % v["period"]
+	var open_at: int = v["period"] - v["on"]
+	return t + janela < open_at - 20
 
 
 func _vent_closed_left(v: Dictionary) -> int:

@@ -303,7 +303,7 @@ func test_format() -> void:
 			check(not room.socket_group.has(0), "sala %d: porta sem compartimento (door_open)" % (i + 1))
 		else:
 			check(room.group_filled(0) == false and room.socket_group.has(0), "sala %d tem compartimento da porta" % (i + 1))
-		check(room.boxes.size() >= room.sockets.size(), "sala %d: caixas >= compartimentos" % (i + 1))
+		check(room.boxes.size() + (1 if room.chute != null else 0) >= room.sockets.size(), "sala %d: caixas >= compartimentos" % (i + 1))
 		for g in room.gates:
 			check(room.socket_group.has(g["id"]), "sala %d: a comporta %d tem compartimento" % [i + 1, g["id"]])
 
@@ -2739,5 +2739,5 @@ func test_industrial_levels() -> void:
 		check(room.group_filled(0) or won_at > 0, "%s: a caixa está no compartimento" % id)
 		var tall: int = room.gh
 		check(room.gw * room.gh >= 80 * 40, "%s: é grande (%dx%d tiles)" % [id, room.gw, tall])
-		check(room.theme == "industrial" and not room.allow_rotate, "%s: tema industrial, sem giro" % id)
+		check(room.theme == "industrial" and room.allow_rotate and room.limiter, "%s: tema industrial, giro liberado com limitador" % id)
 	Gatsby.intro_seen = false

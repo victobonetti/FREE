@@ -22,7 +22,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 
 
 class Level:
-    def __init__(self, id, name, w, h, floor=3, theme="industrial", hint="", hint_touch="", notes="", rotate=True, extra=None):
+    def __init__(self, id, name, w, h, floor=3, theme="industrial", hint="", hint_touch="", notes="", rotate=True, limiter=True, extra=None):
         self.id = id
         self.name = name
         self.w = w
@@ -38,6 +38,7 @@ class Level:
         self.hint_touch = hint_touch or hint
         self.notes = notes
         self.rotate = rotate
+        self.limiter = limiter
         self.extra = extra or {}
         self.objs = {}
         self.steps = []
@@ -119,7 +120,7 @@ class Level:
     # ------------------------------------------------------------ saída
     def to_json(self):
         d = {
-            "name": self.name, "rotate": self.rotate, "start_rot": 0, "version": 1,
+            "name": self.name, "rotate": self.rotate, "limiter": self.limiter, "start_rot": 0, "version": 1,
             "theme": self.theme, "rows": ["".join(r) for r in self.g],
         }
         if self.hint:
@@ -133,6 +134,12 @@ class Level:
         if not self.theme:
             del d["theme"]
         return d
+
+    def ceiling(self, c0=1, c1=None, r=1):
+        """Espinhos no teto em todas as células livres da linha r (a alavanca e a calha ficam de fora)."""
+        for c in range(c0, (c1 if c1 is not None else self.w - 2) + 1):
+            if self.g[r][c] == ".":
+                self.g[r][c] = "v"
 
     def save(self):
         out = os.path.join(ROOT, "levels", "wip", self.id + ".json")

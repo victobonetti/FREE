@@ -493,3 +493,6 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 **Conferido em captura de tela:** as duas placas, a cápsula, as oito expressões. **Não jogado do início ao fim:** a fase de teste "Gatsby (teste)" (`user://levels/gatsby-teste.json`, um L de 150×86) foi gerada por script e não tem prova de que tem solução.
 
 **Falta:** blocos motorizados; a fase de verdade; o editor editar placas e roteiro; som da placa e da cápsula; música.
+
+## Rodada 36: ato 2 mais difícil e na história
+Giro com limitador nas cinco fases industriais, espinhos no teto, fase 1 refeita, Gatsby só no último segundo (parede feliz) na fase 5, vapor granular. Cinco fases canonizadas depois do Jeffrey por `tools/canonize_levels.gd`. As fases 2 a 4 ganharam o giro e o teto de espinhos, mas o desenho delas ainda é o da rodada 35 (mais plataforming é o próximo passo).

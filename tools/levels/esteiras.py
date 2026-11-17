@@ -8,7 +8,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from levelkit import Level
 
-lv = Level("esteiras", "Esteiras", 100, 44, rotate=False,
+lv = Level("esteiras", "Esteiras", 100, 44,
            hint="Pegue as duas baterias. O ácido mata ao toque",
            notes="Ato 2, fase 2 (D76). Três esteiras (contra, a favor, contra) e uma ponte de chapas soltas sobre o ácido, "
                  "uma bateria no fim de cada trecho. A caixa viaja por uma esteira até o compartimento.")
@@ -72,4 +72,5 @@ lv.step("wait_cutscene")
 lv.drop(1, 85, 88, ACID_TOP)
 lv.step("wait_until", "door_open", 1500)
 lv.step("to_door")
+lv.ceiling()   # teto de espinhos: girar sem pensar é arriscado
 lv.save()

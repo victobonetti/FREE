@@ -8,7 +8,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from levelkit import Level
 
-lv = Level("prensas", "Prensas e vapor", 110, 50, rotate=False,
+lv = Level("prensas", "Prensas e vapor", 110, 50,
            hint="Pise no botão para chamar o elevador",
            notes="Ato 2, fase 3 (D76). Corredor com três prensas em ritmo; botão de pressão (modo 'once') chama o elevador; "
                  "corredor alto com quatro jatos de vapor defasados; a caixa cai de uma calha no alto até o compartimento.")
@@ -73,4 +73,5 @@ lv.step("wait_cutscene")
 lv.step("wait_until", "door_open", 1800)
 lv.drop(1, 102, 105, F)
 lv.step("to_door")
+lv.ceiling()   # teto de espinhos: girar sem pensar é arriscado
 lv.save()

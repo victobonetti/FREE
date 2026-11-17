@@ -1,12 +1,13 @@
 {
 	"name": "Casa de força",
-	"rotate": false,
+	"rotate": true,
+	"limiter": true,
 	"start_rot": 0,
 	"version": 1,
 	"theme": "industrial",
 	"rows": [
 		"##################################################################################################################################",
-		"#.............................####################################################################################################",
+		"#vvvvvvvvvvvvvvvvvvvvvvvvvvvvv####################################################################################################",
 		"#.............................####################################################################################################",
 		"#.............................####################################################################################################",
 		"#.................................................................HH.............................................................#",
@@ -58,7 +59,7 @@
 	],
 	"hint": "Pegue as três baterias",
 	"hint_touch": "Pegue as três baterias",
-	"notes": "Ato 2, fase 5 (D76). Hall em ziguezague (chapas soltas, esteiras, coluna de ar, vapor, mola, elevador) até a bateria 3 no alto; corredor final onde o Gatsby aparece rápido e liga a parede de espinhos (ensaio da fuga). A caixa viaja numa esteira.",
+	"notes": "Ato 2, fase 5 (D76). Hall em ziguezague (chapas soltas, esteiras, coluna de ar, vapor, mola, elevador) até a bateria 3 no alto; corredor final onde o Gatsby só aparece no último segundo, junto da parede de espinhos de carinha feliz (ensaio da fuga). A caixa viaja numa esteira.",
 	"crumbles": [
 		[
 			12,
@@ -114,7 +115,7 @@
 				1
 			],
 			"dir": 1,
-			"speed": 36.0
+			"speed": 60.0
 		}
 	],
 	"fans": [
@@ -189,15 +190,15 @@
 	],
 	"gatsby": {
 		"start": [
-			76,
+			118,
 			6
 		],
 		"script": [
 			{
 				"when": [
-					68,
+					106,
 					4,
-					4,
+					3,
 					8
 				],
 				"mood": "smug",
@@ -212,15 +213,15 @@
 	"crushers": [
 		{
 			"rect": [
-				58,
+				96,
 				4,
-				70,
+				32,
 				8
 			],
 			"dir": 1,
-			"speed": 36.0,
+			"speed": 44.0,
 			"delay": -1,
-			"face": "sad"
+			"face": "happy"
 		}
 	]
 }

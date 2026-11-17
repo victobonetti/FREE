@@ -8,7 +8,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from levelkit import Level
 
-lv = Level("dutos", "Dutos", 80, 70, rotate=False,
+lv = Level("dutos", "Dutos", 80, 70,
            hint="As molas lançam para cima; a coluna de ar levanta quem entra nela",
            notes="Ato 2, fase 4 (D76). Subida vertical em três ramais: mola e coluna de ar na esquerda, mola e elevador no meio, "
                  "coluna de ar na direita. Uma bateria por ramal; piso de espinhos. A caixa cai da calha no compartimento do alto.")
@@ -69,4 +69,5 @@ lv.put(74, 10, "DD")
 lv.step("wait_cutscene")
 lv.step("wait_until", "door_open", 1500)
 lv.step("to_door")
+lv.ceiling()   # teto de espinhos: girar sem pensar é arriscado
 lv.save()

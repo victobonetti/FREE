@@ -737,7 +737,7 @@ func _init_dynamics() -> void:
 		vents.append({
 			"rect": _tile_rect(d["rect"]), "dir": posmod(int(d.get("dir", 0)), 4),
 			"period": maxi(roundi(float(d.get("period", 3.0)) * 60.0), 10), "on": maxi(roundi(float(d.get("on", 1.0)) * 60.0), 1),
-			"phase": roundi(float(d.get("phase", 0.0)) * 60.0), "active": false, "warn": false,
+			"phase": roundi(float(d.get("phase", 0.0)) * 60.0), "active": false, "warn": false, "age": 0,
 		})
 
 
@@ -856,20 +856,38 @@ func _update_vents() -> void:
 		var was_warn: bool = v["warn"]
 		v["active"] = t >= open_at
 		v["warn"] = not v["active"] and t >= open_at - VENT_WARN
+		v["age"] = v["age"] + 1 if v["active"] else 0
 		var near: bool = Vector2(v["rect"].get_center()).distance_to(cam) < VIEW.length() * 0.8
 		if near and v["warn"] and not was_warn:
 			sfx.emit("steam_warn")
 		if near and v["active"] and not was_active:
 			sfx.emit("steam_burst")
 			shake = maxf(shake, 0.5)
-		if (v["active"] or v["warn"]) and frame % 2 == 0 and near:
-			var dv: Vector2 = DIR_VEC[v["dir"]]
-			var vr: Rect2i = v["rect"]
-			var long: float = vr.size.y if v["dir"] % 2 == 0 else vr.size.x
-			var wide: float = vr.size.x if v["dir"] % 2 == 0 else vr.size.y
-			var origin := Vector2(vr.get_center()) - dv * long / 2.0 + Vector2(dv.y, -dv.x) * (randf() - 0.5) * wide * 0.8
-			var sp := 90.0 if v["active"] else 20.0
-			particles.append({"pos": origin, "vel": dv * sp * (0.6 + randf() * 0.8), "life": randi_range(8, 16), "col": Color(1, 1, 1, 0.55), "grav": 0.0})
+
+
+## O vapor, em grãos: centenas de bolinhas que saem do bocal, sobem espalhando e crescendo e vão
+## sumindo. Cada grão tem velocidade, posição lateral e tamanho fixos (saem de um hash do número dele),
+## então o desenho não pisca; só o relógio (`frame`) o move. No aviso, só um fiapo curto e ralo.
+func _draw_steam(lw: float, ll: float, by: float, active: bool, age: int) -> void:
+	var n := int(lw * ll / 7.0) if active else maxi(int(lw * ll / 45.0), 4)
+	var reach := ll - 6.0
+	if active:
+		reach *= clampf(float(age) / 8.0, 0.15, 1.0)   # o jato abre rápido, mas não de uma vez
+	else:
+		reach *= 0.22
+	for k in n:
+		var h1 := fposmod(sin(k * 12.9898) * 43758.5453, 1.0)
+		var h2 := fposmod(sin(k * 78.233 + 1.7) * 24634.6345, 1.0)
+		var h3 := fposmod(sin(k * 39.346 + 5.1) * 12345.6789, 1.0)
+		var u := fposmod(float(frame) * (0.016 + h1 * 0.022) + h2, 1.0)        # 0 no bocal, 1 no alto
+		var y := by - 6.0 - u * reach
+		var x := (h3 - 0.5) * (lw - 3.0) * (0.3 + 0.9 * u) + sin(float(frame) * 0.08 + k) * (0.5 + 1.8 * u)
+		var rad := 0.8 + u * 2.2 + h1 * 0.8
+		var a := (1.0 - u) * (0.62 if active else 0.3)
+		if not active:
+			a *= smoothstep(0.0, 0.2, u)
+		draw_circle(Vector2(x, y), rad * 1.9, Color(0.86, 0.93, 1.0, a * 0.22))   # névoa grande e fraca
+		draw_circle(Vector2(x, y), rad, Color(0.96, 0.98, 1.0, a))                 # o grão
 
 
 ## Põe o desenho no referencial da peça: origem no centro, "para cima" no sentido de `dir`.
@@ -987,13 +1005,8 @@ func _draw_vents() -> void:
 		var ll: float = r.size.y if v["dir"] % 2 == 0 else r.size.x
 		_local_begin(Vector2(r.get_center()), v["dir"])
 		var by := ll / 2.0
-		if v["active"]:
-			# a coluna de vapor: faixas brancas que ondulam
-			var w := lw - 2.0
-			draw_rect(Rect2(-w / 2.0, -ll / 2.0, w, ll), Color(1, 1, 1, 0.34))
-			for i in 4:
-				var wob := sin(frame * 0.4 + i * 1.7) * 1.5
-				draw_rect(Rect2(-w / 2.0 + 1 + wob, -ll / 2.0 + i * ll / 4.0, w - 2, ll / 4.0 - 2), Color(1, 1, 1, 0.22))
+		if v["active"] or v["warn"]:
+			_draw_steam(lw, ll, by, v["active"], v["age"])
 		# bocal na base, com uma luz de aviso: pisca no aviso, vermelha enquanto aberto
 		draw_rect(Rect2(-lw / 2.0 - 1, by - 5, lw + 2, 5), C_SEAM)
 		draw_rect(Rect2(-lw / 2.0, by - 4, lw, 3), C_STEEL[1])

@@ -595,3 +595,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Sem giro nas cinco fases:** o foco é plataforming e as fases iniciais do jogo também começam sem giro. Se quiser uma corrida pela parede com o limitador (a ideia da fase 4 da proposta), é uma fase nova ou uma mudança.
 - **Em aberto:** os números (velocidades, ritmos, folga da parede) são palpites; as fases são curtas para um humano? O robô as vence em 16 a 33 s; um jogador deve levar de 2 a 5 vezes isso. Falta música, o replay do Victor, e a ligação delas depois do Jeffrey na história.
 - **Ideia deixada de lado:** a caixa subir por uma coluna de ar até o compartimento (o ventilador já levanta caixas e elas pairam no alto da coluna; falta um jeito de a caixa sair dela para o compartimento sem o coelho entrar na corrente).
+
+### D78 — Ato 2 mais difícil, com giro; canonizado depois do Jeffrey; vapor granular
+- **Giro liberado nas cinco fases, com o limitador (2,5 s).** Nenhuma depende do giro (o robô as vence sem ele), mas ele não é proibido. Para tornar o giro arriscado em vez de gratuito, todas têm **espinhos no teto** (`Level.ceiling()`, a alavanca e a calha ficam de fora).
+- **Fase 1 refeita, mais dura:** degraus estreitos, plataforma em ciclo sobre espinhos, ponte de chapas, elevador em ciclo, estampador e subida de saltos de 3 tiles. O robô ensinou: o elevador em ciclo precisa de tempo de subir antes do pulo, e posições de conector são o canto do coelho (`pos` é o canto superior esquerdo).
+- **Fase 5:** o Gatsby e a parede só aparecem no último trecho (gatilho a 2 tiles do fim do corredor, parede a ~10 tiles da porta, carinha feliz). A esteira da caixa ficou mais rápida (60 px/s) para a porta abrir antes.
+- **Canonizadas** logo depois do `jeffrey` (ids `linha-de-montagem`, `esteiras`, `prensas-e-vapor`, `dutos`, `casa-de-forca`), com a rota do robô como replay (`tools/canonize_levels.gd`). A campanha tem 22 fases.
+- **Vapor:** partículas finas (pontos brancos que sobem, alargam e somem, com o jato aberto crescendo da boca) no lugar dos quadrados cinzas.
