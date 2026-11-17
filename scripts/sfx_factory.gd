@@ -18,6 +18,9 @@ const ONE_SHOTS := {
 	"spring": [-13.0, 0.05], "steam_warn": [-20.0, 0.05], "steam_burst": [-14.0, 0.06],
 	"lock_on": [-20.0, 0.0], "missile": [-17.0, 0.12], "homer": [-18.0, 0.08], "slam": [-8.0, 0.05],
 	"blast": [-15.0, 0.15], "thump": [-11.0, 0.08],
+	"step_grass": [-22.0, 0.14], "step_dirt": [-20.0, 0.14], "step_stone": [-23.0, 0.12],
+	"step_wet": [-22.0, 0.14], "step_metal": [-25.0, 0.1], "step_wood": [-21.0, 0.12],
+	"step_plate": [-24.0, 0.12], "step_water": [-21.0, 0.15],
 }
 
 
@@ -79,6 +82,8 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _blast()
 		"thump":
 			return _thump()
+	if sfx_name.begins_with("step_"):
+		return _step(sfx_name.trim_prefix("step_"))
 	return null
 
 
@@ -524,6 +529,46 @@ static func _thump() -> AudioStreamWAV:
 		lp += (n - lp) * 0.15
 		var v := sin(TAU * (95.0 - t * 160.0) * t) * exp(-t * 22.0) * 1.1 + lp * 1.6 * exp(-t * 45.0)
 		b[i] = tanh(v * 1.6) * 0.8
+	return _wav(b)
+
+
+## Passos, um por material: curtos e baixinhos (o tom varia um pouco a cada passo).
+static func _step(mat: String) -> AudioStreamWAV:
+	var b := _buf(0.2 if mat == "metal" or mat == "plate" else 0.12)
+	var rng := _rng(150 + mat.length() * 7 + mat.unicode_at(0))
+	var lp := 0.0
+	var lp2 := 0.0
+	var hp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var n := rng.randf_range(-1.0, 1.0)
+		lp += (n - lp) * 0.12
+		lp2 += (n - lp2) * 0.35
+		hp = n - lp2
+		var v := 0.0
+		match mat:
+			"grass":
+				v = sin(TAU * 140.0 * t) * exp(-t * 45.0) * 0.6 + hp * 0.35 * exp(-t * 28.0) * minf(t * 300.0, 1.0)
+			"dirt":
+				v = sin(TAU * 105.0 * t) * exp(-t * 40.0) * 0.8 + lp * 2.2 * exp(-t * 35.0)
+			"stone":
+				v = hp * 0.9 * exp(-t * 110.0) + sin(TAU * 620.0 * t) * exp(-t * 70.0) * 0.35 + sin(TAU * 180.0 * t) * exp(-t * 60.0) * 0.4
+			"wet":
+				v = hp * 0.6 * exp(-t * 90.0) + lp2 * 1.2 * exp(-t * 22.0) * minf(t * 200.0, 1.0) + sin(TAU * (950.0 - t * 2500.0) * t) * exp(-t * 35.0) * 0.18
+			"metal":
+				v = hp * 0.5 * exp(-t * 150.0)
+				for f in [523.0, 1307.0, 2149.0, 3011.0]:
+					v += sin(TAU * f * t) * exp(-t * (18.0 + f / 120.0)) * 0.16
+			"wood":
+				v = sin(TAU * 230.0 * t) * exp(-t * 45.0) * 0.6 + sin(TAU * 470.0 * t) * exp(-t * 60.0) * 0.25 + hp * 0.4 * exp(-t * 160.0)
+			"plate":
+				v = hp * 0.4 * exp(-t * 120.0)
+				for f in [410.0, 980.0, 1720.0]:
+					v += sin(TAU * f * t) * exp(-t * 20.0) * 0.16
+				v *= 0.6 + 0.4 * signf(sin(TAU * 38.0 * t))   # chacoalha
+			"water":
+				v = lp2 * 1.6 * exp(-t * 18.0) * minf(t * 120.0, 1.0) + sin(TAU * (700.0 + t * 900.0) * t) * exp(-t * 30.0) * 0.12
+		b[i] = tanh(v * 1.4) * 0.8
 	return _wav(b)
 
 

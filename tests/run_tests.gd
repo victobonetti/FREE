@@ -9,6 +9,7 @@ const Levels := preload("res://scripts/levels.gd")
 const LevelData := preload("res://scripts/level_data.gd")
 const Replay := preload("res://scripts/replay.gd")
 const RoomScript := preload("res://scripts/room.gd")
+const SfxFactory := preload("res://scripts/sfx_factory.gd")
 const Rabbit := preload("res://scripts/rabbit.gd")
 
 var failures := 0
@@ -395,6 +396,14 @@ func test_sfx_signals() -> void:
 	jump(1.0, 30)
 	walk_until(1.0, func(): return room.state != "play", 300)
 	check(got.has("win") and room.state != "play", "entrar no portal emite o som de vitória")
+	var steps := got.filter(func(n): return str(n).begins_with("step_"))
+	check(steps.size() >= 4, "correr emite passos (%d)" % steps.size())
+	check(SfxFactory.make(str(steps[0])) != null if not steps.is_empty() else false, "o passo tem som (%s)" % (steps[0] if not steps.is_empty() else "-"))
+	var mats := ["grass", "dirt", "stone", "wet", "metal", "wood", "plate", "water"]
+	var ok := true
+	for m in mats:
+		ok = ok and SfxFactory.make("step_" + m) != null and SfxFactory.ONE_SHOTS.has("step_" + m)
+	check(ok, "os oito materiais de passo existem")
 
 
 func test_box_impact_and_sensor() -> void:

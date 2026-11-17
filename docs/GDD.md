@@ -201,6 +201,16 @@ O enredo completo (com spoiler) está em `docs/HISTORIA.md`. No jogo:
   ou um estabilizador com antena (fábrica), um a cada ~26 colunas do teto da fase como foi desenhada.
   Pulsa forte enquanto o limitador conta e solta uma onda vermelha quando desfaz o giro. Gira com a sala.
 
+## 5d. Profundidade, reação ao giro, passos e líquidos (D84)
+
+Tudo só aparência e som (não muda colisão, replays nem provas):
+- **Sombras:** a luz vem do alto à esquerda da tela. Paredes, caixas, conectores, chapas, plataformas, comportas e o coelho projetam sombra no fundo (4, 5 px). O miolo das paredes é mais escuro (dois níveis); as faces de baixo e da direita têm sombra por dentro, as de cima e da esquerda um fio de luz. Uma elipse de sombra no chão embaixo do coelho diminui com a altura do pulo. As bordas da tela escurecem (vinheta).
+- **Profundidade:** o fundo anda mais devagar que a sala (paralaxe 0,2) e uma camada mais distante (0,45) tem silhuetas grandes: colunas de rocha e estalactites no subsolo, vigas e treliças na fábrica.
+- **Detalhes:** poeira dourada no feixe de luz (raízes), esporos subindo (caverna), fios de musgo pendurados (lençol d'água); na fábrica, lâmpadas penduradas com cone de luz (piscam de vez em quando), correntes e listras de aviso amarelas e pretas.
+- **Reação ao giro:** raízes, musgo, lâmpadas e correntes são pêndulos: depois do giro ficam apontando para o "baixo" antigo e balançam até se acomodar no novo. Grama e musgo numa parede pendem para baixo da tela. Cai poeira (na fábrica, ferrugem e fagulhas) do novo teto.
+- **Passos:** um a cada 11 px corridos no chão, e um no pouso, com o som do material: grama, terra, pedra, pedra molhada, metal (fábrica, conector, esteira, comporta), madeira (caixa), chapa (chapa solta, plataforma) e água rasa. Na Passagem, terra ou metal conforme a mistura.
+- **Água e ácido:** mais escuros no fundo, manchas de luz andando dentro, cintilado sob a superfície, bolhas que sobem balançando e estouram num anelzinho (muitas e maiores no ácido, poucas na água) e, no ácido, fiapos de vapor verde.
+
 ## 6. As 5 salas
 
 Cada sala introduz uma ideia. A dificuldade cresce porque as ideias se combinam.

@@ -508,3 +508,6 @@ As 17 fases do ato 1 ganharam tema (raízes, caverna, lençol d'água, despensa)
 
 ## Rodada 40: Passagem e dois acertos
 Fase 18 nova, "Passagem": corredor de transição em que a terra vira metal (tema `transicao`), canonizada depois do Jeffrey. Pingos do lençol d'água sempre caem para baixo; o bloco do Jeffrey mantém a textura ao girar (D83).
+
+## Rodada 41: sombras, profundidade, reação ao giro, passos, água e ácido
+Sombra projetada e volume nas paredes, sombra de contato, vinheta, duas camadas de paralaxe; poeira no feixe, esporos, musgo pendurado, lâmpadas, correntes e listras na fábrica; pêndulos que se acomodam depois do giro, grama que pende, poeira do novo teto; passos com oito materiais; água e ácido com profundidade, luz, cintilado, bolhas e vapor (D84).

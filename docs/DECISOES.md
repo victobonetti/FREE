@@ -635,3 +635,11 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Tema `transicao`:** a cada tile, sorteio (por hash) entre terra e aço, com a chance de aço crescendo ao longo da fase. `_metal_frac()` mede esse "ao longo" na direção da fase como foi desenhada, então a mistura não se embaralha com o giro.
 - **Respiro, mas com as peças do ato 2:** depois do boss, nada de quebra-cabeça; o jogador vê chapas soltas, esteira e estampador antes de precisar delas.
 - **Correções:** os pingos do lençol d'água caíam de lado depois de um giro (saíam do "teto original"); agora saem do teto de agora e caem para baixo da tela. O bloco do Jeffrey perdia a textura enquanto girava (era desenhado liso); agora gira tile a tile, com o tema.
+
+### D84 — Sombras, profundidade, reação ao giro, passos e líquidos
+- **Pedido do Victor:** "mais sombras, mais profundidade, detalhes", elementos reagindo à gravidade e passos por superfície; depois, mais detalhe na água e bolhas no ácido.
+- **Sem luzes do motor:** o jogo roda no renderizador de compatibilidade (web/celular); tudo é desenho direto (retângulos, polígonos, uma textura de gradiente para a vinheta). Barato e igual em todo lugar.
+- **Sombra de célula, não de tile:** a sombra é calculada para cada célula vazia (faixas de cima, da esquerda e do canto que não se sobrepõem), senão as sombras de tiles vizinhos somavam e faziam listras.
+- **Um balanço só para tudo que pende** (`_sway()`): como tudo pendia reto antes do giro, a diferença é sempre os 90° do giro; uma oscilação amortecida global basta, sem estado por objeto.
+- **Paralaxe com limite:** o fundo deslocado não pode vazar para fora da sala; as faixas visíveis são cortadas pelo deslocamento.
+- **Passos pela distância andada** (`rabbit.anim`), não pelo tempo: andar devagar ou contra a parede não faz barulho à toa.
