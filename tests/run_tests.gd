@@ -70,6 +70,12 @@ func _init() -> void:
 	test_jeffrey_replay()
 	test_jeffrey_lives()
 	test_jeffrey_intro()
+	test_mecha_intro()
+	test_mecha_dash()
+	test_mecha_homing()
+	test_mecha_thirds()
+	test_mecha_lives()
+	test_mecha_bot()
 	print("")
 	if failures == 0:
 		print("TODOS OS TESTES PASSARAM")
@@ -2739,5 +2745,179 @@ func test_industrial_levels() -> void:
 		check(room.group_filled(0) or won_at > 0, "%s: a caixa está no compartimento" % id)
 		var tall: int = room.gh
 		check(room.gw * room.gh >= 80 * 40, "%s: é grande (%dx%d tiles)" % [id, room.gw, tall])
-		check(room.theme == "industrial" and room.allow_rotate and room.limiter, "%s: tema industrial, giro liberado com limitador" % id)
+		check(room.theme == "industrial" and room.allow_rotate and room.def.get("limiter", false), "%s: tema industrial, giro liberado com limitador" % id)
 	Gatsby.intro_seen = false
+
+
+# ------------------------------------------------------------ boss 3: a mecha do Gatsby (D80)
+
+const BossMecha := preload("res://scripts/boss_mecha.gd")
+
+
+func _mecha(skip_intro := true) -> Variant:
+	BossMecha.intro_seen = skip_intro
+	load_def(JSON.parse_string(FileAccess.get_file_as_string("res://levels/wip/mecha.json")))
+	var m = room.actors[0]
+	if skip_intro:
+		var n := 0
+		while m.state != "idle" and n < 600:
+			tick()
+			n += 1
+	return m
+
+
+## Começa um ataque de investida já; devolve a mecha.
+func _mecha_dash(m) -> void:
+	m.homers.clear()
+	m.markers.clear()
+	m.shots.clear()
+	m.state = "dash_warn"
+	m.t = 0
+	m.committed = false
+	m.lost = false
+
+
+func test_mecha_intro() -> void:
+	print("mecha: a abertura")
+	var raw := FileAccess.get_file_as_string("res://levels/wip/mecha.json")
+	var data: RefCounted = LevelData.from_json(raw)
+	check(data != null and _msgs(data, true) == "", "a sala da mecha valida sem erros (%s)" % _msgs(data, true))
+	var m = _mecha(false)
+	check(m.state == "inert" and not room.allow_rotate, "começa com a mecha inerte e sem giro")
+	idle(30)
+	tick({"rotate": 1})
+	idle(20)
+	check(room.orientation == 0, "na abertura, o giro não acontece")
+	var n := 0
+	while m.state != "idle" and n < 600:
+		tick()
+		n += 1
+	check(m.state == "idle" and room.allow_rotate, "o Gatsby pluga e a luta começa (giro liberado) em %d quadros" % (n + 50))
+	check(BossMecha.intro_seen, "a abertura fica vista")
+	check(m.puppet.pos.distance_to(m.pos + m.HEAD) < 3.0, "a cápsula do Gatsby fica no alto da mecha")
+
+
+func test_mecha_dash() -> void:
+	print("mecha: a investida e o giro")
+	# sem girar: pega o coelho e a batida não a fere
+	var m = _mecha()
+	_mecha_dash(m)
+	var n := 0
+	while m.state != "stun" and n < 300:
+		tick()
+		n += 1
+	check(m.lives == 2 and m.energy == m.ENERGY, "sem girar, a investida tira um coração do coelho (vidas %d, energia %d)" % [m.lives, m.energy])
+	# girando com a mira travada (antes de partir) ou logo depois de partir: erra e bate na parede
+	for when in [-10, -2, 0, 6]:
+		m = _mecha()
+		_mecha_dash(m)
+		n = 0
+		var flipped := false
+		while m.state != "stun" and n < 400:
+			var inp := {}
+			var at: int = m.DASH_WARN[0] + when
+			var now: int = m.t if m.state == "dash_warn" else m.DASH_WARN[0] + m.t
+			if not flipped and (m.state == "dash_warn" or m.state == "dash") and now >= at:
+				inp = {"rotate": 1}
+				flipped = true
+			tick(inp)
+			n += 1
+		check(flipped and m.lives == 3 and m.energy == m.ENERGY - 1, "girar %+d quadros da partida: ela erra, bate e leva dano (vidas %d, energia %d)" % [when, m.lives, m.energy])
+	# girar cedo demais (antes de travar a mira): ela mira de novo e pega
+	m = _mecha()
+	_mecha_dash(m)
+	idle(10)
+	tick({"rotate": 1})
+	n = 0
+	while m.state != "stun" and n < 400:
+		tick()
+		n += 1
+	check(m.lives == 2, "girar cedo demais não esquiva (vidas %d)" % m.lives)
+	idle(200)
+	check(room.orientation == 0, "o limitador desfaz o giro")
+
+
+func test_mecha_homing() -> void:
+	print("mecha: os teleguiados")
+	var m = _mecha()
+	m.state = "idle"
+	m.t = -100000
+	# um míssil armado vindo para a mecha: acerta e tira energia
+	m.homers.append({"pos": m.pos + Vector2(-30, -4), "vel": Vector2(40, 0), "age": m.HOM_ARM + 1})
+	room.rabbit.pos = Vector2i(int(m.pos.x) + 40, room.rabbit.pos.y)
+	idle(60)
+	check(m.energy == m.ENERGY - 1, "o próprio míssil fere a mecha (energia %d)" % m.energy)
+	# recém-lançado: passa por ela sem acertar
+	m = _mecha()
+	m.t = -100000
+	m.homers.append({"pos": m.pos, "vel": Vector2(0, -70), "age": 0})
+	idle(10)
+	check(m.energy == m.ENERGY, "o míssil saindo dela não a fere")
+	# sem a mecha no caminho, persegue e acerta o coelho
+	m = _mecha()
+	m.t = -100000
+	m.homers.append({"pos": Vector2(100, 40), "vel": Vector2(0, 40), "age": 20})
+	var n := 0
+	while m.lives == 3 and n < 900:
+		tick()
+		n += 1
+	check(m.lives == 2, "o teleguiado persegue e acerta o coelho em %d quadros" % n)
+	# depois de um giro, a velocidade é de tela: o míssil não vira junto com a sala
+	m = _mecha()
+	m.t = -100000
+	m.homers.append({"pos": Vector2(88, 60), "vel": Vector2(40, 0), "age": 20})
+	wait_rot_ready()
+	tick({"rotate": 1})
+	check(m.homers.size() == 1 and m.homers[0]["vel"].x > 30.0, "o giro não vira a velocidade do míssil")
+
+
+func test_mecha_thirds() -> void:
+	print("mecha: barra em terços e os corações do Gatsby")
+	var m = _mecha()
+	m.energy = 9
+	m._damage(1)
+	check(m.hearts == 2 and m.state == "break", "perder um terço: explode por dentro e o Gatsby perde um coração")
+	idle(m.BREAK_FRAMES + 2)
+	check(m.state == "idle", "depois da explosão, a luta segue")
+	m.energy = 1
+	m.hearts = 1
+	m._damage(1)
+	check(m.hearts == 0 and m.state == "dying", "o último terço: ela se desmancha")
+	idle(m.DIE_FRAMES + 5)
+	check(m.state == "wreck" and room.door_unlocked, "derrotada, a porta destrava")
+	idle(200)
+	check(not m.puppet.visible, "o Gatsby foge na cápsula")
+
+
+func test_mecha_lives() -> void:
+	print("mecha: os 3 corações do coelho")
+	var m = _mecha()
+	for i in 2:
+		room.kill()
+		check(room.state == "play" and m.lives == 2 - i, "levar dano tira um coração e o coelho continua (vidas %d)" % m.lives)
+		room.invuln = 0
+	m.energy = 7
+	room.kill()
+	check(room.state == "dead", "no terceiro, o coelho morre")
+	idle(200)
+	check(m.lives == 3 and m.energy == m.ENERGY and m.hearts == m.HEARTS, "a luta recomeça inteira")
+
+
+## Um bot que só gira quando a mira da investida trava (e não desvia de mais nada) vence a mecha.
+func test_mecha_bot() -> void:
+	print("mecha: girar na investida vence")
+	var m = _mecha()
+	var i := 0
+	var flips := 0
+	while m.hearts > 0 and i < 40000:
+		var r := 0
+		if m.state == "dash_warn" and m.t == m.DASH_WARN[m._phase()] - m.DASH_COMMIT + 3 and not room.rotating and room.rot_lock == 0:
+			r = 1 if flips % 2 == 0 else -1
+			flips += 1
+		m.lives = m.LIVES   # só interessa o giro na investida
+		tick({"rotate": r})
+		i += 1
+	print("  %d quadros (%.0f s), %d giros" % [i, i / 60.0, flips])
+	check(m.hearts == 0, "o bot tira os 3 corações do Gatsby")
+	idle(m.DIE_FRAMES + 60)
+	check(room.door_unlocked, "a porta destrava")

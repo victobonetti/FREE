@@ -1,0 +1,36 @@
+{
+	"name": "A mecha",
+	"actors": [
+		"res://scripts/boss_mecha.gd"
+	],
+	"rotate": true,
+	"limiter": true,
+	"start_rot": 0,
+	"version": 1,
+	"theme": "industrial",
+	"notes": "Boss 3, a mecha do Gatsby (GDD 8e, D79, D80). Sala quadrada sem espinhos. A abertura não deixa girar; o Gatsby pluga na mecha. Miras, mísseis teleguiados (o único jeito de ferir, além da investida na parede) e a investida, que só o giro desvia. 3 corações do coelho; a barra da mecha em terços tira os 3 corações do Gatsby.",
+	"rows": [
+		"######################",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#....................#",
+		"#.................DD.#",
+		"#.................DD.#",
+		"#..PP.............DD.#",
+		"#..PP.............DD.#",
+		"######################"
+	]
+}

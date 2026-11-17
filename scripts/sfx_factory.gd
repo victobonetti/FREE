@@ -16,6 +16,8 @@ const ONE_SHOTS := {
 	"battery": [-14.0, 0.04], "charge": [-14.0, 0.0], "hatch": [-13.0, 0.05],
 	"plate_on": [-15.0, 0.04], "plate_off": [-19.0, 0.04],
 	"spring": [-13.0, 0.05], "steam_warn": [-20.0, 0.05], "steam_burst": [-14.0, 0.06],
+	"lock_on": [-20.0, 0.0], "missile": [-17.0, 0.12], "homer": [-18.0, 0.08], "slam": [-8.0, 0.05],
+	"blast": [-15.0, 0.15],
 }
 
 
@@ -65,6 +67,16 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _steam_warn()
 		"steam_burst":
 			return _steam_burst()
+		"lock_on":
+			return _lock_on()
+		"missile":
+			return _missile()
+		"homer":
+			return _homer()
+		"slam":
+			return _slam()
+		"blast":
+			return _blast()
 	return null
 
 
@@ -423,6 +435,79 @@ static func _steam_burst() -> AudioStreamWAV:
 		var v := hp * 0.8 * exp(-t * 3.2) * minf(t * 120.0, 1.0)
 		v += sin(TAU * 130.0 * t) * exp(-t * 40.0) * 0.5
 		b[i] = tanh(v * 1.4) * 0.8
+	return _wav(b)
+
+
+## Mira da mecha: três bipes agudos e rápidos.
+static func _lock_on() -> AudioStreamWAV:
+	var b := _buf(0.3)
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var v := 0.0
+		for k in 3:
+			var tk: float = t - k * 0.09
+			if tk >= 0.0 and tk < 0.05:
+				var env := minf(tk * 400.0, 1.0) * (1.0 - smoothstep(0.03, 0.05, tk))
+				v += signf(sin(TAU * 1568.0 * tk)) * 0.25 * env + sin(TAU * 1568.0 * tk) * 0.3 * env
+		b[i] = v * 0.7
+	return _wav(b)
+
+
+## Míssil da mira: um assobio que desce rápido, com chiado.
+static func _missile() -> AudioStreamWAV:
+	var b := _buf(0.18)
+	var rng := _rng(131)
+	var ph := 0.0
+	var lp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		ph += TAU * (2600.0 - t * 9000.0) / MIX_RATE
+		lp += (rng.randf_range(-1.0, 1.0) - lp) * 0.6
+		var env := minf(t * 300.0, 1.0) * exp(-t * 14.0)
+		b[i] = (sin(ph) * 0.35 + lp * 0.4) * env
+	return _wav(b)
+
+
+## Teleguiado saindo: um sopro de foguete que cresce e some.
+static func _homer() -> AudioStreamWAV:
+	var b := _buf(0.45)
+	var rng := _rng(133)
+	var lp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		lp += (rng.randf_range(-1.0, 1.0) - lp) * 0.18
+		var env := minf(t * 25.0, 1.0) * exp(-t * 6.0)
+		b[i] = tanh((lp * 2.2 + sin(TAU * (90.0 + t * 60.0) * t) * 0.3) * env * 1.5) * 0.8
+	return _wav(b)
+
+
+## A investida bate na parede: pancada grave e enorme, com metal rangendo.
+static func _slam() -> AudioStreamWAV:
+	var b := _buf(0.7)
+	var rng := _rng(137)
+	var lp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var n := rng.randf_range(-1.0, 1.0)
+		lp += (n - lp) * 0.06
+		var v := sin(TAU * (55.0 - t * 20.0) * t) * exp(-t * 5.0) * 1.1
+		v += lp * 4.0 * exp(-t * 9.0)
+		v += sin(TAU * 410.0 * t + sin(TAU * 7.0 * t) * 3.0) * exp(-t * 4.0) * 0.18
+		b[i] = tanh(v * 1.8) * 0.85
+	return _wav(b)
+
+
+## Explosão pequena (míssil): estalo e ronco curto.
+static func _blast() -> AudioStreamWAV:
+	var b := _buf(0.32)
+	var rng := _rng(139)
+	var lp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var n := rng.randf_range(-1.0, 1.0)
+		lp += (n - lp) * 0.2
+		var v := n * exp(-t * 60.0) * 0.8 + lp * 2.0 * exp(-t * 11.0) + sin(TAU * 70.0 * t) * exp(-t * 14.0) * 0.6
+		b[i] = tanh(v * 1.5) * 0.8
 	return _wav(b)
 
 

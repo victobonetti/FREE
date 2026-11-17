@@ -163,6 +163,7 @@ scripts/
   input_setup.gd       # teclas e controle registrados em código
   touch_controls.gd    # controles de toque (celular), apertam as mesmas ações
   boss_squirrel.gd     # boss 1, Jeffrey, o esquilo (ator da sala 17)
+  boss_mecha.gd        # boss 3, a mecha do Gatsby (levels/wip/mecha.json)
 tests/
   run_tests.gd         # formato das salas, pulo e bots que resolvem cada sala
   shot.gd              # capturas de tela de cada sala
@@ -409,7 +410,7 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 
 **Ordem de trabalho (Victor: editor primeiro):** peças na sala → editor com todas elas → as fases (rascunhos provados por robô; o Victor refina no editor, grava os replays e canoniza). **Feito (D77).**
 
-## 8e. Boss 3 — a mecha do Gatsby (conceito fechado, nada implementado; D79)
+## 8e. Boss 3 — a mecha do Gatsby (D79; primeira versão jogável em D80)
 
 Segunda luta contra o Gatsby, na sala logo depois da fuga (8c). Sala quadrada, grande, **sem espinhos**.
 
@@ -431,6 +432,17 @@ Segunda luta contra o Gatsby, na sala logo depois da fuga (8c). Sala quadrada, g
 **Ordem de implementação:** protótipo da investida (a sensação do flip como esquiva, aviso e janela), depois os teleguiados, por último a mira. Depois a abertura, as fases e a arte.
 
 **Em aberto (calibrar no protótipo):** tamanho da barra, aviso e janela da investida, velocidade e curva dos teleguiados, quanto dano cada coisa causa.
+
+**Primeira versão (D80):** `scripts/boss_mecha.gd`, sala `levels/wip/mecha.json` (22×22, sem espinhos, giro com limitador). Joga-se com `run.ps1 -Play mecha` ou, na web, com `?play=mecha` no endereço.
+- **Abertura:** 2,5 s para olhar a sala sem giro; a cápsula do Gatsby desce e pluga no alto da mecha (vira a cabeça dela). Depois de perder, a abertura é curta.
+- **A investida:** ~0,9 s de aviso (linha vermelha piscando até o coelho); nos últimos 14 quadros a **mira trava** (a linha fica sólida e vai até a parede) e soa um bipe. Ela parte a 240 px/s e corrige a rota até o coelho. Um giro com a mira travada ou nos primeiros ~12 quadros da investida a faz perder o alvo: segue reto na direção de tela, bate na parede, leva dano e fica atordoada. Girar antes da trava não adianta (ela mira de novo e o giro fica em recarga). A janela de esquiva é de ~0,45 s.
+- **A regra do giro:** a velocidade da investida e dos teleguiados é de tela (não gira com a sala). Depois de qualquer giro, a mecha liga os propulsores, flutua para o lado do coelho e desce devagar até o chão novo.
+- **Teleguiados:** 3/4/5 por ataque, lentos (34 a 42 px/s), viram 0,032 rad por quadro. Explodem no coelho, na parede ou na mecha (depois de 36 quadros de voo, para não acertarem a mecha ao sair dela).
+- **Miras:** 4/6/8 no contorno (chão, paredes, teto), a primeira sempre embaixo do coelho; o primeiro disparo depois de 1 s (menos a cada fase), um a cada 5 quadros, a 12 px por quadro, explosão de raio 11.
+- **Barra:** 12 de energia (4 por terço); cada acerto de míssil ou batida tira 1. Fases: 1) mira, teleguiados, investida; 2) teleguiados, mira, investida, teleguiados, investida; 3) mira com teleguiados juntos, investida, teleguiados, investida, mira.
+- **Distância:** andando, ela fica entre 56 e 96 px do coelho (perto, recua), para a investida ter tempo de aviso.
+- **Sons novos:** mira (bipes), míssil, teleguiado, batida da investida, explosão pequena.
+- **Falta:** música; a cena de saída (hoje o Gatsby ejeta a cápsula e foge pelo alto); calibrar números jogando; ligar na campanha depois da fuga do Gatsby (que ainda não está na história).
 
 ## 9. Decisões
 

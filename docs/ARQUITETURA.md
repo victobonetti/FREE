@@ -228,6 +228,13 @@ Todos são campos da fase (JSON) lidos por `room.gd`, giram com a sala e são de
 - **Sons** (`scripts/sfx_factory.gd`): todos gerados em código. `ONE_SHOTS` lista nome, volume e variação de tom; `main.gd` cria um tocador para cada um e toca quando a sala emite `sfx` com o nome. `rumble()` é o loop do ronco. Nomes: `lever`, `mover_warn`, `mover_go`, `mover_dock`, `launch`, `crumble_warn`, `crumble`, `crunch`, `crusher_wake`, `alarm`, `gatsby_dash`, `gatsby_laugh`.
 - **Fase e prova:** `tools/gatsby_level.py` escreve `levels/wip/gatsby.json`; `tools/gatsby_robot.gd` joga a fase com um plano de comandos (correr até x, pular, esperar, girar) e grava `tests/fixtures/gatsby-route.json`, que `test_gatsby_route` roda. Mudou a fase: rode os dois, nessa ordem. `levels/wip/` entra no pacote exportado; `--play=<id>` e `?play=<id>` jogam um rascunho do jogador ou, se não houver, a fase de `levels/wip`.
 
+## A mecha (`boss_mecha.gd`, D80)
+- Ator da sala (`actors`), como o Jeffrey: `step`, `on_reset`, `on_rotate`, `absorb_kill` (3 corações do coelho), `replay_state` (a abertura vista).
+- `pos` é o centro da caixa (24×30), sempre em pé na tela. Em `on_rotate`, as posições giram com a sala, mas as velocidades da investida e dos teleguiados não (são de tela): é o que faz o giro desviar.
+- A cápsula do Gatsby é um `boss_gatsby.gd` filho, só para o desenho (`phase = "puppet"`, `show_behind_parent`); `anim_draw()` a põe no alto da mecha também durante a animação do giro.
+- Projéteis: `markers` (miras no contorno), `shots` (mísseis da mira, 12 px por quadro), `homers` (teleguiados), `blasts` (só desenho; o dano é no quadro da explosão).
+- A abertura desliga `room.allow_rotate` e o religa quando o Gatsby pluga.
+
 ## Gatsby (`boss_gatsby.gd`, D74)
 
 - **Movimento (D75, substitui a órbita):** `_orbit` puxa a cápsula por uma mola para um ponto à frente do coelho no rumo da corrida (`_race_dir`: do coelho para a próxima área `when` do roteiro), numa elipse mais larga que alta, com balanço lateral por humor (`LEAD`). Se o ponto cai dentro de uma parede (`_in_wall`), tenta ângulos ao lado. `_keep_clear` roda em toda fase menos `gone`: abaixo de `KEEP_AWAY` (66 px) ele é empurrado e pode dar um arranque; abaixo de `KEEP_MIN` (50 px) a posição é corrigida na hora. `min_gap` guarda a menor distância desde o reset (os testes conferem).

@@ -496,3 +496,6 @@ Depois: cambalhota encolhida do coelho e faíscas azuis a cada giro (pedido do V
 
 ## Rodada 36: ato 2 mais difícil e na história
 Giro com limitador nas cinco fases industriais, espinhos no teto, fase 1 refeita, Gatsby só no último segundo (parede feliz) na fase 5, vapor granular. Cinco fases canonizadas depois do Jeffrey por `tools/canonize_levels.gd`. As fases 2 a 4 ganharam o giro e o teto de espinhos, mas o desenho delas ainda é o da rodada 35 (mais plataforming é o próximo passo).
+
+## Rodada 37: a mecha do Gatsby, primeira versão
+Plano fechado (GDD 8e, D79) e implementado (D80): `scripts/boss_mecha.gd` e a sala `levels/wip/mecha.json`. Abertura sem giro e o Gatsby plugando; miras, teleguiados e a investida que só o giro desvia; barra em terços com os corações do Gatsby; 3 corações do coelho; cinco sons novos. Testes da luta e um bot que vence. Também: a linha do editor saiu da tela de título no celular, e um teste do ato 2 que não rodava (lia um campo inexistente) foi corrigido.

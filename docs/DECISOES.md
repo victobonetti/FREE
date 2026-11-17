@@ -607,3 +607,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Ideia do Victor** (esboço com mira, teleguiados e investida), discutida e fechada em 8e do GDD. Fica depois da fuga do Gatsby.
 - **Escolhas:** sem espinhos; a mecha leva dano só dos próprios mísseis e da investida na parede (atordoada); cada terço da barra tira um coração do Gatsby (3), com explosão e deterioração; coelho com 3 corações como no Jeffrey; flip com o limitador de ~2,5 s; a abertura não permite flip.
 - **Prioridade da implementação:** a investida primeiro, porque a sensação do flip como esquiva é o maior risco do desenho.
+
+### D80 — A mecha: primeira versão jogável
+- **A esquiva da investida** vem de uma regra só: a velocidade da investida (e dos teleguiados) é de tela, não gira com a sala. Um giro move o coelho e a mecha junto com a sala, mas a investida segue para o mesmo lado da tela: perde o alvo e bate na parede. Não precisou de nenhum caso especial.
+- **A mira travada** (os 14 quadros finais do aviso) existe porque, sem ela, a janela era de ~0,2 s, só no começo da investida. Com ela, ~0,45 s, e o jogador vê quando pode girar (a linha fica sólida). Girar antes da trava é cedo demais: ela mira de novo.
+- **A mecha mantém distância** (56 a 96 px) para a investida ter caminho; se ficasse colada no coelho, não haveria tempo de reagir.
+- **A cápsula do Gatsby é o próprio `boss_gatsby.gd`**, usado só para o desenho (um "boneco" dentro da mecha, desenhado atrás do corpo: só a cúpula aparece). As expressões dele já existem e acompanham a luta.
+- **Prova:** sem replay ainda (está em `levels/wip`). Os testes provam a abertura, a esquiva em quatro momentos, girar cedo demais, os teleguiados (inclusive acertando a mecha), os terços, a derrota e um bot que vence só girando na investida (em ~2,6 min de jogo).
