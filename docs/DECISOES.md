@@ -602,3 +602,8 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Fase 5:** o Gatsby e a parede só aparecem no último trecho (gatilho a 2 tiles do fim do corredor, parede a ~10 tiles da porta, carinha feliz). A esteira da caixa ficou mais rápida (60 px/s) para a porta abrir antes.
 - **Canonizadas** logo depois do `jeffrey` (ids `linha-de-montagem`, `esteiras`, `prensas-e-vapor`, `dutos`, `casa-de-forca`), com a rota do robô como replay (`tools/canonize_levels.gd`). A campanha tem 22 fases.
 - **Vapor:** partículas finas (pontos brancos que sobem, alargam e somem, com o jato aberto crescendo da boca) no lugar dos quadrados cinzas.
+
+### D79 — Boss 3: a mecha do Gatsby (só o plano)
+- **Ideia do Victor** (esboço com mira, teleguiados e investida), discutida e fechada em 8e do GDD. Fica depois da fuga do Gatsby.
+- **Escolhas:** sem espinhos; a mecha leva dano só dos próprios mísseis e da investida na parede (atordoada); cada terço da barra tira um coração do Gatsby (3), com explosão e deterioração; coelho com 3 corações como no Jeffrey; flip com o limitador de ~2,5 s; a abertura não permite flip.
+- **Prioridade da implementação:** a investida primeiro, porque a sensação do flip como esquiva é o maior risco do desenho.

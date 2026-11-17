@@ -409,6 +409,29 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 
 **Ordem de trabalho (Victor: editor primeiro):** peças na sala → editor com todas elas → as fases (rascunhos provados por robô; o Victor refina no editor, grava os replays e canoniza). **Feito (D77).**
 
+## 8e. Boss 3 — a mecha do Gatsby (conceito fechado, nada implementado; D79)
+
+Segunda luta contra o Gatsby, na sala logo depois da fuga (8c). Sala quadrada, grande, **sem espinhos**.
+
+**Abertura:** só o corpo inerte de uma mecha no chão. O jogador tem alguns segundos para ver a sala, **sem poder fazer flip**. O Gatsby chega de nave, pluga na mecha, que liga: começa a luta.
+
+**Regras**
+- O coelho tem **3 corações** e o mesmo sistema do Jeffrey (a morte vira dano, `absorb_kill`; `invuln` o faz piscar). Corações não se recuperam.
+- A mecha tem uma **barra de energia enorme**; o Gatsby tem **3 corações**, mostrados acima da mecha. A barra só cai com os **mísseis teleguiados** e com a **investida** que bate na parede.
+- A cada **terço** da barra há uma explosão na mecha: ela se deteriora (visual) e o Gatsby perde um coração. Cada coração é uma fase, com ataques mais densos.
+- **Flip limitado:** o limitador de ~2,5 s da sala (como nas fases do ato 2). A mecha **se adapta** à gravidade e **flutua** para reagir ao movimento do coelho (cai devagar usando os propulsores), o que a deixa ao alcance dos próprios mísseis.
+
+**Ataques**
+1. **Mira:** marcadores no chão, nas paredes e no teto. Os mísseis são quase instantâneos, com raio de explosão pequeno. Pode acertar o coelho **no ar, durante um flip**, antes do alvo original. Aviso longo e legível (celular).
+2. **Teleguiados:** mísseis extremamente lentos que perseguem o coelho. Ferem por contato. O coelho desvia ou os leva até a mecha (o flip leva os mísseis à mecha). Curva limitada, para o jogador conseguir posicionar a mecha.
+3. **Investida:** os propulsores levam a mecha direto ao coelho, até bater forte na parede (impacto enorme, tremor). A única esquiva é um flip dentro do intervalo. A mecha **leva dano** e fica **atordoada** por um instante.
+
+**Arte e som:** arte nova no estilo do jogo (a imagem do Victor é só referência: plugue, propulsores, compartimento de mísseis). Música própria, depois.
+
+**Ordem de implementação:** protótipo da investida (a sensação do flip como esquiva, aviso e janela), depois os teleguiados, por último a mira. Depois a abertura, as fases e a arte.
+
+**Em aberto (calibrar no protótipo):** tamanho da barra, aviso e janela da investida, velocidade e curva dos teleguiados, quanto dano cada coisa causa.
+
 ## 9. Decisões
 
 O registro completo, com motivos e alternativas, está em [DECISOES.md](DECISOES.md). Resumo do que afeta o design:
