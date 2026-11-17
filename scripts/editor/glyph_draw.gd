@@ -10,7 +10,7 @@ const NAMES := {
 	"v": "Espinho para baixo", "<": "Espinho para a esquerda",
 	"=": "Plataforma: seta para cima", "}": "Plataforma: seta para a direita",
 	"_": "Plataforma: seta para baixo", "{": "Plataforma: seta para a esquerda",
-	"~": "Água", "o": "Ralo", "|": "Corda vertical", "-": "Corda horizontal",
+	"~": "Água", "%": "Ácido (mata ao toque)", "o": "Ralo", "|": "Corda vertical", "-": "Corda horizontal",
 	"P": "Coelho (2x2)", "B": "Caixa (2x2)", "S": "Compartimento da porta (2x2)", "D": "Porta",
 }
 
@@ -71,6 +71,11 @@ static func draw(ci: CanvasItem, g: String, r: Rect2, ctx := {}) -> void:
 			ci.draw_colored_polygon(_xf(ar, f2, r), Color(RoomScript.C_PLAT, a * 0.9))
 		"~":
 			ci.draw_rect(r, Color(RoomScript.C_WATER, 0.6 * a))
+		"%":
+			ci.draw_rect(r, Color(RoomScript.C_ACID, 0.65 * a))
+			ci.draw_rect(Rect2(r.position, Vector2(s, maxf(s * 0.12, 1))), Color(RoomScript.C_ACID_TOP, a))
+			ci.draw_circle(r.position + Vector2(s * 0.3, s * 0.6), maxf(s * 0.08, 1.0), Color(RoomScript.C_ACID_TOP, 0.8 * a))
+			ci.draw_circle(r.position + Vector2(s * 0.7, s * 0.4), maxf(s * 0.06, 1.0), Color(RoomScript.C_ACID_TOP, 0.8 * a))
 		"o":
 			var c := r.get_center()
 			ci.draw_circle(c, s * 0.42, Color(RoomScript.C_DRAIN, 0.3 * a))

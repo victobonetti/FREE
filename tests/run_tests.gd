@@ -36,6 +36,7 @@ func _init() -> void:
 	test_gatsby()
 	test_gatsby_route()
 	test_race_components()
+	test_acid()
 	test_reload_params()
 	test_rope()
 	test_water()
@@ -2251,3 +2252,63 @@ func test_race_components() -> void:
 
 func Gatsby_script() -> Script:
 	return load("res://scripts/boss_gatsby.gd")
+
+
+# ------------------------------------------------------------ ácido (D76)
+
+func _acid_room() -> Dictionary:
+	var d: Dictionary = WATER_ROOM.duplicate(true)
+	var rows: Array = []
+	for r in d["rows"]:
+		rows.append(String(r).replace("~", "%"))
+	d["rows"] = rows
+	d["name"] = "teste ácido"
+	return d
+
+
+func test_acid() -> void:
+	print("ácido")
+	load_def(_acid_room())
+	check(room.fluid_acid, "o glifo % faz o fluido da sala ser ácido")
+	var vol := _water_sum()
+	check(absf(vol - 18 * 6 * 64) < 0.5 and room.water_calm and _surface_spread() < 0.5, "escorre e assenta como a água (%.0f px²)" % vol)
+	var h0: PackedFloat64Array = room.wt_h.duplicate()
+	for i in 4:
+		room._rotate_logic(1)
+	var same: bool = room.wt_h.size() == h0.size()
+	for k in h0.size():
+		same = same and absf(room.wt_h[k] - h0[k]) < 0.001
+	check(same, "quatro giros devolvem o ácido ao lugar")
+	room.reset()
+	idle(30)
+	check(room.state == "play", "longe do ácido, nada acontece")
+	var got: Array = []
+	room.sfx.connect(func(n): got.append(n))
+	walk_until(1.0, func(): return room.state != "play" or not room.rabbit.on_ground and room.rabbit.pos.x > 40, 200)
+	var died := false
+	for i in 150:
+		tick()
+		if room.state == "dead":
+			died = true
+			break   # depois de morrer a sala reinicia sozinha
+	check(died, "tocar no ácido mata")
+	check(got.has("acid_burn") and got.has("acid_splash"), "com chiado e respingo próprios")
+	# nada de ácido no que não toca: ficar na borda do tanque, rente à superfície
+	room.reset()
+	idle(30)
+	var surface_y := 13 * 8
+	check(room.rabbit.pos.y + 12 <= surface_y - 20, "o coelho começa bem acima da superfície")
+	# a sala mista é recusada pelo validador
+	var mixed: RefCounted = LevelData.from_def(WATER_ROOM)
+	mixed.set_cell(3, 8, "%")
+	var msgs := ""
+	for e in mixed.errors():
+		msgs += e["msg"]
+	check(msgs.contains("água") and msgs.contains("ácido"), "água e ácido na mesma sala é erro no editor")
+	var pure: RefCounted = LevelData.from_def(_acid_room())
+	var only_door := true
+	for e in pure.errors():
+		only_door = only_door and String(e["msg"]).contains("porta")
+	check(only_door, "uma sala só de ácido é válida (o único erro é a falta de porta da sala de teste)")
+	load_def(WATER_ROOM)
+	check(not room.fluid_acid, "a água continua água")

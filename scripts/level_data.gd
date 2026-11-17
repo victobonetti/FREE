@@ -18,7 +18,7 @@ const MAX_TIME := 30.0
 const MIN_W := 6
 const MIN_H := 6
 const INVERSE_GATES := "¹²³⁴⁵⁶⁷⁸⁹"   # comporta inversa 1..9
-const GLYPHS := "#.PBSD123456789abcdefghi=}_{^>v<~o|-¹²³⁴⁵⁶⁷⁸⁹"
+const GLYPHS := "#.PBSD123456789abcdefghi=}_{^>v<~%o|-¹²³⁴⁵⁶⁷⁸⁹"
 const BLOCK_GLYPHS := "PBSabcdefghi"   # peças de 2x2
 const GATE_SOCKETS := "abcdefghi"
 
@@ -340,6 +340,14 @@ func validate() -> Array:
 	var sockets := door_sockets + gate_sockets.size()
 	if boxes < sockets:
 		out.append({"erro": true, "msg": "Há %d compartimentos e só %d caixas." % [sockets, boxes], "pos": no_pos})
+	# a sala tem um fluido só: água ou ácido
+	var has_w := false
+	var has_a := false
+	for line in rows:
+		has_w = has_w or String(line).contains("~")
+		has_a = has_a or String(line).contains("%")
+	if has_w and has_a:
+		out.append({"erro": true, "msg": "A sala não pode ter água '~' e ácido '%' ao mesmo tempo.", "pos": no_pos})
 	# bloco giratório (sala de boss): quadrado, dentro da sala, todo de parede
 	if extra.has("spin_block"):
 		var sb = extra["spin_block"]

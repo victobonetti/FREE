@@ -12,6 +12,7 @@ const ONE_SHOTS := {
 	"mover_dock": [-14.0, 0.08], "launch": [-13.0, 0.05], "crumble_warn": [-17.0, 0.1],
 	"crumble": [-13.0, 0.1], "crunch": [-15.0, 0.18], "crusher_wake": [-9.0, 0.0],
 	"alarm": [-21.0, 0.0], "gatsby_dash": [-18.0, 0.1], "gatsby_laugh": [-15.0, 0.05],
+	"acid_burn": [-13.0, 0.06], "acid_splash": [-17.0, 0.1],
 }
 
 
@@ -41,6 +42,10 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _gatsby_dash()
 		"gatsby_laugh":
 			return _gatsby_laugh()
+		"acid_burn":
+			return _acid_burn()
+		"acid_splash":
+			return _acid_splash()
 	return null
 
 
@@ -266,6 +271,36 @@ static func _gatsby_laugh() -> AudioStreamWAV:
 				var env := minf(tk * 120.0, 1.0) * (1.0 - smoothstep(0.04, 0.1, tk))
 				v += (saw * 0.45 + sin(TAU * f * 2.5 * tk) * 0.25) * env
 		b[i] = tanh(v * 1.4) * 0.7
+	return _wav(b)
+
+
+## O coelho toca o ácido: chiado agudo que cai, com estalos de bolhas.
+static func _acid_burn() -> AudioStreamWAV:
+	var b := _buf(0.5)
+	var rng := _rng(111)
+	var hp := 0.0
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var n := rng.randf_range(-1.0, 1.0)
+		hp = n - hp * 0.55   # filtro passa-alta simples: chiado
+		var v := hp * 0.45 * exp(-t * 5.0)
+		v += sin(TAU * lerpf(900.0, 260.0, minf(t * 3.0, 1.0)) * t) * exp(-t * 9.0) * 0.3
+		if rng.randf() < 0.018 and t < 0.35:
+			v += rng.randf_range(-0.8, 0.8) * exp(-t * 4.0)
+		b[i] = tanh(v * 1.3) * 0.7
+	return _wav(b)
+
+
+## Algo cai no ácido: um "glub" borbulhante, mais grosso que o da água.
+static func _acid_splash() -> AudioStreamWAV:
+	var b := _buf(0.3)
+	var rng := _rng(112)
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var v := sin(TAU * lerpf(300.0, 120.0, minf(t * 5.0, 1.0)) * t) * exp(-t * 14.0) * 0.8
+		v += sin(TAU * 520.0 * t) * exp(-t * 30.0) * 0.3
+		v += rng.randf_range(-1.0, 1.0) * exp(-t * 45.0) * 0.3
+		b[i] = tanh(v * 1.3) * 0.75
 	return _wav(b)
 
 

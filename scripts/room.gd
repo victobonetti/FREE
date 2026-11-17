@@ -98,6 +98,9 @@ const C_PLAT_DARK := Color("3a3158")
 const C_ROPE := Color("e39a4c")
 const C_WATER := Color("2f86e0")
 const C_WATER_TOP := Color("9fd4ff")
+const C_ACID := Color("5fd63a")
+const C_ACID_TOP := Color("d8ff7a")
+const ACID_TOUCH := 0.02        # fração do coelho dentro do ácido a partir da qual ele morre
 const C_DRAIN := Color("8d8d99")
 # Engenhocas do Gatsby (ato 2): aço em chapas remendadas, rebites, ferrugem e tinta de pichação.
 const C_STEEL := [Color("2b2d35"), Color("31343d"), Color("26282f")]
@@ -231,6 +234,10 @@ var we_nu := PackedFloat64Array()
 var we_fall := PackedFloat64Array() # cascata visível nesta ligação (só desenho)
 var we_near := 0
 var ripples := false       # há ondas na superfície
+# Ácido (glifo "%"): o mesmo fluido da água (escorre, nivela, gira com a sala), em verde, e mata o
+# coelho ao toque. A sala tem um tipo de fluido só: se há "%" em qualquer lugar, todo o fluido é ácido
+# (o validador do editor recusa misturar "~" e "%").
+var fluid_acid := false
 var water_vol := 0.0       # volume total (px²)
 var water_calm := false    # parada: a simulação descansa
 var water_dirty := true    # os vãos precisam ser refeitos (comporta ou plataforma mudou)
@@ -369,6 +376,7 @@ func reset() -> void:
 	timer = 0
 	rabbit = Rabbit.new()
 	var water_tiles: Array = []
+	fluid_acid = false
 	_parse(rows, water_tiles)
 	_init_crushers()
 	_init_movers()
@@ -882,6 +890,9 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 				_add_spike(c, r, 3)
 			elif ch == "~":
 				water_tiles.append(key)
+			elif ch == "%":
+				water_tiles.append(key)
+				fluid_acid = true
 			elif ch == "o":
 				drains.append({"rect": cell, "t": 0, "spin": 0.0})
 			elif ch == "|" or ch == "-":
@@ -1328,7 +1339,7 @@ func step(inp: Dictionary) -> void:
 	if rabbit.ev_release:
 		sfx.emit("jump")
 	if rabbit.ev_splash > 0.0:
-		sfx.emit("splash")
+		sfx.emit("acid_splash" if fluid_acid else "splash")
 		_splash(rabbit.ev_splash)
 		_water_push(rabbit.pos.x, rabbit.pos.x + Rabbit.SIZE, rabbit.ev_splash * 0.02)
 	elif rabbit.wet > 0.2 and absf(rabbit.vel.x) > 12.0 and frame % 5 == 0:
@@ -1344,6 +1355,7 @@ func step(inp: Dictionary) -> void:
 		a.step(self)
 	if state != "play":
 		return
+	_acid_bubbles()
 	_update_crumbles()
 	_update_crushers()
 	_update_danger()
@@ -2020,6 +2032,37 @@ func _water_push(x0: int, x1: int, strength: float) -> void:
 				ripples = true
 
 
+## O coelho tocou o ácido: chiado e fumaça verde.
+func _acid_burn() -> void:
+	if state != "play" or invuln > 0:
+		return
+	sfx.emit("acid_splash")   # o coelho morre antes de a água teria tempo de espirrar: o respingo vem junto
+	sfx.emit("acid_burn")
+	_splash(maxf(rabbit.vel.y, 60.0))
+	var c := Vector2(rabbit.pos.x + 6, rabbit.pos.y + 8)
+	for i in 14:
+		particles.append({
+			"pos": c + Vector2(randf_range(-5.0, 5.0), randf_range(-4.0, 4.0)),
+			"vel": Vector2(randf_range(-30.0, 30.0), -randf_range(20.0, 80.0)),
+			"life": randi_range(14, 28), "col": C_ACID_TOP if i % 2 == 0 else C_ACID, "grav": -20.0,
+		})
+
+
+## Bolhas que estouram na superfície do ácido (só desenho).
+func _acid_bubbles() -> void:
+	if not fluid_acid or water_vol <= 0.0 or frame % 5 != 0 or wt_x.is_empty():
+		return
+	var k := randi() % wt_x.size()
+	if wt_h[k] < 3.0:
+		return
+	var x := float(wt_x[k])
+	var y := wt_bot[k] - wt_air[k] - wt_h[k] + wt_o[k]
+	if absf(x - cam.x) > VIEW.x * 0.75 or absf(y - cam.y) > VIEW.y * 0.75:
+		return
+	particles.append({"pos": Vector2(x, y), "vel": Vector2(randf_range(-4.0, 4.0), -randf_range(8.0, 22.0)),
+		"life": randi_range(8, 14), "col": C_ACID_TOP, "grav": 30.0})
+
+
 func _splash(speed: float) -> void:
 	var k := clampf(speed / 160.0, 0.3, 1.5)
 	var c := Vector2(rabbit.pos.x + 6, rabbit.pos.y + 10)
@@ -2028,7 +2071,7 @@ func _splash(speed: float) -> void:
 		particles.append({
 			"pos": c + Vector2(dir * randf_range(1.0, 6.0), 0),
 			"vel": Vector2(dir * randf_range(10.0, 45.0) * k, -randf_range(40.0, 110.0) * k),
-			"life": randi_range(12, 22), "col": C_WATER_TOP, "grav": 380.0,
+			"life": randi_range(12, 22), "col": C_ACID_TOP if fluid_acid else C_WATER_TOP, "grav": 380.0,
 		})
 
 
@@ -2057,6 +2100,10 @@ func touch_check() -> bool:
 
 func _check_hazards() -> void:
 	var rr: Rect2i = rabbit.rect
+	if fluid_acid and water_vol > 0.0 and water_frac(rr) > ACID_TOUCH:
+		_acid_burn()
+		kill()
+		return
 	for s in spikes:
 		if overlaps(rr, _spike_hurt(s["rect"], s["facing"])):
 			kill()
@@ -2725,8 +2772,8 @@ func _draw_ropes() -> void:
 func _draw_water() -> void:
 	if water_vol <= 0.0:
 		return
-	var body := Color(C_WATER, 0.55)
-	var top := Color(C_WATER_TOP, 0.85)
+	var body := Color(C_ACID, 0.62) if fluid_acid else Color(C_WATER, 0.55)
+	var top := Color(C_ACID_TOP, 0.95) if fluid_acid else Color(C_WATER_TOP, 0.85)
 	var run_x := 0
 	var run_y0 := -1
 	var run_y1 := -1
@@ -2763,7 +2810,7 @@ func _draw_water() -> void:
 		if y_to > y_from + 1.0:
 			var w := 2.0 if absf(q) > 0.05 else 1.0
 			var x := float(wt_x[to]) if q > 0.0 else float(wt_x[to]) + 1.0 - w
-			draw_rect(Rect2(x, y_from, w, y_to - y_from), Color(C_WATER_TOP, clampf(absf(q) * 30.0, 0.35, 0.8)))
+			draw_rect(Rect2(x, y_from, w, y_to - y_from), Color(C_ACID_TOP if fluid_acid else C_WATER_TOP, clampf(absf(q) * 30.0, 0.35, 0.8)))
 
 
 func _draw_rabbit(base: Transform2D) -> void:
