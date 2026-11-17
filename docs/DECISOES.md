@@ -649,3 +649,9 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Modo novo de botão, "timed"** (campo `time`, em segundos): cada pisada liga o canal; ao sair, conta o tempo e desliga; dá para chamar de novo. No editor: "liga por um tempo (pode chamar de novo)".
 - **Prensas e vapor:** botão por tempo (5 s), elevador de 50 para 120 px/s, mantendo 1 s de espera para embarcar (com menos, ele saía antes de o coelho pousar). Rota do robô refeita e a fase substituída no mesmo lugar da campanha (`tools/canonize_levels.gd` agora substitui pelo nome).
 - **Botão mais visível** (todos): brilho no chão na cor do canal, base mais larga, botão colorido, uma seta pulsando acima enquanto não está apertado e, no modo por tempo, uma barra com o que falta.
+
+### D86 — O fundo não pula mais no giro
+- **Problema (Victor):** as silhuetas do fundo "se teletransportavam para baixo" e se deformavam a cada giro, e pareciam espinhos.
+- **Causa:** o fundo era gerado a partir do chão e do tamanho da sala de agora; no giro, largura e altura trocam e o "chão" muda de lado, então tudo era recalculado.
+- **Solução em duas camadas:** (1) o fundo do meio é pintado nas coordenadas da fase como foi desenhada e desenhado com a transformação da orientação (`_orig_xform`): gira junto, como as paredes; (2) o mundo lá fora é desenhado na tela, sempre em pé, rolando com o quanto a câmera andou na tela (`_world_off`, que atravessa o giro sem salto) e recortado pelo retângulo da sala (`Geometry2D.intersect_polygons`). No giro, a sala gira na frente dele: mais profundidade.
+- **Sem pontas:** as rochas viraram colunas largas e onduladas que atravessam a tela, para não serem confundidas com espinhos.

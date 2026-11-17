@@ -40,8 +40,8 @@ const C_ANCHOR := Color("ff3b4e")      # o amortecedor das salas com limitador (
 # fundo, o miolo das paredes é mais escuro, e o fundo anda mais devagar que a sala (paralaxe).
 const SHADOW_OFF := Vector2(4, 5)
 const C_SHADOW := Color(0, 0, 0, 0.42)
-const PARALLAX := 0.2
-const PARALLAX_FAR := 0.45     # a camada mais distante (silhuetas grandes) anda ainda mais devagar
+const PARALLAX := 0.2          # o fundo pintado na sala anda um pouco mais devagar que ela
+const FAR_K := [0.18, 0.32]    # o mundo lá fora (duas profundidades): anda bem mais devagar e não gira
 const ROT_COOLDOWN := 134    # espera extra depois do giro: com a animação, 2,5 s (150 quadros)
 const DEFAULT_RELOAD := 2.5   # s: recarga do giro e tempo do limitador, se a fase não disser outro
 const ROT_BUFFER := 6        # apertar até 6 quadros antes do fim da recarga ainda vale
@@ -248,7 +248,12 @@ var belt_acc := {}       # corpo -> resto fracionário do carregamento da esteir
 var fan_gain := 0.0      # 0 a 1: o quanto há ventilador perto do coelho (som)
 var belt_gain := 0.0     # idem para esteiras
 var _base := Transform2D()
-var _bg_shift := Vector2.ZERO  # deslocamento do fundo (paralaxe), em px da sala
+var _bg_shift := Vector2.ZERO  # deslocamento do fundo (paralaxe), em px da fase como foi desenhada
+var _bw := 0.0                 # largura e altura da fase como foi desenhada (o fundo é pintado nela)
+var _bh := 0.0
+var _world_off := Vector2.ZERO # quanto a câmera andou, na tela, desde o início (o mundo lá fora rola com isto)
+var _prev_cam := Vector2.ZERO
+var _bg_cam := Vector2.ZERO    # a câmera, em px da fase como foi desenhada
 var sway_frame := -1000        # quadro em que as coisas penduradas começam a balançar (depois de um giro)
 var sway_dir := 0              # sentido do último giro
 var _fx_live := false          # falso durante o reset (o giro de start_rot não solta poeira)
@@ -1644,6 +1649,7 @@ func _rotate_logic(dir: int) -> void:
 	rabbit.pos = _rot_rect(rabbit.rect, dir).position
 	rabbit.on_rotate()
 	cam = _rot_point(cam, dir)
+	_prev_cam = _rot_point(_prev_cam, dir)
 	look = Vector2.ZERO   # depois do giro, a vista volta para o coelho
 	for p in particles:
 		p["pos"] = _rot_point(p["pos"], dir)
@@ -3151,12 +3157,15 @@ func _draw() -> void:
 
 	draw_rect(room_rect, C_BG)
 	if theme != "":
-		_bg_shift = (cam - Vector2(pw, ph) / 2.0) * PARALLAX_FAR
-		draw_set_transform_matrix(base * Transform2D(0.0, _bg_shift.round()))
-		_draw_far_layer()
-	_bg_shift = (cam - Vector2(pw, ph) / 2.0) * PARALLAX
-	if theme != "":
-		draw_set_transform_matrix(base * Transform2D(0.0, _bg_shift.round()))
+		_draw_world_far(base)
+		# o fundo do meio é pintado na fase como foi desenhada e gira junto com ela (não pula no giro)
+		var to := _orig_xform()
+		var cam_o := to.affine_inverse() * cam
+		_bw = float(pw if orientation % 2 == 0 else ph)
+		_bh = float(ph if orientation % 2 == 0 else pw)
+		_bg_shift = (cam_o - Vector2(_bw, _bh) / 2.0) * PARALLAX
+		draw_set_transform_matrix(base * to * Transform2D(0.0, _bg_shift.round()))
+		_bg_cam = cam_o
 	if theme == "industrial":
 		_draw_industrial_back()
 	elif theme == "transicao":
@@ -3164,6 +3173,7 @@ func _draw() -> void:
 	elif SUBSOIL.has(theme):
 		_draw_subsoil_back()
 	draw_set_transform_matrix(base)
+	_draw_ambient_motion()
 	_draw_cast_shadows()
 
 	# compartimentos (fundo)
@@ -3618,10 +3628,10 @@ func _draw_steel_tile(c: int, r: int, x: int, y: int, loose := false) -> void:
 ## Fundo do tema industrial: dutos e tubulações apagadas atrás de tudo, e manchas de luz âmbar.
 ## Só o que está na tela, com contraste baixo para não atrapalhar a leitura das plataformas.
 func _draw_industrial_back() -> void:
-	var half := VIEW / 2.0 + Vector2(24, 24)
-	var bc := cam - _bg_shift   # o fundo está deslocado (paralaxe)
+	var half := Vector2(VIEW.x, VIEW.x) / 2.0 + Vector2(24, 24)   # quadrado: a fase pode estar girada
+	var bc := _bg_cam - _bg_shift   # o fundo está deslocado (paralaxe)
 	var lo := (-_bg_shift).max(Vector2.ZERO)
-	var hi := Vector2(pw, ph) - _bg_shift.max(Vector2.ZERO)
+	var hi := Vector2(_bw, _bh) - _bg_shift.max(Vector2.ZERO)
 	var x0 := maxi(int(bc.x - half.x), int(lo.x))
 	var x1 := mini(int(bc.x + half.x), int(hi.x))
 	var y0 := maxi(int(bc.y - half.y), int(lo.y))
@@ -3769,10 +3779,10 @@ func _draw_soil_decor(c: int, r: int, x: int, y: int) -> void:
 ## (logo abaixo do buraco), estalactites ao longe e brilhos, veios de água, montes de nozes.
 ## Contraste baixo, só o que está na tela.
 func _draw_subsoil_back() -> void:
-	var half := VIEW / 2.0 + Vector2(24, 24)
-	var bc := cam - _bg_shift   # o fundo está deslocado (paralaxe)
+	var half := Vector2(VIEW.x, VIEW.x) / 2.0 + Vector2(24, 24)   # quadrado: a fase pode estar girada
+	var bc := _bg_cam - _bg_shift   # o fundo está deslocado (paralaxe)
 	var lo := (-_bg_shift).max(Vector2.ZERO)
-	var hi := Vector2(pw, ph) - _bg_shift.max(Vector2.ZERO)
+	var hi := Vector2(_bw, _bh) - _bg_shift.max(Vector2.ZERO)
 	var x0 := maxi(int(bc.x - half.x), int(lo.x))
 	var x1 := mini(int(bc.x + half.x), int(hi.x))
 	var y0 := maxi(int(bc.y - half.y), int(lo.y))
@@ -3784,7 +3794,7 @@ func _draw_subsoil_back() -> void:
 	for k in range(k0, y1 / 64 + 2):
 		var by := k * 64 + absi(k * 7919) % 24
 		var xx := x0 - x0 % 8
-		while xx < x1 and by < ph - 12:
+		while xx < x1 and by < _bh - 12:
 			var wy := by + roundf(sin(xx * 0.035 + k * 1.7) * 4.0)
 			draw_rect(Rect2(xx, wy, mini(8, x1 - xx), 3), band)
 			xx += 8
@@ -3796,20 +3806,20 @@ func _draw_subsoil_back() -> void:
 			if hh % 4 != 0:
 				continue
 			var p := Vector2(gx * 40 + hh % 32, gy * 40 + (hh >> 5) % 32)
-			if p.x > pw - 12 or p.y > ph - 8:
+			if p.x > _bw - 12 or p.y > _bh - 8:
 				continue
 			draw_rect(Rect2(p, Vector2(4 + hh % 3, 2)), Color(pal[2], 0.25))
 	match theme:
 		"raizes":
 			# o buraco lá em cima: um feixe de luz quente, bem fraco
-			var lx := pw * 0.35
-			draw_colored_polygon(PackedVector2Array([Vector2(lx - 12, 0), Vector2(lx + 14, 0), Vector2(lx + 70, ph), Vector2(lx + 10, ph)]), Color(1.0, 0.92, 0.66, 0.035))
+			var lx := _bw * 0.35
+			draw_colored_polygon(PackedVector2Array([Vector2(lx - 12, 0), Vector2(lx + 14, 0), Vector2(lx + 70, _bh), Vector2(lx + 10, _bh)]), Color(1.0, 0.92, 0.66, 0.035))
 			for i in range(int(x0 / 26), int(x1 / 26) + 1):
 				var hh := absi(i * 2654435761)
 				var rx := i * 26 + hh % 18
-				if rx < 10 or rx > pw - 12:
+				if rx < 10 or rx > _bw - 12:
 					continue
-				var depth := mini(30 + hh % 90, ph - 16)
+				var depth := mini(30 + hh % 90, int(_bh) - 16)
 				for yy in range(0, mini(depth, y1), 2):
 					if yy < y0:
 						continue
@@ -3817,42 +3827,26 @@ func _draw_subsoil_back() -> void:
 			# poeira dourada flutuando no feixe
 			for i in 16:
 				var mx := lx - 6.0 + float((i * 37) % 64) + sin(frame * 0.012 + i) * 6.0 + float(i % 5) * 4.0
-				var my := fposmod(float(i * 53) - frame * 0.12, float(ph))
+				var my := fposmod(float(i * 53) - frame * 0.12, float(_bh))
 				if my > y0 and my < y1:
 					draw_rect(Rect2(mx + my * 0.25, my, 1, 1), Color(1.0, 0.9, 0.6, 0.30 + 0.2 * sin(frame * 0.05 + i)))
-			# torrões caindo do buraco
-			for i in 3:
-				var tt := float((frame + i * 97) % 240) / 240.0
-				draw_rect(Rect2(lx + 8 + i * 9 + sin(tt * 6.0 + i) * 3.0, tt * ph, 1, 1), Color(C_ROOT, 0.6))
 		"caverna":
-			# esporos subindo devagar, com um brilho fraco
-			for i in 14:
-				var sp := Vector2(fposmod(float(i * 71) + sin(frame * 0.01 + i) * 10.0, float(pw)), fposmod(float(i * 97) - frame * 0.18, float(ph)))
-				if sp.x > x0 and sp.x < x1 and sp.y > y0 and sp.y < y1:
-					var scol: Color = C_SHROOM[i % 2]
-					draw_circle(sp, 2.5, Color(scol, 0.07))
-					draw_rect(Rect2(sp.round(), Vector2(1, 1)), Color(scol, 0.6))
 			for i in range(int(x0 / 30), int(x1 / 30) + 1):
 				var hh := absi(i * 40503 ^ 77)
 				var sx := float(i * 30 + hh % 20)
 				var ln := 10.0 + float(hh % 24)
 				draw_colored_polygon(PackedVector2Array([Vector2(sx - 4, 0), Vector2(sx + 4, 0), Vector2(sx, ln)]), Color(pal[2], 0.35))
-				var gpos := Vector2(sx + 7, 30 + (hh >> 3) % maxi(ph - 40, 1))
+				var gpos := Vector2(sx + 7, 30 + (hh >> 3) % maxi(int(_bh) - 40, 1))
 				if gpos.y > y0 and gpos.y < y1 and (frame / 20 + hh) % 9 == 0:
 					draw_rect(Rect2(gpos, Vector2(1, 1)), Color(C_CRYSTAL, 0.6))
 		"aquifero":
-			for i in range(int(x0 / 34), int(x1 / 34) + 1):
-				var hh := absi(i * 92821)
-				var vx := i * 34 + hh % 20
-				draw_rect(Rect2(vx, y0, 1, y1 - y0), Color(C_DRIP, 0.05))
-				var tt := (frame * 2 + hh) % maxi(ph, 1)
-				draw_rect(Rect2(vx, tt, 1, 3), Color(C_DRIP, 0.25))
+			pass   # os veios de água escorrem para baixo da tela: estão em _draw_ambient_motion
 		"despensa":
 			for i in range(int(x0 / 22), int(x1 / 22) + 1):
 				var hh := absi(i * 31337)
 				var nx := float(i * 22 + hh % 12)
 				for j in 3 + hh % 3:
-					var q := Vector2(nx + j * 4 - (j / 3) * 8, ph - 10 - (j / 3) * 4)
+					var q := Vector2(nx + j * 4 - (j / 3) * 8, _bh - 10 - (j / 3) * 4)
 					draw_circle(q, 2.5, Color(C_NUT_DECOR, 0.18))
 
 
@@ -3985,59 +3979,158 @@ func _ceiling_dust() -> void:
 
 # ---------------------------------------------------------------- profundidade (D84)
 
-## A camada mais distante: silhuetas grandes e escuras (rochas e colunas no subsolo, vigas e
-## treliças na fábrica), quase da cor do fundo. Anda mais devagar que tudo (PARALLAX_FAR).
-func _draw_far_layer() -> void:
-	var half := VIEW / 2.0 + Vector2(24, 24)
-	var bc := cam - _bg_shift
-	var lo := (-_bg_shift).max(Vector2.ZERO) + Vector2(8, 8)
-	var hi := Vector2(pw, ph) - _bg_shift.max(Vector2.ZERO) - Vector2(8, 8)
-	var x0 := maxf(bc.x - half.x, lo.x)
-	var x1 := minf(bc.x + half.x, hi.x)
-	if x1 <= x0:
-		return
-	var metal := theme == "industrial" or (theme == "transicao" and _metal_frac(bc) > 0.6)
-	if metal:
-		var beam := Color(C_STEEL_LIGHT, 0.07)
-		for k in range(maxi(int((bc.y - half.y) / 96.0) - 1, 0), int((bc.y + half.y) / 96.0) + 2):
-			var by := k * 96 + 40
-			if by < lo.y or by > hi.y - 6:
-				continue
-			draw_rect(Rect2(x0, by, x1 - x0, 4), beam)
-			draw_rect(Rect2(x0, by + 18, x1 - x0, 2), beam)
-			var bx := floorf(x0 / 24.0) * 24.0
-			while bx < x1 - 24.0:
-				if bx >= x0:
-					draw_line(Vector2(bx, by + 4), Vector2(bx + 24, by + 18), beam, 1.0)
-					draw_line(Vector2(bx, by + 18), Vector2(bx + 24, by + 4), beam, 1.0)
-				bx += 24.0
-		return
-	var pal: Array = C_SOIL[soil if soil != "" else "caverna"]
-	var mass := Color(pal[0], 0.38)
-	var rim := Color(pal[2], 0.28)
-	var room_h := hi.y - lo.y
-	for i in range(int(x0 / 56.0) - 1, int(x1 / 56.0) + 2):
-		var hh := absi(i * 2246822519)
-		var cx := float(i * 56 + hh % 30)
-		var wdt := 16.0 + float(hh % 18)
-		if cx - wdt < lo.x or cx + wdt > hi.x:
-			continue
-		# coluna de rocha subindo do chão (ou estalagmite), com a borda de cima à esquerda iluminada
-		var ht := minf(30.0 + float((hh >> 5) % 70), room_h * 0.6)
-		var base_y := hi.y
-		var pts := PackedVector2Array([Vector2(cx - wdt, base_y), Vector2(cx - wdt * 0.6, base_y - ht * 0.7),
-			Vector2(cx - wdt * 0.15, base_y - ht), Vector2(cx + wdt * 0.5, base_y - ht * 0.8), Vector2(cx + wdt, base_y)])
-		draw_colored_polygon(pts, mass)
-		draw_line(pts[0], pts[1], rim, 1.0)
-		draw_line(pts[1], pts[2], rim, 1.0)
-		# do teto, uma estalactite grande de vez em quando
-		if hh % 3 == 0:
-			var tl := minf(16.0 + float((hh >> 9) % 40), room_h * 0.3)
-			draw_colored_polygon(PackedVector2Array([Vector2(cx + 10, lo.y), Vector2(cx + 24, lo.y), Vector2(cx + 16, lo.y + tl)]), mass)
-
-
 func _solid_at(c: int, r: int) -> bool:
 	return c >= 0 and r >= 0 and c < gw and r < gh and tiles[r * gw + c] != 0
+
+
+## Da fase como foi desenhada para a sala de agora (depois dos giros). O fundo do meio é pintado
+## nas coordenadas da fase como foi desenhada e desenhado com esta transformação: gira junto com a
+## sala, como as paredes, em vez de ser recalculado (e pular) a cada giro.
+func _orig_xform() -> Transform2D:
+	match posmod(orientation, 4):
+		1:
+			return Transform2D(Vector2(0, 1), Vector2(-1, 0), Vector2(pw, 0))
+		2:
+			return Transform2D(Vector2(-1, 0), Vector2(0, -1), Vector2(pw, ph))
+		3:
+			return Transform2D(Vector2(0, -1), Vector2(1, 0), Vector2(0, ph))
+	return Transform2D.IDENTITY
+
+
+## O mundo lá fora: colunas de rocha largas (subsoil) ou colunas e treliças de aço (fábrica), bem ao
+## fundo, SEMPRE EM PÉ NA TELA: não giram com a sala (no giro, a sala gira na frente delas). Rolam
+## com o quanto a câmera andou na tela (`_world_off`, contínuo também no giro), em duas
+## profundidades. Recortadas pelo retângulo da sala (só aparecem lá dentro).
+func _draw_world_far(base: Transform2D) -> void:
+	var d := cam - _prev_cam
+	if d.length() < 64.0:   # trocou de sala ou recomeçou: não arrasta o mundo
+		_world_off += d.rotated(view_angle)
+	_prev_cam = cam
+	var corners := PackedVector2Array([base * Vector2(0, 0), base * Vector2(pw, 0), base * Vector2(pw, ph), base * Vector2(0, ph)])
+	var half := VIEW / 2.0 + Vector2(40, 40)
+	var mf := 0.0
+	if theme == "industrial":
+		mf = 1.0
+	elif theme == "transicao":
+		mf = _metal_frac(cam)
+	for layer in 2:
+		var k: float = FAR_K[layer]
+		var off := (_world_off * k).round()
+		var room := PackedVector2Array()
+		for cpt in corners:
+			room.append(cpt + off)
+		draw_set_transform_matrix(Transform2D(0.0, -off))
+		var vx0 := off.x - half.x
+		var vx1 := off.x + half.x
+		var vy0 := off.y - half.y
+		var vy1 := off.y + half.y
+		var dim := 0.55 if layer == 0 else 1.0
+		if mf < 1.0:
+			_far_rock_columns(room, vx0, vx1, vy0, vy1, layer, dim * (1.0 - mf))
+		if mf > 0.0:
+			_far_steel(room, vx0, vx1, vy0, vy1, layer, dim * mf)
+	draw_set_transform_matrix(base)
+
+
+## Desenha `pts` só dentro do retângulo da sala (`room`, já no espaço do mundo lá fora).
+func _far_poly(pts: PackedVector2Array, room: PackedVector2Array, col: Color) -> void:
+	for piece in Geometry2D.intersect_polygons(pts, room):
+		if piece.size() >= 3:
+			draw_colored_polygon(piece, col)
+
+
+## Colunas de rocha que atravessam a tela de cima a baixo, de bordas onduladas: sem pontas.
+func _far_rock_columns(room: PackedVector2Array, vx0: float, vx1: float, vy0: float, vy1: float, layer: int, a: float) -> void:
+	var pal: Array = C_SOIL[soil if soil != "" else "caverna"]
+	var spacing := 70.0 if layer == 0 else 96.0
+	var mass := Color(pal[0], 0.30 * a)
+	var rim := Color(pal[2], 0.22 * a)
+	for i in range(int(floor(vx0 / spacing)) - 1, int(ceil(vx1 / spacing)) + 1):
+		var hh := absi((i + layer * 7919) * 2246822519)
+		if hh % 3 == 0:
+			continue
+		var cx := i * spacing + float(hh % 30)
+		var wdt := (10.0 if layer == 0 else 16.0) + float(hh % 14)
+		var left := PackedVector2Array()
+		var right := PackedVector2Array()
+		var y := floorf(vy0 / 16.0) * 16.0 - 16.0
+		while y <= vy1 + 16.0:
+			var wob := sin(y * 0.035 + float(hh % 11)) * 4.0 + sin(y * 0.11 + float(hh % 5)) * 1.5
+			var narrow := 0.75 + 0.25 * sin(y * 0.018 + float(hh % 7))
+			left.append(Vector2(cx - wdt * narrow + wob, y))
+			right.append(Vector2(cx + wdt * narrow + wob * 0.6, y))
+			y += 16.0
+		right.reverse()
+		var poly := left.duplicate()
+		poly.append_array(right)
+		_far_poly(poly, room, mass)
+		# a borda da esquerda pega a luz: uma faixa estreita mais clara
+		var lit := PackedVector2Array()
+		for q in left:
+			lit.append(q)
+		for idx in range(left.size() - 1, -1, -1):
+			lit.append(left[idx] + Vector2(2, 0))
+		_far_poly(lit, room, rim)
+
+
+## Colunas de aço e treliças horizontais, ao fundo da fábrica.
+func _far_steel(room: PackedVector2Array, vx0: float, vx1: float, vy0: float, vy1: float, layer: int, a: float) -> void:
+	var beam := Color(C_STEEL_LIGHT, (0.05 if layer == 0 else 0.08) * a)
+	var spacing := 110.0 if layer == 0 else 150.0
+	for i in range(int(floor(vx0 / spacing)) - 1, int(ceil(vx1 / spacing)) + 1):
+		var cx := i * spacing + float(absi(i * 40503) % 40)
+		var w := 6.0 if layer == 0 else 9.0
+		_far_poly(PackedVector2Array([Vector2(cx, vy0 - 10), Vector2(cx + w, vy0 - 10), Vector2(cx + w, vy1 + 10), Vector2(cx, vy1 + 10)]), room, beam)
+	var rs := 90.0 if layer == 0 else 120.0
+	for j in range(int(floor(vy0 / rs)) - 1, int(ceil(vy1 / rs)) + 1):
+		var by := j * rs + 30.0
+		_far_poly(PackedVector2Array([Vector2(vx0 - 10, by), Vector2(vx1 + 10, by), Vector2(vx1 + 10, by + 3), Vector2(vx0 - 10, by + 3)]), room, beam)
+		_far_poly(PackedVector2Array([Vector2(vx0 - 10, by + 16), Vector2(vx1 + 10, by + 16), Vector2(vx1 + 10, by + 18), Vector2(vx0 - 10, by + 18)]), room, beam)
+		var bx := floorf(vx0 / 24.0) * 24.0
+		while bx < vx1:
+			for seg in [[Vector2(bx, by + 3), Vector2(bx + 24, by + 16)], [Vector2(bx, by + 16), Vector2(bx + 24, by + 3)]]:
+				var p0: Vector2 = seg[0]
+				var p1: Vector2 = seg[1]
+				var nn := (p1 - p0).orthogonal().normalized() * 0.5
+				_far_poly(PackedVector2Array([p0 - nn, p1 - nn, p1 + nn, p0 + nn]), room, beam)
+			bx += 24.0
+
+
+## O que se move no fundo segue a gravidade de agora (para baixo da tela), não a fase como foi
+## desenhada: torrões caindo (raízes), veios e pingos escorrendo (lençol d'água), esporos subindo
+## (caverna). Em px da sala atual.
+func _draw_ambient_motion() -> void:
+	if soil == "":
+		return
+	var half := VIEW / 2.0 + Vector2(16, 16)
+	var x0 := maxf(cam.x - half.x, 8.0)
+	var x1 := minf(cam.x + half.x, pw - 8.0)
+	var y0 := maxf(cam.y - half.y, 8.0)
+	var y1 := minf(cam.y + half.y, ph - 8.0)
+	match soil:
+		"raizes", "despensa":
+			for i in 4:
+				var tt := float((frame + i * 97) % 260) / 260.0
+				var fx := fposmod(float(i * 131 + 40), maxf(pw - 16.0, 1.0)) + 8.0 + sin(tt * 6.0 + i) * 3.0
+				var fy := 8.0 + tt * (ph - 16.0)
+				if fx > x0 and fx < x1 and fy > y0 and fy < y1:
+					draw_rect(Rect2(fx, fy, 1, 1), Color(C_ROOT, 0.6))
+		"aquifero":
+			for i in range(int(x0 / 34), int(x1 / 34) + 1):
+				var hh := absi(i * 92821)
+				var vx := float(i * 34 + hh % 20)
+				draw_rect(Rect2(vx, y0, 1, y1 - y0), Color(C_DRIP, 0.05))
+				var tt := 8.0 + fposmod(float(frame * 2 + hh), maxf(ph - 16.0, 1.0))
+				if tt > y0 and tt < y1:
+					draw_rect(Rect2(vx, tt, 1, 3), Color(C_DRIP, 0.25))
+		"caverna":
+			for i in 14:
+				var sp := Vector2(8.0 + fposmod(float(i * 71) + sin(frame * 0.01 + i) * 10.0, maxf(pw - 16.0, 1.0)),
+					8.0 + fposmod(float(i * 97) - frame * 0.18, maxf(ph - 16.0, 1.0)))
+				if sp.x > x0 and sp.x < x1 and sp.y > y0 and sp.y < y1:
+					var scol: Color = C_SHROOM[i % 2]
+					draw_circle(sp, 2.5, Color(scol, 0.07))
+					draw_rect(Rect2(sp.round(), Vector2(1, 1)), Color(scol, 0.6))
 
 
 ## Sombra das paredes no fundo: cada célula vazia escurece onde a parede de cima, da esquerda ou da
@@ -4180,10 +4273,10 @@ func _metal_frac(p: Vector2) -> float:
 
 ## Fundo da transição: as camadas de terra somem aos poucos e os canos da fábrica aparecem.
 func _draw_transition_back() -> void:
-	var half := VIEW / 2.0 + Vector2(24, 24)
-	var bc := cam - _bg_shift   # o fundo está deslocado (paralaxe)
+	var half := Vector2(VIEW.x, VIEW.x) / 2.0 + Vector2(24, 24)   # quadrado: a fase pode estar girada
+	var bc := _bg_cam - _bg_shift   # o fundo está deslocado (paralaxe)
 	var lo := (-_bg_shift).max(Vector2.ZERO)
-	var hi := Vector2(pw, ph) - _bg_shift.max(Vector2.ZERO)
+	var hi := Vector2(_bw, _bh) - _bg_shift.max(Vector2.ZERO)
 	var x0 := maxi(int(bc.x - half.x), int(lo.x))
 	var x1 := mini(int(bc.x + half.x), int(hi.x))
 	var y0 := maxi(int(bc.y - half.y), int(lo.y))
@@ -4197,11 +4290,11 @@ func _draw_transition_back() -> void:
 		var py := k * 64 + 24 + absi(k * 2654435761) % 20
 		var xx := x0
 		while xx < x1:
-			var f := _metal_frac(Vector2(xx, by))
-			if by < ph - 12 and f < 0.85:
+			var f := clampf(float(xx) / _bw, 0.0, 1.0)
+			if by < _bh - 12 and f < 0.85:
 				draw_rect(Rect2(xx, by + roundf(sin(xx * 0.035 + k * 1.7) * 4.0), 8, 3), Color(pal[2], 0.22 * (1.0 - f)))
-			var fp := _metal_frac(Vector2(xx, py))
-			if py < ph - 12 and fp > 0.3:
+			var fp := clampf(float(xx) / _bw, 0.0, 1.0)
+			if py < _bh - 12 and fp > 0.3:
 				draw_rect(Rect2(xx, py, 8, 5), Color(C_STEEL_LIGHT, 0.16 * fp))
 				draw_rect(Rect2(xx, py, 8, 1), Color(C_STEEL_LIGHT, 0.22 * fp))
 			xx += 8
@@ -4209,9 +4302,9 @@ func _draw_transition_back() -> void:
 	for i in range(int(x0 / 26), int(x1 / 26) + 1):
 		var hh := absi(i * 2654435761)
 		var rx := i * 26 + hh % 18
-		if rx < 10 or rx > pw - 12:
+		if rx < 10 or rx > _bw - 12:
 			continue
-		var f := _metal_frac(Vector2(rx, 40))
+		var f := clampf(float(rx) / _bw, 0.0, 1.0)
 		if f < 0.45:
 			for yy in range(maxi(y0, 0), mini(30 + hh % 70, y1), 2):
 				draw_rect(Rect2(rx + roundf(sin(yy * 0.12 + i) * 2.0), yy, 1, 2), Color(C_ROOT, 0.35 * (1.0 - f / 0.45)))
