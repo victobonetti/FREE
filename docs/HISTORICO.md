@@ -499,3 +499,6 @@ Giro com limitador nas cinco fases industriais, espinhos no teto, fase 1 refeita
 
 ## Rodada 37: a mecha do Gatsby, primeira versão
 Plano fechado (GDD 8e, D79) e implementado (D80): `scripts/boss_mecha.gd` e a sala `levels/wip/mecha.json`. Abertura sem giro e o Gatsby plugando; miras, teleguiados e a investida que só o giro desvia; barra em terços com os corações do Gatsby; 3 corações do coelho; cinco sons novos. Testes da luta e um bot que vence. Também: a linha do editor saiu da tela de título no celular, e um teste do ato 2 que não rodava (lia um campo inexistente) foi corrigido.
+
+## Rodada 38: a mecha maior, numa peça só, com movimento
+Sala 30×30 sem limitador e com setas para o que está fora da tela; mecha de 40×52 com caixa única (corpo e cúpula), arte nova pela referência, motores laterais, vista de 3/4 e poses por estado; cena da fusão; pedaços de chapa e careta do Gatsby no acerto (D81). Testes passando.

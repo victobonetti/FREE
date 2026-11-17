@@ -103,6 +103,8 @@ var sig_t := 0            # quadros restantes do raio
 var min_gap := 1e9        # menor distância ao coelho desde o reset (os testes conferem)
 var pulses: Array = []    # repetições em andamento: {"at": quadros até a alavanca virar, "src", "left", "gap"}
 var lever_vis := 0        # quadros de gesto da alavanca (para o desenho, também nas repetições)
+var fused := false        # plugado na mecha (boss_mecha.gd): sem balanço nem propulsor próprio
+var tilt := 0.0           # inclinação dada pela mecha (o corpo dela se inclina e leva a cápsula)
 
 
 func on_reset(r) -> void:
@@ -451,9 +453,9 @@ func _draw() -> void:
 	if room == null or phase == "gone":
 		return
 	var base := Transform2D(room.view_angle, Vector2.ZERO) * Transform2D(0.0, -room.cam.round())
-	var bob := Vector2(0, roundf(sin(anim * 0.07) * 1.5))
+	var bob := Vector2.ZERO if fused else Vector2(0, roundf(sin(anim * 0.07) * 1.5))
 	# a cápsula fica em pé mesmo com a sala girando
-	var cap := base * Transform2D(-room.view_angle, pos.round() + bob)
+	var cap := base * Transform2D(-room.view_angle + tilt, pos.round() + bob)
 	var m := mood
 	if room.state == "dead":
 		m = "amused"   # ri quando o coelho morre
@@ -487,16 +489,17 @@ func _draw() -> void:
 			pts.append(to)
 			draw_polyline(pts, col, 1.0)
 
-	# propulsor: gira contra o movimento
-	draw_set_transform_matrix(cap * Transform2D(nozzle, Vector2(0, 19)))
-	var fl := 6.0 + float((anim / 2) % 3) * 2.0 + clampf(-vel.y / 30.0, -2.0, 4.0) + (4.0 if dash_fx > 0 else 0.0)
-	draw_colored_polygon(PackedVector2Array([Vector2(-3, 6), Vector2(0, 6 + fl), Vector2(3, 6)]), C_FLAME)
-	draw_colored_polygon(PackedVector2Array([Vector2(-1.5, 6), Vector2(0, 6 + fl * 0.55), Vector2(1.5, 6)]), C_FLAME_CORE)
-	draw_rect(Rect2(-4, 0, 9, 3), C_HULL_LIGHT)
-	draw_rect(Rect2(-3, 3, 7, 3), C_HULL_DARK)
-	draw_rect(Rect2(-4, 2, 9, 1), C_SEAM)
-	_px(Vector2(-3, 1), C_RIVET)
-	_px(Vector2(3, 1), C_RIVET)
+	# propulsor: gira contra o movimento (plugada na mecha, quem empurra são os motores dela)
+	if not fused:
+		draw_set_transform_matrix(cap * Transform2D(nozzle, Vector2(0, 19)))
+		var fl := 6.0 + float((anim / 2) % 3) * 2.0 + clampf(-vel.y / 30.0, -2.0, 4.0) + (4.0 if dash_fx > 0 else 0.0)
+		draw_colored_polygon(PackedVector2Array([Vector2(-3, 6), Vector2(0, 6 + fl), Vector2(3, 6)]), C_FLAME)
+		draw_colored_polygon(PackedVector2Array([Vector2(-1.5, 6), Vector2(0, 6 + fl * 0.55), Vector2(1.5, 6)]), C_FLAME_CORE)
+		draw_rect(Rect2(-4, 0, 9, 3), C_HULL_LIGHT)
+		draw_rect(Rect2(-3, 3, 7, 3), C_HULL_DARK)
+		draw_rect(Rect2(-4, 2, 9, 1), C_SEAM)
+		_px(Vector2(-3, 1), C_RIVET)
+		_px(Vector2(3, 1), C_RIVET)
 	draw_set_transform_matrix(cap)
 
 	# vidro

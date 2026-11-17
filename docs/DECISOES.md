@@ -614,3 +614,11 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **A mecha mantém distância** (56 a 96 px) para a investida ter caminho; se ficasse colada no coelho, não haveria tempo de reagir.
 - **A cápsula do Gatsby é o próprio `boss_gatsby.gd`**, usado só para o desenho (um "boneco" dentro da mecha, desenhado atrás do corpo: só a cúpula aparece). As expressões dele já existem e acompanham a luta.
 - **Prova:** sem replay ainda (está em `levels/wip`). Os testes provam a abertura, a esquiva em quatro momentos, girar cedo demais, os teleguiados (inclusive acertando a mecha), os terços, a derrota e um bot que vence só girando na investida (em ~2,6 min de jogo).
+
+### D81 — A mecha, segunda passada: maior, uma peça só, com movimento
+- **Câmera rolando** (escolha do Victor) em vez de zoom: a sala de 30×30 é mais alta que a tela; o que está fora da vista (miras, teleguiados) ganha uma seta na borda.
+- **Sem limitador** nesta sala (pedido do Victor): o giro fica, só com a recarga normal.
+- **Corpo e cúpula numa caixa só** (40×52): antes, o míssil que passava pela cúpula não contava.
+- **Motores laterais:** a cápsula ganhou `fused` (sem balanço e sem o propulsor próprio) e `tilt` (inclina junto com o corpo). Quem empurra a mecha são os motores embaixo dos braços; o fogo aponta para trás do movimento.
+- **Movimento:** a pose é só desenho (`_pose()`), calculada do estado a cada quadro; nada disso muda a colisão, então os testes da luta não dependem da arte.
+- **Paleta:** as chapas da mecha são um pouco mais claras que as da cápsula, para ler no fundo escuro.

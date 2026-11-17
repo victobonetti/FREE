@@ -2834,7 +2834,7 @@ func test_mecha_dash() -> void:
 		n += 1
 	check(m.lives == 2, "girar cedo demais não esquiva (vidas %d)" % m.lives)
 	idle(200)
-	check(room.orientation == 0, "o limitador desfaz o giro")
+	check(room.orientation == 1 and not room.def.get("limiter", false), "sem limitador: o giro fica")
 
 
 func test_mecha_homing() -> void:

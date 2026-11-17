@@ -26,8 +26,8 @@ extends Node2D
 
 const GatsbyScript := preload("res://scripts/boss_gatsby.gd")
 
-const MW := 24
-const MH := 30
+const MW := 40                   # caixa de colisão: o corpo E a cúpula (depois da fusão são uma coisa só)
+const MH := 52
 const LIVES := 3                 # corações do coelho, só nesta sala
 const HEARTS := 3                # corações do Gatsby: um por terço da barra
 const ENERGY := 12               # barra da mecha (4 por terço)
@@ -35,14 +35,15 @@ const INVULN := 60
 const INTRO_FREE := 150          # quadros para olhar a sala antes de o Gatsby chegar (1ª vez)
 const INTRO_AGAIN := 30          # depois de perder: a cápsula chega logo
 const ARRIVE := 70               # voo da cápsula até a mecha
-const PLUG := 50                 # encaixe: faíscas, luzes acendem
-const HEAD := Vector2(0, -17)    # centro da cúpula da cápsula, em relação a `pos` (em pé na tela)
+const PLUG := 84                 # a fusão: tranco, cabos acendem, luzes do peito uma a uma, motores
+const HEAD := Vector2(0, -13)    # centro da cúpula da cápsula, em relação a `pos` (em pé na tela)
+const FEET := 26.0               # os pés, em relação a `pos`: o corpo se inclina em torno deles
 const GRAV := 420.0
 const FALL_MAX := 220.0
 const FLOAT_FRAMES := 110        # quadros flutuando depois de um giro
 const FLOAT_FALL := 16.0         # px/s: desce devagar com os propulsores
 const FLOAT_SEEK := 30.0         # px/s: vai para o lado do coelho enquanto flutua
-const WALK := 14.0
+const WALK := 18.0
 const IDLE := [80, 60, 45]       # quadros entre ataques, por fase
 const PLAN := [
 	["aim", "homing", "dash"],
@@ -53,8 +54,8 @@ const AIM_COUNT := [4, 6, 8]
 const AIM_WARN := [60, 52, 44]   # quadros de aviso antes do primeiro disparo
 const AIM_GAP := 5               # quadros entre um disparo e o seguinte
 const AIM_STEP := 12.0           # px por quadro: quase instantâneo
-const AIM_RADIUS := 11.0
-const AIM_SPACING := 28.0        # distância mínima entre duas miras
+const AIM_RADIUS := 12.0
+const AIM_SPACING := 32.0        # distância mínima entre duas miras
 const HOM_COUNT := [3, 4, 5]
 const HOM_SPEED := [34.0, 38.0, 42.0]
 const HOM_TURN := 0.032          # rad por quadro
@@ -62,8 +63,8 @@ const HOM_LIFE := 540
 const HOM_ARM := 36              # antes disto o míssil não acerta a própria mecha (está saindo dela)
 const HOM_RADIUS := 10.0
 const DASH_WARN := [54, 46, 38]
-const DASH_SPEED := 240.0
-const KEEP := [56.0, 96.0]     # distância que ela mantém do coelho, andando (perto: recua)
+const DASH_SPEED := 260.0
+const KEEP := [72.0, 130.0]     # distância que ela mantém do coelho, andando (perto: recua)
 const DASH_COMMIT := 14         # quadros finais do aviso com a mira travada (a linha fica sólida)
 const DASH_TURN := 0.06          # correção da rota por quadro, enquanto tem o alvo
 const DASH_MAX := 120
@@ -71,9 +72,9 @@ const STUN := [80, 70, 60]
 const BREAK_FRAMES := 100        # explosão de um terço: a mecha fica parada, faiscando
 const DIE_FRAMES := 150
 
-const C_HULL := GatsbyScript.C_HULL
-const C_HULL_DARK := GatsbyScript.C_HULL_DARK
-const C_HULL_LIGHT := GatsbyScript.C_HULL_LIGHT
+const C_HULL := Color("525663")          # chapas um pouco mais claras que as da cápsula: lê no fundo escuro
+const C_HULL_DARK := Color("373a44")
+const C_HULL_LIGHT := Color("767b88")
 const C_SEAM := GatsbyScript.C_SEAM
 const C_RIVET := GatsbyScript.C_RIVET
 const C_RUST := GatsbyScript.C_RUST
@@ -129,6 +130,11 @@ var anim := 0
 var trail: Array = []       # rastro da investida
 var pod_side := 1
 var last_floor := true
+var face := 1.0             # para onde olha, suavizado: -1 esquerda, 0 de frente, 1 direita
+var walk_ph := 0.0          # passada
+var recoil := 0             # tranco do disparo
+var grimace := 0            # careta do Gatsby depois de levar um míssil
+var debris: Array = []      # pedaços de chapa que voam quando um míssil acerta: {pos, vel, ang, av, life}
 
 
 func _init() -> void:
@@ -166,8 +172,13 @@ func on_reset(r) -> void:
 	room.allow_rotate = false   # a abertura não deixa girar
 	state = "inert"
 	t = 0
+	face = -1.0
+	debris.clear()
+	grimace = 0
 	puppet.mood = "bored"
 	puppet.visible = true
+	puppet.fused = false
+	puppet.tilt = 0.0
 
 
 ## A sala ia matar o coelho: aqui ele perde um coração e pisca, imune. No terceiro, morre de
@@ -206,6 +217,8 @@ func on_rotate(r, dir: int) -> void:
 		h["pos"] = r._rot_point(h["pos"], dir)
 	for b in blasts:
 		b["pos"] = r._rot_point(b["pos"], dir)
+	for d in debris:
+		d["pos"] = r._rot_point(d["pos"], dir)
 	trail.clear()
 	if state == "dash":
 		locked = false   # perdeu o alvo: segue reto (na tela) até a parede
@@ -242,7 +255,8 @@ func _on_floor() -> bool:
 
 func _pod() -> Vector2:
 	pod_side = -pod_side
-	return pos + Vector2(14 * pod_side, -16)
+	recoil = 6
+	return pos + Vector2(16 * pod_side - 5 * face, -22)
 
 
 func fighting() -> bool:
@@ -256,6 +270,12 @@ func step(r) -> void:
 	anim += 1
 	flash = maxi(flash - 1, 0)
 	bar_hit = maxi(bar_hit - 1, 0)
+	recoil = maxi(recoil - 1, 0)
+	_update_debris()
+	if grimace > 0:
+		grimace -= 1
+		if grimace == 0 and puppet.mood == "panic" and fighting() and state != "stun" and state != "break":
+			puppet.mood = "annoyed"
 	if room.state == "play":
 		room.invuln = maxi(room.invuln - 1, 0)
 	for b in blasts:
@@ -265,6 +285,7 @@ func step(r) -> void:
 		return
 	t += 1
 	_smoke()
+	_turn()
 	match state:
 		"inert":
 			if t >= (INTRO_AGAIN if intro_seen else INTRO_FREE):
@@ -273,6 +294,7 @@ func step(r) -> void:
 				puppet.mood = "smug"
 				room.sfx.emit("gatsby_dash")
 		"arrive":
+			room.cam_focus = pos + Vector2(0, -24)
 			var k := clampf(float(t) / ARRIVE, 0.0, 1.0)
 			k = k * k * (3.0 - 2.0 * k)
 			var to := pos + HEAD
@@ -281,13 +303,26 @@ func step(r) -> void:
 				cap_pos = to
 				state = "plug"
 				t = 0
+				puppet.fused = true
 				room.sfx.emit("hatch")
-				room.shake = maxf(room.shake, 2.0)
-				_sparks(pos + Vector2(0, -12), 10)
+				room.sfx.emit("crunch")
+				room.shake = maxf(room.shake, 3.0)
+				room.impact.emit(1.2)
+				_sparks(pos + Vector2(-9, -15), 8)
+				_sparks(pos + Vector2(9, -15), 8)
 		"plug":
-			if t == 20:
+			# a fusão: tranco, os cabos acendem, as luzes do peito ligam uma a uma, os motores rugem
+			if t == 14:
 				room.sfx.emit("charge")
+			if t == 34 or t == 42 or t == 50:
+				room.sfx.emit("plate_on")
+			if t == 62:
+				room.sfx.emit("crusher_wake")
+				room.shake = maxf(room.shake, 3.0)
+				for k in 10:
+					_thrust_puff()
 			if t >= PLUG:
+				room.cam_focus = null
 				intro_seen = true
 				room.allow_rotate = bool(room.def.get("rotate", true))
 				room.impact.emit(1.4)
@@ -341,13 +376,13 @@ func step(r) -> void:
 		"stun":
 			_body(false)
 			if t % 6 == 0:
-				_sparks(pos + Vector2(rng.randf_range(-10, 10), rng.randf_range(-12, 6)), 2)
+				_sparks(pos + Vector2(rng.randf_range(-16, 16), rng.randf_range(-18, 10)), 2)
 			if t >= STUN[_phase()]:
 				_go_idle()
 		"break":
 			_body(false)
 			if t % 9 == 0 and t < BREAK_FRAMES - 20:
-				_boom(pos + Vector2(rng.randf_range(-12, 12), rng.randf_range(-14, 10)), 8.0, false)
+				_boom(pos + Vector2(rng.randf_range(-18, 18), rng.randf_range(-22, 16)), 9.0, false)
 			if t >= BREAK_FRAMES:
 				plan_i = 0
 				puppet.mood = "furious"
@@ -355,12 +390,14 @@ func step(r) -> void:
 		"dying":
 			_body(false)
 			if t % 7 == 0:
-				_boom(pos + Vector2(rng.randf_range(-14, 14), rng.randf_range(-16, 12)), 9.0, false)
+				_boom(pos + Vector2(rng.randf_range(-20, 20), rng.randf_range(-24, 18)), 10.0, false)
 			cap_pos = pos + HEAD
 			if t >= DIE_FRAMES:
 				state = "wreck"
 				t = 0
 				cap_from = pos + HEAD
+				puppet.fused = false
+				puppet.tilt = 0.0
 				room.door_unlocked = true
 				room.sfx.emit("gate_open")
 				_boom(pos, 16.0, false)
@@ -542,7 +579,8 @@ func _damage(n: int) -> void:
 		else:
 			_break()
 	elif state != "stun":
-		puppet.mood = "annoyed"
+		puppet.mood = "panic"
+		grimace = 40
 
 
 ## Um terço da barra: explode por dentro, se estraga e o Gatsby perde um coração.
@@ -679,6 +717,7 @@ func _update_homers() -> void:
 			_boom(p, HOM_RADIUS, true)
 		elif h["age"] > HOM_ARM and fighting() and body_rect().grow(1.0).has_point(p):
 			_boom(p, HOM_RADIUS, false)
+			_hit_fx(p)
 			_damage(1)
 			if not fighting():
 				return   # explodiu um terço ou morreu: os outros mísseis já foram limpos
@@ -713,6 +752,43 @@ static func blast_hits(p: Vector2, r: Rect2, radius: float) -> bool:
 
 # ---------------------------------------------------------------- efeitos
 
+## Vira o corpo para o coelho (ou para onde vai, na investida). Passa pela frente ao virar.
+func _turn() -> void:
+	if state == "inert" or state == "wreck" or state == "dying" or state == "stun" or state == "break":
+		return
+	var want := face
+	if state == "dash":
+		if absf(vel.x) > 20.0:
+			want = signf(vel.x)
+	elif state == "dash_warn" and committed:
+		want = signf(dash_dir.x) if absf(dash_dir.x) > 0.2 else face
+	else:
+		var dx := _rabbit_c().x - pos.x
+		if absf(dx) > 8.0:
+			want = signf(dx)
+	face = move_toward(face, want, 0.07)
+
+
+## Míssil acertou a mecha: pedaços de chapa voam e o Gatsby faz careta.
+func _hit_fx(p: Vector2) -> void:
+	room.shake = maxf(room.shake, 3.5)
+	room.sfx.emit("crunch")
+	var away := (p - pos).normalized()
+	for i in 4:
+		var a := away.angle() + rng.randf_range(-0.9, 0.9)
+		debris.append({"pos": p, "vel": Vector2.from_angle(a) * rng.randf_range(60.0, 120.0) + Vector2(0, -40),
+			"ang": rng.randf() * TAU, "av": rng.randf_range(-0.4, 0.4), "life": 50, "w": 2 + i % 3})
+
+
+func _update_debris() -> void:
+	for d in debris:
+		d["vel"].y += 6.0
+		d["pos"] += d["vel"] / 60.0
+		d["ang"] += d["av"]
+		d["life"] -= 1
+	debris = debris.filter(func(d): return d["life"] > 0)
+
+
 func _sparks(p: Vector2, n: int) -> void:
 	for i in n:
 		room.particles.append({
@@ -724,7 +800,7 @@ func _sparks(p: Vector2, n: int) -> void:
 func _thrust_puff() -> void:
 	for s in [-1, 1]:
 		room.particles.append({
-			"pos": pos + Vector2(14.5 * s, 7), "vel": Vector2(randf_range(-6.0, 6.0), 40.0),
+			"pos": pos + Vector2(20.0 * s, 12), "vel": Vector2(randf_range(-6.0, 6.0), 40.0),
 			"life": randi_range(6, 10), "col": C_FLAME if randf() < 0.5 else Color(0.6, 0.6, 0.65), "grav": -20.0,
 		})
 
@@ -737,7 +813,7 @@ func _smoke() -> void:
 	var every := 14 if dmg == 1 else 7
 	if anim % every == 0:
 		room.particles.append({
-			"pos": pos + Vector2(rng.randf_range(-10, 10), -8), "vel": Vector2(randf_range(-5.0, 5.0), -22.0),
+			"pos": pos + Vector2(rng.randf_range(-14, 14), -10), "vel": Vector2(randf_range(-5.0, 5.0), -22.0),
 			"life": randi_range(18, 30), "col": Color(0.35, 0.35, 0.4, 0.7), "grav": -10.0,
 		})
 
@@ -749,23 +825,88 @@ func _process(_delta: float) -> void:
 	queue_redraw()
 
 
+## A pose do quadro (só desenho): inclinação em torno dos pés, deslocamento, pernas, braços,
+## tampas dos mísseis, direção do fogo dos motores.
+func _pose() -> Dictionary:
+	var p := {"tilt": 0.0, "off": Vector2.ZERO, "leg": [0.0, 0.0], "swing": 0.0, "raise": 0.0,
+		"dangle": 0.0, "slump": 0.0, "lid": 0.0, "thrust": Vector2.ZERO}
+	match state:
+		"inert", "arrive":
+			p["slump"] = 5.0
+			p["tilt"] = 0.07
+		"plug":
+			var k := clampf(float(t - 14) / 40.0, 0.0, 1.0)
+			p["slump"] = 5.0 * (1.0 - k)
+			p["tilt"] = 0.07 * (1.0 - k)
+			if t < 12:
+				p["off"] = Vector2(0, 3.0 * (1.0 - t / 12.0))   # o tranco do encaixe
+			if t >= 62 and t < 82:
+				p["thrust"] = Vector2.DOWN
+				p["off"] += Vector2(0, -2)
+		"dash_warn":
+			p["slump"] = 5.0 if committed else 2.5 + sin(anim * 0.6)
+			p["tilt"] = -0.12 * face
+			p["swing"] = -4.0
+			p["thrust"] = Vector2(-face * 0.7, 1.0).normalized()
+		"dash":
+			p["tilt"] = clampf(vel.x / DASH_SPEED, -1.0, 1.0) * 0.35
+			p["thrust"] = -vel.normalized() if vel.length() > 1.0 else Vector2.ZERO
+			p["swing"] = -5.0
+			p["dangle"] = 3.0
+		"aim", "homing":
+			p["raise"] = 1.0
+			p["lid"] = 1.0
+			p["off"] = Vector2(-face * recoil * 0.25, recoil * 0.25)
+		"stun":
+			p["slump"] = 4.0
+			p["tilt"] = sin(anim * 0.18) * 0.13
+		"break", "dying":
+			p["off"] = Vector2(float((anim * 7) % 3) - 1.0, float((anim * 5) % 3) - 1.0)
+			p["slump"] = 2.0
+			p["tilt"] = sin(anim * 0.5) * 0.06
+		"wreck":
+			p["slump"] = 8.0
+			p["tilt"] = 0.24
+	if float_t > 0 and state != "dash":
+		p["dangle"] = 3.0
+		p["thrust"] = Vector2.DOWN
+		p["tilt"] += clampf(vel.x / FLOAT_SEEK, -1.0, 1.0) * 0.12
+		p["swing"] = 2.0
+	elif state == "idle" and _on_floor():
+		if absf(vel.x) > 1.0:
+			var ph := pos.x * 0.22
+			p["leg"] = [maxf(0.0, sin(ph)) * 3.5, maxf(0.0, -sin(ph)) * 3.5]
+			p["off"].y -= absf(sin(ph)) * 1.2
+			p["swing"] = sin(ph) * 2.5
+			p["tilt"] += signf(vel.x) * 0.05
+		else:
+			p["slump"] = (sin(anim * 0.07) + 1.0) * 0.6   # respira
+	return p
+
+
+## Um ponto do corpo (em relação a `pos`, em pé) para px da sala, com a inclinação e o giro da tela.
+func _body_point(local: Vector2, pz: Dictionary) -> Vector2:
+	var f := Vector2(0, FEET)
+	var q: Vector2 = (local - f).rotated(pz["tilt"]) + f + pz["off"]
+	return pos + q.rotated(-room.view_angle)
+
+
 ## A cápsula acompanha a mecha na tela (também durante a animação do giro, quando step não roda).
 func anim_draw() -> void:
 	if room == null:
 		return
 	puppet.anim = anim
 	var plugged := state in ["plug", "idle", "aim", "homing", "dash_warn", "dash", "stun", "break", "dying"]
-	puppet.pos = (pos + _lift() + HEAD.rotated(-room.view_angle)) if plugged else cap_pos
+	if plugged:
+		var pz := _pose()
+		puppet.pos = _body_point(HEAD + Vector2(2.0 * face, pz["slump"]), pz)
+		puppet.tilt = pz["tilt"]
+	else:
+		puppet.pos = cap_pos
+		puppet.tilt = 0.0
+	if grimace > 0 and fighting():
+		puppet.mood = "panic"
 	puppet.jolt = 20 if state == "break" or state == "stun" else 0
-
-
-## Deslocamento do desenho: agacha no aviso, treme atordoada.
-func _lift() -> Vector2:
-	if state == "dash_warn":
-		return Vector2(0, 2)
-	if state == "stun" or state == "break" or state == "dying":
-		return Vector2(float((anim / 2) % 2) - 0.5, 0)
-	return Vector2.ZERO
 
 
 func _draw() -> void:
@@ -790,7 +931,13 @@ func _draw() -> void:
 		draw_circle(p, rr * minf(1.0, 0.4 + k * 1.5), Color(C_FIRE, 0.55 * (1.0 - k)))
 		draw_circle(p, rr * 0.6 * (1.0 - k), Color(1, 1, 1, 0.9 * (1.0 - k)))
 		draw_arc(p, rr, 0.0, TAU, 20, Color(C_FIRE, 1.0 - k), 1.0)
-	# aviso da investida: a linha até o coelho pisca
+	for d in debris:
+		draw_set_transform_matrix(base * Transform2D(d["ang"], d["pos"].round()))
+		var w: float = d["w"]
+		draw_rect(Rect2(-w, -1, w * 2.0, 2), C_HULL_LIGHT)
+		draw_rect(Rect2(-w, -1, 1, 1), C_RIVET)
+	draw_set_transform_matrix(base)
+	# aviso da investida: a linha até o coelho pisca; com a mira travada, fica sólida até a parede
 	if state == "dash_warn" and (committed or (t / 4) % 2 == 0):
 		var a := pos
 		var b := a + dash_dir * _ray_len(a, dash_dir) if committed else _rabbit_c()
@@ -802,11 +949,17 @@ func _draw() -> void:
 	for i in trail.size():
 		var tp: Vector2 = trail[i]
 		draw_set_transform_matrix(base * Transform2D(-room.view_angle, tp.round()))
-		draw_rect(Rect2(-MW / 2.0, -MH / 2.0, MW, MH), Color(C_HULL_LIGHT, 0.12 + 0.08 * i), false, 1.0)
-	draw_set_transform_matrix(base * Transform2D(-room.view_angle, (pos + _lift()).round()))
-	_draw_mecha()
+		draw_rect(Rect2(-MW / 2.0 + 4, -MH / 2.0 + 10, MW - 8, MH - 10), Color(C_HULL_LIGHT, 0.10 + 0.07 * i), false, 1.0)
+	var pz := _pose()
+	var xf := base * Transform2D(-room.view_angle, pos.round()) * Transform2D(0.0, pz["off"].round()) \
+		* Transform2D(pz["tilt"], Vector2(0, FEET)) * Transform2D(0.0, Vector2(0, -FEET))
+	draw_set_transform_matrix(xf)
+	_draw_mecha(pz)
 	if fighting() or state == "dying":
+		draw_set_transform_matrix(base * Transform2D(-room.view_angle, pos.round()))
 		_draw_gatsby_hearts()
+	draw_set_transform_matrix(base)
+	_draw_offscreen()
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 	_draw_hud()
 
@@ -824,6 +977,31 @@ func _ray_len(a: Vector2, d: Vector2) -> float:
 	elif d.y < -0.001:
 		best = minf(best, (inner.position.y - a.y) / d.y)
 	return maxf(best, 0.0)
+
+
+## A sala é mais alta que a tela: miras e mísseis fora da vista ganham uma seta na borda.
+func _draw_offscreen() -> void:
+	if room.rotating:
+		return
+	var half: float = room.VIEW.y / 2.0 - 6.0
+	var c: Vector2 = room.cam
+	var items: Array = []
+	for m in markers:
+		if not m["fired"]:
+			items.append([m["pos"], C_AIM])
+	for h in homers:
+		items.append([h["pos"], C_MISSILE])
+	for it in items:
+		var p: Vector2 = it[0]
+		var dy := p.y - c.y
+		if absf(dy) <= half + 4.0:
+			continue
+		var sgn := signf(dy)
+		var tip := Vector2(p.x, c.y + sgn * half)
+		var col: Color = it[1]
+		if (anim / 5) % 2 == 0:
+			col = Color(col, 0.6)
+		draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(-3, -sgn * 4), tip + Vector2(3, -sgn * 4)]), col)
 
 
 func _draw_marker(m: Dictionary) -> void:
@@ -856,88 +1034,178 @@ func _draw_homer(base: Transform2D, h: Dictionary) -> void:
 		draw_rect(Rect2(0, -1, 1, 1), Color(1, 1, 1))
 
 
-## A mecha em pé na tela. Origem no centro da caixa (24 x 30); os pés em y = 15.
-func _draw_mecha() -> void:
+# ---- a mecha (40 x 52; origem no centro da caixa, pés em y = 26). Vista de 3/4: `face` vai de
+# -1 (olha para a esquerda) a 1 (direita), passando pela frente. O lado para onde olha é o "de
+# perto" (desenhado por cima); o outro fica atrás do tronco, mais escuro.
+
+func _dk(c: Color, far: bool) -> Color:
+	return c.darkened(0.32) if far else c
+
+
+func _draw_mecha(pz: Dictionary) -> void:
 	var dmg := HEARTS - hearts
 	var on := state != "inert" and state != "arrive" and state != "wreck"
-	var thr := float_t > 0 or state == "dash" or state == "dash_warn"
-	# compartimentos de mísseis, atrás dos ombros
-	for s in [-1, 1]:
-		var px := -18 if s < 0 else 12
-		draw_rect(Rect2(px, -18, 6, 17), C_HULL_DARK)
-		draw_rect(Rect2(px, -18, 6, 1), C_HULL_LIGHT)
-		draw_rect(Rect2(px, -1, 6, 1), C_SEAM)
-		for k in 3:
-			var broken: bool = dmg >= 1 and s < 0 and k == 0
-			var c: Color = C_SEAM if broken else (C_AIM if on else C_RUST)
-			draw_rect(Rect2(px + 2, -16 + k * 5, 2, 3), c)
-			draw_rect(Rect2(px + 2, -16 + k * 5, 2, 1), Color(1, 1, 1, 0.35) if on and not broken else C_SEAM)
-	# pernas e pés
-	for s in [-1, 1]:
-		var lx := -10 if s < 0 else 4
-		draw_rect(Rect2(lx, 4, 6, 9), C_HULL)
-		draw_rect(Rect2(lx, 4, 6, 1), C_HULL_LIGHT)
-		draw_rect(Rect2(lx - 1, 12, 8, 3), C_HULL_DARK)
-		draw_rect(Rect2(lx + 1, 8, 1, 1), C_RIVET)
-		draw_rect(Rect2(lx + 4, 8, 1, 1), C_RIVET)
-	# quadril e a placa do meio (cobre a chama da cápsula)
-	draw_rect(Rect2(-8, 2, 16, 4), C_HULL_DARK)
-	draw_rect(Rect2(-4, 6, 8, 5), C_HULL_DARK)
-	draw_rect(Rect2(-4, 6, 8, 1), C_SEAM)
-	# tronco: chapas remendadas
-	draw_rect(Rect2(-12, -11, 24, 14), C_HULL)
-	draw_rect(Rect2(-12, -11, 24, 2), C_HULL_LIGHT)
-	draw_rect(Rect2(-12, -2, 24, 1), C_SEAM)
-	draw_rect(Rect2(-6, -9, 1, 7), C_SEAM)
-	draw_rect(Rect2(5, -9, 1, 7), C_SEAM)
-	for q in [Vector2(-11, -8), Vector2(10, -8), Vector2(-11, 1), Vector2(10, 1)]:
+	var d := 1.0 if face >= 0.0 else -1.0
+	var k := absf(face)
+	var u: Vector2 = Vector2(0, pz["slump"])             # o tronco desce quando ela se agacha
+	var sx := 1.0 - 0.16 * k                      # escorço: o corpo estreita de lado
+	var lights := 3
+	if state == "inert" or state == "arrive":
+		lights = 0
+	elif state == "plug":
+		lights = clampi((t - 26) / 8, 0, 3)
+	# compartimentos de mísseis (nas costas): vão para trás quando ela vira
+	for side in [-d, d]:
+		var cx: float = side * 16.0 * sx - d * 5.0 * k
+		_draw_pod(Vector2(cx, -24) + u, side == -d, pz["lid"], dmg, on, side)
+	# braço e perna de trás
+	_draw_leg(-d, pz, true, sx, k)
+	_draw_arm(-d, pz, true, sx, k, u)
+	# quadril, perna da frente
+	draw_rect(Rect2(-11 * sx, 8 + u.y * 0.6, 22 * sx, 5), C_HULL_DARK)
+	draw_rect(Rect2(-4 * sx + 2 * d * k, 12 + u.y * 0.6, 8, 4), C_HULL_DARK)
+	_draw_leg(d, pz, false, sx, k)
+	# tronco
+	var tx: float = -15.0 * sx + 1.5 * d * k
+	var tw := 30.0 * sx
+	var ty: float = -14.0 + u.y
+	draw_rect(Rect2(tx, ty, tw, 23), C_HULL)
+	draw_rect(Rect2(tx, ty, tw, 2), C_HULL_LIGHT)
+	draw_rect(Rect2(tx, ty + 22, tw, 1), C_SEAM)
+	if k > 0.15:
+		# a lateral do tronco aparece do lado de trás: dá volume
+		var sw := roundf(4.0 * k)
+		draw_rect(Rect2(tx if d > 0 else tx + tw - sw, ty, sw, 23), C_HULL_DARK)
+	draw_rect(Rect2(tx, ty + 12, tw, 1), C_SEAM)
+	draw_rect(Rect2(tx + tw * 0.25, ty + 3, 1, 9), C_SEAM)
+	draw_rect(Rect2(tx + tw * 0.75, ty + 3, 1, 9), C_SEAM)
+	for q in [Vector2(tx + 1, ty + 4), Vector2(tx + tw - 2, ty + 4), Vector2(tx + 1, ty + 18), Vector2(tx + tw - 2, ty + 18)]:
 		draw_rect(Rect2(q, Vector2(1, 1)), C_RIVET)
-	# painel do peito com luzes
-	draw_rect(Rect2(-4, -8, 8, 6), C_SEAM)
+	# placa da barriga com remendo
+	draw_rect(Rect2(tx + 4, ty + 14, tw - 8, 7), C_HULL_DARK)
+	draw_rect(Rect2(tx + 6 + 3 * d * k, ty + 15, 6, 4), C_RUST)
+	# painel do peito: vai para o lado para onde ela olha
+	var px: float = -6.0 + 4.0 * d * k
+	draw_rect(Rect2(px, ty + 3, 12, 9), C_SEAM)
 	for i in 3:
 		var lc: Color = C_LIGHTS[i]
-		var lit := on and ((anim / 10 + i) % 3 != 0 or state == "dash_warn")
-		draw_rect(Rect2(-3 + i * 2 + (i / 2), -7, 2, 2), lc if lit else Color(lc, 0.2))
-	draw_rect(Rect2(-3, -4, 6, 1), C_ENERGY if on else C_RUST)
-	# encaixe da cápsula no alto
-	draw_rect(Rect2(-8, -13, 16, 2), C_SEAM)
-	draw_rect(Rect2(-7, -13, 2, 1), C_RIVET)
-	draw_rect(Rect2(5, -13, 2, 1), C_RIVET)
-	# braços com propulsor na mão
-	for s in [-1, 1]:
-		var ax := -17 if s < 0 else 13
-		draw_rect(Rect2(ax, -9, 4, 12), C_HULL_LIGHT)
-		draw_rect(Rect2(ax, -9, 4, 1), C_RIVET)
-		draw_rect(Rect2(ax, 3, 4, 3), C_HULL_DARK)
-		if thr and on:
-			var fl := 4.0 + float((anim / 2) % 3) * 2.0
-			var cx := ax + 2.0
-			draw_colored_polygon(PackedVector2Array([Vector2(cx - 2, 6), Vector2(cx, 6 + fl), Vector2(cx + 2, 6)]), C_FLAME)
-			draw_colored_polygon(PackedVector2Array([Vector2(cx - 1, 6), Vector2(cx, 6 + fl * 0.5), Vector2(cx + 1, 6)]), C_FLAME_CORE)
+		var lit := i < lights and ((anim / 9 + i) % 4 != 0 or state == "dash_warn" or state == "plug")
+		draw_rect(Rect2(px + 1 + i * 4, ty + 4, 3, 3), lc if lit else Color(lc, 0.15))
+		if lit:
+			draw_rect(Rect2(px + 1 + i * 4, ty + 4, 1, 1), Color(1, 1, 1, 0.6))
+	var bar_w := 10.0 * clampf(float(energy) / ENERGY, 0.0, 1.0) if lights > 0 else 0.0
+	draw_rect(Rect2(px + 1, ty + 9, 10, 2), C_RUST)
+	draw_rect(Rect2(px + 1, ty + 9, bar_w, 2), C_ENERGY)
+	# gola e cabos da fusão (prendem a cúpula ao tronco)
+	draw_rect(Rect2(-10 * sx + 2 * d * k, ty - 2, 20 * sx, 3), C_HULL_DARK)
+	draw_rect(Rect2(-10 * sx + 2 * d * k, ty - 2, 20 * sx, 1), C_HULL_LIGHT)
+	var glow := 0.0
+	if state == "plug":
+		glow = clampf(float(t - 14) / 16.0, 0.0, 1.0)
+	elif on:
+		glow = 0.55 + 0.25 * sin(anim * 0.15)
+	for side in [-1.0, 1.0]:
+		var c0: Vector2 = Vector2(side * 8.0 * sx + 2 * d * k, ty - 1)
+		var c1: Vector2 = Vector2(side * 12.0 + 2 * d * k, ty - 6)
+		draw_line(c0, c1, C_SEAM, 2.0)
+		if glow > 0.0:
+			draw_line(c0, c1, Color(C_LIGHTS[2], glow), 1.0)
+	# ombros com chifres
+	for side in [-d, d]:
+		var far: bool = side == -d
+		var sh: Vector2 = Vector2(side * 15.0 * sx + d * 1.5 * k, ty + 1)
+		draw_rect(Rect2(sh.x - 5, sh.y - 3, 10, 6), _dk(C_HULL_LIGHT, far))
+		draw_rect(Rect2(sh.x - 5, sh.y + 2, 10, 1), C_SEAM)
+		if not (dmg >= 2 and side < 0):
+			draw_colored_polygon(PackedVector2Array([sh + Vector2(-3, -3), sh + Vector2(side * 3.0, -9), sh + Vector2(2, -3)]), _dk(C_HULL_LIGHT, far))
+	# braço da frente
+	_draw_arm(d, pz, false, sx, k, u)
 	# estragos
 	if dmg >= 1:
-		draw_line(Vector2(-10, -10), Vector2(-7, -5), C_SEAM, 1.0)
-		draw_line(Vector2(-7, -5), Vector2(-9, -2), C_SEAM, 1.0)
-		draw_rect(Rect2(7, -1, 4, 3), C_RUST)
+		draw_line(Vector2(tx + 3, ty + 2), Vector2(tx + 7, ty + 8), C_SEAM, 1.0)
+		draw_line(Vector2(tx + 7, ty + 8), Vector2(tx + 4, ty + 12), C_SEAM, 1.0)
+		draw_rect(Rect2(tx + tw - 9, ty + 16, 5, 3), C_RUST)
 	if dmg >= 2:
-		draw_rect(Rect2(6, -9, 5, 6), Color("120f0c"))       # chapa arrancada: fios à mostra
-		draw_line(Vector2(7, -8), Vector2(9, -5), C_AIM, 1.0)
-		draw_line(Vector2(9, -8), Vector2(8, -4), C_LIGHTS[1], 1.0)
+		draw_rect(Rect2(tx + tw - 10, ty + 3, 7, 8), Color("120f0c"))   # chapa arrancada: fios
+		draw_line(Vector2(tx + tw - 9, ty + 4), Vector2(tx + tw - 6, ty + 9), C_AIM, 1.0)
+		draw_line(Vector2(tx + tw - 5, ty + 4), Vector2(tx + tw - 7, ty + 10), C_LIGHTS[1], 1.0)
 		if (anim / 4) % 5 == 0:
-			draw_rect(Rect2(8, -6, 1, 1), C_FLAME_CORE)
+			draw_rect(Rect2(tx + tw - 7, ty + 6, 1, 1), C_FLAME_CORE)
 	if state == "wreck":
-		draw_rect(Rect2(-12, -11, 24, 14), Color(0, 0, 0, 0.35))
-	elif state == "inert":
-		draw_rect(Rect2(-12, -11, 24, 14), Color(0, 0, 0, 0.25))
-	# pisca branco ao levar dano
+		draw_rect(Rect2(tx, ty, tw, 23), Color(0, 0, 0, 0.3))
 	if flash > 0 and (flash / 3) % 2 == 0:
-		draw_rect(Rect2(-12, -11, 24, 26), Color(1, 1, 1, 0.55))
+		draw_rect(Rect2(tx, ty, tw, 23), Color(1, 1, 1, 0.4))
+
+
+## Compartimento de mísseis: caixa alta com as bocas redondas; a tampa abre para atirar.
+func _draw_pod(o: Vector2, far: bool, lid: float, dmg: int, on: bool, side: float) -> void:
+	draw_rect(Rect2(o.x - 4, o.y, 8, 20), _dk(C_HULL_DARK, far))
+	draw_rect(Rect2(o.x - 4, o.y + 19, 8, 1), C_SEAM)
+	draw_rect(Rect2(o.x - 4, o.y, 1, 20), _dk(C_HULL_LIGHT, far))
+	for i in 3:
+		var c: Vector2 = o + Vector2(0.5, 4 + i * 5)
+		var empty: bool = (dmg >= 1 and side < 0 and i == 0) or not on
+		draw_circle(c, 2.2, C_SEAM)
+		draw_circle(c, 1.4, C_SEAM if empty else _dk(C_AIM, far))
+		if not empty:
+			draw_rect(Rect2(c - Vector2(1, 1), Vector2(1, 1)), Color(1, 1, 1, 0.5))
+	# tampa: abre girando para fora
+	var hinge: Vector2 = o + Vector2(-4 if side < 0 else 4, 0)
+	var ang: float = -side * lid * 1.1
+	var a: Vector2 = hinge
+	var b: Vector2 = hinge + Vector2(side * -8.0, 0).rotated(ang)
+	draw_line(a, b, _dk(C_HULL_LIGHT, far), 2.0)
+
+
+func _draw_leg(side: float, pz: Dictionary, far: bool, sx: float, k: float) -> void:
+	var lift: float = pz["leg"][0 if side < 0 else 1]
+	var dangle: float = pz["dangle"]
+	var hip: Vector2 = Vector2(side * 7.0 * sx - (2.0 * k * side if far else 0.0), 12 + pz["slump"] * 0.6)
+	var knee_y: float = 18.0 + pz["slump"] * 0.3 - lift * 0.5 + dangle * 0.5
+	var foot_y: float = 23.0 - lift + dangle
+	var c := _dk(C_HULL, far)
+	draw_rect(Rect2(hip.x - 4, hip.y, 8, knee_y - hip.y + 1), c)
+	draw_rect(Rect2(hip.x - 5, knee_y - 1, 10, 3), _dk(C_HULL_LIGHT, far))
+	draw_rect(Rect2(hip.x - 1, knee_y, 2, 1), C_RIVET)
+	draw_rect(Rect2(hip.x - 4, knee_y + 2, 8, foot_y - knee_y - 2), c)
+	# pé: o bico aponta para onde ela olha
+	var d := 1.0 if face >= 0.0 else -1.0
+	var toe: float = d * (2.0 + 2.0 * k)
+	draw_rect(Rect2(hip.x - 6 + toe * 0.5, foot_y, 12, 3), _dk(C_HULL_DARK, far))
+	draw_colored_polygon(PackedVector2Array([Vector2(hip.x + d * 6 + toe * 0.5, foot_y), Vector2(hip.x + d * 9 + toe * 0.5, foot_y + 3), Vector2(hip.x + d * 6 + toe * 0.5, foot_y + 3)]), _dk(C_HULL_LIGHT, far))
+
+
+## Braço com o motor embaixo da mão (os dois motores laterais).
+func _draw_arm(side: float, pz: Dictionary, far: bool, sx: float, k: float, u: Vector2) -> void:
+	var d := 1.0 if face >= 0.0 else -1.0
+	var sh: Vector2 = Vector2(side * 17.0 * sx + (d * 3.0 * k if far else d * 1.0 * k), -11 + u.y)
+	var raise: float = pz["raise"]
+	var swing: float = pz["swing"] * side * d * 0.5 + pz["swing"] * 0.5
+	var hand: Vector2 = sh + Vector2(side * (2.0 + raise * 3.0) + swing, 18.0 - raise * 10.0)
+	var c := _dk(C_HULL_LIGHT, far)
+	var elbow: Vector2 = sh.lerp(hand, 0.5) + Vector2(side * 2.0, 0)
+	draw_line(sh, elbow, c, 6.0)
+	draw_line(elbow, hand, c, 6.0)
+	draw_rect(Rect2(elbow - Vector2(2, 2), Vector2(4, 4)), _dk(C_HULL_DARK, far))
+	# motor: um bocal embaixo da mão
+	var noz: Vector2 = hand + Vector2(0, 3)
+	draw_rect(Rect2(noz.x - 4, noz.y - 1, 8, 4), _dk(C_HULL_DARK, far))
+	draw_rect(Rect2(noz.x - 4, noz.y - 1, 8, 1), C_RIVET)
+	var th: Vector2 = pz["thrust"]
+	if th != Vector2.ZERO and state != "wreck":
+		# o fogo sai para trás do movimento (o corpo está inclinado: compensa)
+		var dir: Vector2 = th.rotated(-pz["tilt"])
+		var fl := 6.0 + float((anim / 2) % 3) * 2.5 + (4.0 if state == "dash" else 0.0)
+		var o: Vector2 = noz + Vector2(0, 3)
+		var nrm: Vector2 = dir.orthogonal()
+		draw_colored_polygon(PackedVector2Array([o - nrm * 3.0, o + dir * fl, o + nrm * 3.0]), _dk(C_FLAME, far))
+		draw_colored_polygon(PackedVector2Array([o - nrm * 1.5, o + dir * fl * 0.55, o + nrm * 1.5]), C_FLAME_CORE)
 
 
 ## Os corações do Gatsby, flutuando acima da cápsula.
 func _draw_gatsby_hearts() -> void:
 	for i in HEARTS:
-		_draw_heart(Vector2(-13 + i * 9, -42), i < hearts)
+		_draw_heart(Vector2(-13 + i * 9, -38), i < hearts)
 
 
 func _draw_hud() -> void:
