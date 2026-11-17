@@ -384,6 +384,7 @@ func validate() -> Array:
 				out.append({"erro": true, "msg": "O bloco giratório precisa ser todo de parede '#'.", "pos": Vector2i(c0, r0)})
 	if extra.has("actors") and not extra.has("spin_block") and str(extra["actors"]).contains("boss_squirrel"):
 		out.append({"erro": true, "msg": "O Jeffrey precisa de um bloco giratório.", "pos": no_pos})
+	_validate_objects(out, w, h)
 	# numa sala com ator (boss), quem abre a porta é ele
 	if door_sockets == 0 and not door_open and dcount > 0 and not extra.has("actors"):
 		out.append({"erro": true, "msg": "A porta não tem compartimento 'S': marque 'porta aberta' ou ponha um.", "pos": no_pos})
@@ -428,6 +429,88 @@ func validate() -> Array:
 	if limiter and not rotate:
 		out.append({"erro": false, "msg": "O limitador não faz nada sem giro.", "pos": no_pos})
 	return out
+
+
+## Os objetos da fase que não são glifos: placas de espinhos, conectores, chapas soltas e botões.
+## Cada um é uma lista em `extra` (veja room.gd). Em tiles, dentro da sala; erros impedem de jogar.
+func _validate_objects(out: Array, w: int, h: int) -> void:
+	var no_pos := Vector2i(-1, -1)
+	var in_room := func(r: Array) -> bool:
+		return r.size() >= 3 and int(r[0]) >= 0 and int(r[1]) >= 0 and int(r[0]) + int(r[2]) <= w \
+			and int(r[1]) + (int(r[3]) if r.size() > 3 else 1) <= h
+	var bad_rect := func(name: String, i: int, key: String) -> void:
+		out.append({"erro": true, "msg": "%s %d: '%s' mal definido ou fora da sala." % [name, i + 1, key], "pos": no_pos})
+	var has_actor: bool = extra.has("actors")
+	var has_cycle_or_actor := has_actor
+	var channels_driven := {}   # canais que algo aciona (botão ou ator)
+	for pl in extra.get("plates", []):
+		channels_driven[int(pl.get("ch", 0))] = true
+	for i in extra.get("crushers", []).size():
+		var c: Dictionary = extra["crushers"][i]
+		if not (c.get("rect", null) is Array) or not in_room.call(c["rect"]) or int(c["rect"][3]) < 1:
+			bad_rect.call("Placa", i, "rect")
+			continue
+		if int(c.get("dir", 0)) < 0 or int(c.get("dir", 0)) > 3:
+			out.append({"erro": true, "msg": "Placa %d: 'dir' vai de 0 a 3." % (i + 1), "pos": no_pos})
+		if float(c.get("speed", 9.0)) <= 0.0:
+			out.append({"erro": true, "msg": "Placa %d: a velocidade precisa ser maior que zero." % (i + 1), "pos": no_pos})
+		if float(c.get("delay", 0.0)) < 0.0 and not has_actor:
+			out.append({"erro": false, "msg": "Placa %d espera um ator ligá-la, mas a fase não tem nenhum: ela nunca liga." % (i + 1), "pos": no_pos})
+	for i in extra.get("movers", []).size():
+		var m: Dictionary = extra["movers"][i]
+		var off = m.get("off", null)
+		var on = m.get("on", null)
+		if not (off is Array) or not in_room.call(off) or int(off[3]) < 1:
+			bad_rect.call("Conector", i, "off")
+			continue
+		if not (on is Array) or on.size() < 2:
+			bad_rect.call("Conector", i, "on")
+			continue
+		var on_rect := [int(on[0]), int(on[1]), int(off[2]), int(off[3])]
+		if not in_room.call(on_rect):
+			bad_rect.call("Conector", i, "on")
+			continue
+		if int(off[0]) != int(on[0]) and int(off[1]) != int(on[1]):
+			out.append({"erro": true, "msg": "Conector %d: os dois encaixes precisam estar na mesma linha ou na mesma coluna." % (i + 1), "pos": Vector2i(int(off[0]), int(off[1]))})
+		if float(m.get("speed", 40.0)) <= 0.0:
+			out.append({"erro": true, "msg": "Conector %d: a velocidade precisa ser maior que zero." % (i + 1), "pos": no_pos})
+		if int(m.get("ch", 0)) < 0 or int(m.get("ch", 0)) > 7:
+			out.append({"erro": true, "msg": "Conector %d: o canal vai de 0 a 7." % (i + 1), "pos": no_pos})
+		if int(m.get("spikes", -1)) < -1 or int(m.get("spikes", -1)) > 3:
+			out.append({"erro": true, "msg": "Conector %d: 'spikes' vai de -1 a 3." % (i + 1), "pos": no_pos})
+		if m.has("cycle") and float(m["cycle"]) != 0.0 and float(m["cycle"]) < 0.5:
+			out.append({"erro": true, "msg": "Conector %d: o ciclo mínimo é 0,5 s." % (i + 1), "pos": no_pos})
+		for dock in [off, on_rect]:
+			for rr in range(int(dock[1]), int(dock[1]) + int(dock[3])):
+				for cc in range(int(dock[0]), int(dock[0]) + int(dock[2])):
+					if cell(cc, rr) == "#":
+						out.append({"erro": true, "msg": "Conector %d: um encaixe cai dentro da parede." % (i + 1), "pos": Vector2i(cc, rr)})
+		var driven: bool = has_actor or float(m.get("cycle", 0.0)) > 0.0 or int(m.get("bat", 0)) > 0 or channels_driven.has(int(m.get("ch", 0)))
+		if not driven:
+			out.append({"erro": false, "msg": "Conector %d não tem acionador (ciclo, bateria, botão ou ator): fica parado." % (i + 1), "pos": Vector2i(int(off[0]), int(off[1]))})
+		if int(m.get("bat", 0)) > MAX_BATTERIES:
+			out.append({"erro": true, "msg": "Conector %d: 'bat' vai até %d." % [i + 1, MAX_BATTERIES], "pos": no_pos})
+	for i in extra.get("crumbles", []).size():
+		var cr = extra["crumbles"][i]
+		if not (cr is Array) or not in_room.call(cr):
+			bad_rect.call("Chapa solta", i, "rect")
+			continue
+		for rr in range(int(cr[1]), int(cr[1]) + int(cr[3])):
+			for cc in range(int(cr[0]), int(cr[0]) + int(cr[2])):
+				if cell(cc, rr) == "#":
+					out.append({"erro": false, "msg": "Chapa solta %d está dentro da parede." % (i + 1), "pos": Vector2i(cc, rr)})
+	for i in extra.get("plates", []).size():
+		var pl: Dictionary = extra["plates"][i]
+		if not (pl.get("rect", null) is Array) or not in_room.call(pl["rect"]):
+			bad_rect.call("Botão", i, "rect")
+			continue
+		if int(pl.get("ch", 0)) < 0 or int(pl.get("ch", 0)) > 7:
+			out.append({"erro": true, "msg": "Botão %d: o canal vai de 0 a 7." % (i + 1), "pos": no_pos})
+		var any := has_actor
+		for m2 in extra.get("movers", []):
+			any = any or int(m2.get("ch", 0)) == int(pl.get("ch", 0))
+		if not any:
+			out.append({"erro": false, "msg": "Botão %d: nenhum conector usa o canal %d." % [i + 1, int(pl.get("ch", 0))], "pos": no_pos})
 
 
 func errors() -> Array:

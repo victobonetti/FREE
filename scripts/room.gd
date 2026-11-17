@@ -214,6 +214,12 @@ var crushers: Array = []
 # {"off": Rect2i, "on": Rect2i, "r": Rect2i (atual), "pf": Vector2, "ch", "speed", "spikes", "fx"}
 var movers: Array = []
 var mover_state := {}    # canal -> true (peças em "on")
+var cycle_t := 0         # quadros de simulação desde o início: os conectores em ciclo seguem este relógio
+var plate_on := {}       # canal -> true enquanto um botão de pressão dele está apertado
+# Botões de pressão (campo "plates": {"rect": [coluna, linha, largura] em tiles, "ch": canal, "mode":
+# "hold" (padrão: ligado enquanto apertado) ou "once" (liga e fica)}. O coelho ou uma caixa em cima
+# aperta. Servem a conectores do mesmo canal.
+var plates: Array = []
 var mover_pending: Array = []   # trocas de canal avisadas e ainda não feitas: [canal, quadros]
 # Chapas soltas (campo "crumbles"): chão que desaba pouco depois de o coelho pisar. Não voltam
 # (só ao reiniciar a sala). {"rect": Rect2i, "t" (-1 parada; senão quadros desde o pisão)}
@@ -353,6 +359,9 @@ func reset() -> void:
 	movers.clear()
 	mover_state.clear()
 	mover_pending.clear()
+	plate_on.clear()
+	plates.clear()
+	cycle_t = 0
 	crumbles.clear()
 	danger = 0.0
 	danger_dir = -1
@@ -401,6 +410,10 @@ func reset() -> void:
 	_parse(rows, water_tiles)
 	_init_crushers()
 	_init_movers()
+	for pd in def.get("plates", []):
+		var pr: Array = pd["rect"]
+		plates.append({"rect": Rect2i(int(pr[0]) * TILE, int(pr[1]) * TILE, int(pr[2]) * TILE, TILE),
+			"ch": int(pd.get("ch", 0)), "once": str(pd.get("mode", "hold")) == "once", "down": false, "latched": false, "k": 0.0})
 	for cr in def.get("crumbles", []):
 		crumbles.append({"rect": Rect2i(int(cr[0]) * TILE, int(cr[1]) * TILE, int(cr[2]) * TILE, int(cr[3]) * TILE), "t": -1})
 	_water_build()
@@ -517,6 +530,12 @@ func _init_movers() -> void:
 			"ch": int(d.get("ch", 0)), "speed": float(d.get("speed", 40.0)),
 			"spikes": int(d.get("spikes", -1)), "fx": 0,
 			"launch": float(d.get("launch", 0.0)), "last": Vector2i.ZERO,
+			# gatilhos próprios (além de um ator chamar mover_toggle): "cycle" (s por meio ciclo, com
+			# "phase" em s de deslocamento) e "bat" (liga quando se pegou tantas baterias)
+			"cycle": roundi(float(d.get("cycle", 0.0)) * 60.0),
+			"phase": roundi(float(d.get("phase", 0.0)) * 60.0),
+			"bat": int(d.get("bat", 0)),
+			"want": false, "warn": false,
 		})
 
 
@@ -547,7 +566,11 @@ func mover_warning(ch: int) -> bool:
 
 
 func mover_wants_on(m: Dictionary) -> bool:
-	return mover_state.get(m["ch"], false)
+	if m["cycle"] > 0:
+		return m["want"]
+	if m["bat"] > 0:
+		return bat_got >= m["bat"]
+	return mover_state.get(m["ch"], false) or plate_on.get(m["ch"], false)
 
 
 ## A peça está encaixada (parada no lugar a que o canal a manda).
@@ -557,6 +580,22 @@ func mover_docked(m: Dictionary) -> bool:
 
 
 func _update_movers() -> void:
+	cycle_t += 1
+	for m in movers:
+		var P: int = m["cycle"]
+		if P <= 0:
+			continue
+		var t: int = cycle_t + m["phase"]
+		var on: bool = (t / P) % 2 == 1
+		if on != m["want"] and cycle_t > 1:
+			if Vector2(m["r"].position).distance_to(cam) < VIEW.length():
+				sfx.emit("mover_go")
+			m["fx"] = 0
+		m["want"] = on
+		# o aviso: os encaixes piscam nos últimos MOVER_WARN quadros de cada meio ciclo
+		m["warn"] = P > 2 * MOVER_WARN and P - (t % P) <= MOVER_WARN
+		if m["warn"] and P - (t % P) == MOVER_WARN and Vector2(m["r"].position).distance_to(cam) < VIEW.length() * 0.8:
+			sfx.emit("mover_warn")
 	for p in mover_pending:
 		p[1] -= 1
 		if p[1] <= 0:
@@ -613,6 +652,50 @@ func _mover_launch(m: Dictionary) -> void:
 			"pos": feet + Vector2(randf_range(-6.0, 6.0), 0), "vel": Vector2(randf_range(-40.0, 40.0), randf_range(10.0, 50.0)),
 			"life": randi_range(10, 18), "col": C_PAINT, "grav": 200.0,
 		})
+
+
+# ---------------------------------------------------------------- botões de pressão
+
+func _update_plates() -> void:
+	if plates.is_empty():
+		return
+	plate_on.clear()
+	var bodies: Array = [rabbit]
+	bodies.append_array(boxes)
+	for p in plates:
+		var pr: Rect2i = p["rect"]
+		var zone := Rect2i(pr.position.x, pr.position.y + 3, pr.size.x, 5)
+		var pressed := false
+		for b in bodies:
+			if overlaps(b.rect, zone):
+				pressed = true
+				break
+		if p["once"]:
+			p["latched"] = p["latched"] or pressed
+			pressed = p["latched"]
+		if pressed != p["down"]:
+			p["down"] = pressed
+			if Vector2(pr.position).distance_to(cam) < VIEW.length():
+				sfx.emit("plate_on" if pressed else "plate_off")
+		p["k"] = move_toward(p["k"], 1.0 if pressed else 0.0, 0.25)
+		if pressed:
+			plate_on[p["ch"]] = true
+
+
+func _draw_plates() -> void:
+	for p in plates:
+		var pr := Rect2(p["rect"])
+		if (pr.get_center() - cam).length() > VIEW.length() / 2.0 + 24.0:
+			continue
+		var col: Color = C_CHANNEL[p["ch"] % C_CHANNEL.size()]
+		var dip: float = p["k"] * 2.0
+		draw_rect(Rect2(pr.position.x, pr.end.y - 3, pr.size.x, 3), C_SEAM)
+		draw_rect(Rect2(pr.position.x + 1, pr.end.y - 4 + dip, pr.size.x - 2, 3), C_STEEL[1])
+		draw_rect(Rect2(pr.position.x + 1, pr.end.y - 4 + dip, pr.size.x - 2, 1), Color(col, 0.55 + 0.4 * p["k"]))
+		draw_rect(Rect2(pr.position.x + 2, pr.end.y - 6, 1, 2 - int(dip)), C_RIVET)
+		draw_rect(Rect2(pr.end.x - 3, pr.end.y - 6, 1, 2 - int(dip)), C_RIVET)
+		if p["k"] > 0.5:
+			draw_rect(Rect2(pr.position.x, pr.end.y - 5, pr.size.x, 1), Color(col, 0.25))
 
 
 # ---------------------------------------------------------------- chapas soltas
@@ -1096,6 +1179,8 @@ func _rotate_logic(dir: int) -> void:
 			m["spikes"] = posmod(m["spikes"] + dir, 4)
 	for c in crumbles:
 		c["rect"] = _rot_rect(c["rect"], dir)
+	for p in plates:
+		p["rect"] = _rot_rect(p["rect"], dir)
 	for c in crushers:
 		c["lane"] = _rot_rect(c["lane"], dir)
 		c["dir"] = posmod(c["dir"] + dir, 4)
@@ -1384,6 +1469,7 @@ func step(inp: Dictionary) -> void:
 	_update_boxes()
 	if state != "play":
 		return
+	_update_plates()
 	_update_batteries()
 	for a in actors:
 		a.step(self)
@@ -2523,6 +2609,7 @@ func _draw() -> void:
 	_draw_platforms()
 	_draw_movers()
 	_draw_crumbles()
+	_draw_plates()
 	_draw_drains()
 	_draw_ropes()
 
@@ -2633,7 +2720,7 @@ func _draw_movers() -> void:
 			if lit and m["fx"] >= 0 and m["fx"] < 14:
 				fx = 1.0 - float(m["fx"]) / 14.0
 			# no aviso, os dois encaixes piscam: é a deixa de que este canal vai mudar
-			if mover_warning(m["ch"]) and (frame / 3) % 2 == 0:
+			if (mover_warning(m["ch"]) or m["warn"]) and (frame / 3) % 2 == 0:
 				lit = true
 				fx = maxf(fx, 0.8)
 			_draw_dock(Rect2(dock), col, lit, fx)

@@ -14,6 +14,7 @@ const ONE_SHOTS := {
 	"alarm": [-21.0, 0.0], "gatsby_dash": [-18.0, 0.1], "gatsby_laugh": [-15.0, 0.05],
 	"acid_burn": [-13.0, 0.06], "acid_splash": [-17.0, 0.1],
 	"battery": [-14.0, 0.04], "charge": [-14.0, 0.0], "hatch": [-13.0, 0.05],
+	"plate_on": [-15.0, 0.04], "plate_off": [-19.0, 0.04],
 }
 
 
@@ -53,6 +54,10 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _charge()
 		"hatch":
 			return _hatch()
+		"plate_on":
+			return _plate(true)
+		"plate_off":
+			return _plate(false)
 	return null
 
 
@@ -355,6 +360,19 @@ static func _hatch() -> AudioStreamWAV:
 		v += sin(TAU * 410.0 * t) * exp(-t * 28.0) * 0.25
 		v += lp * exp(-t * 7.0) * 0.45 * minf(t * 60.0, 1.0)
 		b[i] = tanh(v * 1.3) * 0.75
+	return _wav(b)
+
+
+## Botão de pressão: um "clac" seco e curto; ao soltar, mais fraco e mais agudo.
+static func _plate(down: bool) -> AudioStreamWAV:
+	var b := _buf(0.14)
+	var rng := _rng(115 if down else 116)
+	for i in b.size():
+		var t := float(i) / MIX_RATE
+		var f := 150.0 if down else 230.0
+		var v := sin(TAU * f * t) * exp(-t * 40.0) * 0.8 + rng.randf_range(-1.0, 1.0) * exp(-t * 220.0) * 0.5
+		v += sin(TAU * f * 5.3 * t) * exp(-t * 70.0) * 0.2
+		b[i] = tanh(v * 1.3) * (0.8 if down else 0.55)
 	return _wav(b)
 
 

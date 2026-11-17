@@ -38,6 +38,7 @@ func _init() -> void:
 	test_race_components()
 	test_acid()
 	test_battery_lever()
+	test_mover_triggers()
 	test_reload_params()
 	test_rope()
 	test_water()
@@ -2429,3 +2430,130 @@ func test_battery_lever() -> void:
 	load_def(th)
 	idle(30)
 	check(room.theme == "industrial" and room.state == "play", "o tema é lido e não muda a simulação")
+
+
+# ------------------------------------------------------------ gatilhos dos conectores (D76)
+
+## As mensagens do validador. A sala de teste não tem porta, então esse erro é sempre ignorado.
+func _msgs(d: RefCounted, only_errors := false) -> String:
+	var t := ""
+	for e in d.validate():
+		if String(e["msg"]).contains("Falta a porta"):
+			continue
+		if not only_errors or e["erro"]:
+			t += String(e["msg"]) + " | "
+	return t
+
+
+func test_mover_triggers() -> void:
+	print("conectores: ciclo, bateria e botão")
+	# ciclo: meio ciclo de 1 s, aviso nos últimos 16 quadros
+	var cyc := {"ch": 0, "off": [20, 3, 4, 1], "on": [20, 8], "speed": 240.0, "cycle": 1.0}
+	load_def(_mover_def([cyc]))
+	var m: Dictionary = room.movers[0]
+	idle(30)
+	check(not room.mover_wants_on(m) and m["r"].position.y == 24 and not m["warn"], "no começo do ciclo o conector está no encaixe de desligado")
+	idle(20)
+	check(m["warn"], "nos últimos %d quadros do meio ciclo os encaixes avisam" % room.MOVER_WARN)
+	idle(12)
+	check(room.mover_wants_on(m) and not m["warn"], "passado o meio ciclo ele vai para o outro encaixe")
+	idle(40)
+	check(m["r"].position.y == 64, "e chega lá (y=%d)" % m["r"].position.y)
+	idle(60)
+	check(not room.mover_wants_on(m) and m["r"].position.y == 24, "no ciclo seguinte volta")
+	var a: Dictionary = cyc.duplicate()
+	var b: Dictionary = cyc.duplicate()
+	b["phase"] = 1.0
+	b["off"] = [10, 3, 4, 1]
+	b["on"] = [10, 8]
+	load_def(_mover_def([a, b]))
+	idle(70)
+	check(room.mover_wants_on(room.movers[0]) != room.mover_wants_on(room.movers[1]), "'phase' defasa os ciclos (um liga quando o outro desliga)")
+	room.reset()
+	idle(10)
+	check(room.cycle_t == 10 and not room.mover_wants_on(room.movers[0]), "morrer reinicia o relógio dos ciclos")
+
+	# bateria
+	var bm := {"ch": 3, "off": [20, 3, 4, 1], "on": [20, 8], "speed": 240.0, "bat": 2}
+	load_def(_lever_room(2, {"movers": [bm]}))
+	idle(5)
+	var mb: Dictionary = room.movers[0]
+	check(not room.mover_wants_on(mb), "sem as baterias, o conector fica parado")
+	for i in 200:
+		tick({"move": 1.0})
+		if room.bat_got == 1:
+			break
+	check(not room.mover_wants_on(mb), "com 1 de 2 baterias, ainda parado")
+	for i in 200:
+		tick({"move": 1.0})
+		if room.bat_got == 2:
+			break
+	check(room.mover_wants_on(mb), "com 2 baterias o conector liga")
+
+	# botão de pressão
+	var pm := {"ch": 2, "off": [20, 3, 4, 1], "on": [20, 7], "speed": 240.0}
+	var plate := {"rect": [9, 13, 3], "ch": 2}
+	load_def(_mover_def([pm], false, {"plates": [plate]}))
+	idle(20)
+	var mp: Dictionary = room.movers[0]
+	check(not room.mover_wants_on(mp) and not room.plates[0]["down"], "o botão solto não liga nada")
+	var got: Array = []
+	room.sfx.connect(func(n): got.append(n))
+	for i in 120:
+		tick({"move": 1.0})
+		if room.plates[0]["down"]:
+			break
+	check(room.plates[0]["down"] and room.mover_wants_on(mp) and got.has("plate_on"), "pisar no botão liga o canal dele, com clique")
+	for i in 120:
+		tick({"move": 1.0})
+		if not room.plates[0]["down"]:
+			break
+	check(not room.mover_wants_on(mp) and got.has("plate_off"), "sair do botão desliga (modo 'hold')")
+	load_def(_mover_def([pm], true, {"plates": [{"rect": [10, 13, 3], "ch": 2}]}))
+	idle(30)
+	check(room.plates[0]["down"] and room.mover_wants_on(room.movers[0]) and room.rabbit.pos.x < 40, "uma caixa em cima do botão o mantém apertado, mesmo com o coelho longe")
+	load_def(_mover_def([pm], false, {"plates": [{"rect": [9, 13, 3], "ch": 2, "mode": "once"}]}))
+	for i in 150:
+		tick({"move": 1.0})
+		if room.plates[0]["down"]:
+			break
+	for i in 90:
+		tick({"move": 1.0})
+	check(room.mover_wants_on(room.movers[0]) and room.plates[0]["down"], "no modo 'once' o botão fica apertado depois que o coelho sai")
+	var pr: Rect2i = room.plates[0]["rect"]
+	for i in 4:
+		room._rotate_logic(1)
+	check(room.plates[0]["rect"] == pr, "o botão gira com a sala (quatro giros restauram)")
+
+	print("validação das peças")
+	var base := _mover_def([])
+	var ok := LevelData.from_def(base)
+	var bad: Dictionary
+	bad = _mover_def([{"ch": 0, "off": [3, 5, 4, 1], "on": [20, 8], "speed": 60.0, "cycle": 1.0}])
+	check(_msgs(LevelData.from_def(bad), true).contains("mesma linha ou na mesma coluna"), "conector com encaixes desalinhados é erro")
+	bad = _mover_def([{"ch": 0, "off": [3, 12, 4, 1], "on": [3, 14], "speed": 60.0, "cycle": 1.0}])
+	check(_msgs(LevelData.from_def(bad), true).contains("dentro da parede"), "encaixe dentro da parede é erro")
+	bad = _mover_def([{"ch": 0, "off": [3, 3, 4, 1], "on": [3, 8], "speed": 60.0, "cycle": 0.2}])
+	check(_msgs(LevelData.from_def(bad), true).contains("0,5 s"), "ciclo menor que 0,5 s é erro")
+	bad = _mover_def([{"ch": 9, "off": [3, 3, 4, 1], "on": [3, 8], "speed": 60.0, "cycle": 1.0}])
+	check(_msgs(LevelData.from_def(bad), true).contains("canal"), "canal fora de 0 a 7 é erro")
+	bad = _mover_def([{"ch": 0, "off": [3, 3, 4, 1], "on": [3, 8], "speed": 60.0}])
+	var dm := _msgs(LevelData.from_def(bad))
+	check(dm.contains("não tem acionador") and _msgs(LevelData.from_def(bad), true) == "", "conector sem acionador é só aviso")
+	bad = _mover_def([{"ch": 0, "off": [3, 3, 4, 1], "on": [3, 8], "speed": 60.0}], false, {"plates": [{"rect": [9, 13, 3], "ch": 0}]})
+	check(not _msgs(LevelData.from_def(bad)).contains("acionador"), "com um botão no canal dele, o aviso some")
+	bad = _mover_def([], false, {"crushers": [{"rect": [1, 1, 99, 5], "dir": 0, "speed": 9.0}]})
+	check(_msgs(LevelData.from_def(bad), true).contains("fora da sala"), "placa fora da sala é erro")
+	bad = _mover_def([], false, {"crushers": [{"rect": [1, 1, 5, 5], "dir": 7, "speed": 9.0}]})
+	check(_msgs(LevelData.from_def(bad), true).contains("'dir'"), "direção da placa inválida é erro")
+	bad = _mover_def([], false, {"crushers": [{"rect": [1, 1, 5, 5], "dir": 0, "speed": 9.0, "delay": -1}]})
+	check(_msgs(LevelData.from_def(bad)).contains("nunca liga"), "placa que espera um ator inexistente é aviso")
+	bad = _mover_def([], false, {"crumbles": [[0, 0, 3, 1]]})
+	check(_msgs(LevelData.from_def(bad)).contains("dentro da parede"), "chapa solta dentro da parede é aviso")
+	bad = _mover_def([], false, {"crumbles": [[40, 3, 3, 1]]})
+	check(_msgs(LevelData.from_def(bad), true).contains("fora da sala"), "chapa solta fora da sala é erro")
+	bad = _mover_def([], false, {"plates": [{"rect": [9, 13, 3], "ch": 9}]})
+	check(_msgs(LevelData.from_def(bad), true).contains("canal"), "botão com canal inválido é erro")
+	check(_msgs(ok, true) == "", "e uma sala sem esses objetos continua válida")
+	var gat: RefCounted = LevelData.from_json(FileAccess.get_file_as_string("res://levels/wip/gatsby.json"))
+	check(gat.validate().is_empty(), "a fase do Gatsby valida sem erros nem avisos")
