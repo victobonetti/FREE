@@ -655,3 +655,9 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Causa:** o fundo era gerado a partir do chão e do tamanho da sala de agora; no giro, largura e altura trocam e o "chão" muda de lado, então tudo era recalculado.
 - **Solução em duas camadas:** (1) o fundo do meio é pintado nas coordenadas da fase como foi desenhada e desenhado com a transformação da orientação (`_orig_xform`): gira junto, como as paredes; (2) o mundo lá fora é desenhado na tela, sempre em pé, rolando com o quanto a câmera andou na tela (`_world_off`, que atravessa o giro sem salto) e recortado pelo retângulo da sala (`Geometry2D.intersect_polygons`). No giro, a sala gira na frente dele: mais profundidade.
 - **Sem pontas:** as rochas viraram colunas largas e onduladas que atravessam a tela, para não serem confundidas com espinhos.
+
+### D87 — As duas lutas do Gatsby entram na história
+- **Ordem:** depois das 5 fases do ato 2 vêm a fuga do Gatsby (fase 24, `gatsby`) e a mecha (fase 25, `a-mecha`). A campanha tem 25 fases.
+- **Provas:** a fuga entra com a rota do robô (`tests/fixtures/gatsby-route.json`) como replay. A mecha entra sem replay, provada por bot como o Jeffrey (`test_mecha_bot`; está em `BOT_IDS`), porque o bot de teste repõe as vidas do coelho e não serve como replay honesto.
+- **Ferramenta:** `tools/canonize_levels.gd` aceita `bot:<id>` (entra sem replay) e acha a rota em `route-<id>.json` ou `<id>-route.json`.
+- A fuga ganhou o tema `industrial` (só aparência).

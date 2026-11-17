@@ -511,3 +511,6 @@ Fase 18 nova, "Passagem": corredor de transição em que a terra vira metal (tem
 
 ## Rodada 41: sombras, profundidade, reação ao giro, passos, água e ácido
 Sombra projetada e volume nas paredes, sombra de contato, vinheta, duas camadas de paralaxe; poeira no feixe, esporos, musgo pendurado, lâmpadas, correntes e listras na fábrica; pêndulos que se acomodam depois do giro, grama que pende, poeira do novo teto; passos com oito materiais; água e ácido com profundidade, luz, cintilado, bolhas e vapor (D84).
+
+## Rodada 42: o fundo que não pula, o botão por tempo e o Gatsby na história
+O fundo distante fica em pé na tela e o fundo pintado gira com a sala (D86); botão por tempo no elevador de Prensas e vapor (D85); as duas lutas do Gatsby canonizadas depois do ato 2: fuga (24) e mecha (25) (D87).

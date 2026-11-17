@@ -162,6 +162,7 @@ level = {
     "rotate": True,
     "limiter": True,
     "door_open": True,
+    "theme": "industrial",
     "start_rot": 0,
     "version": 1,
     "actors": ["res://scripts/boss_gatsby.gd"],

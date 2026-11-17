@@ -2154,7 +2154,8 @@ func test_jeffrey_lives() -> void:
 ## Fases que ainda são provadas por um bot escrito à mão (neste arquivo). Cada uma sai desta
 ## lista quando ganhar um replay gravado no editor; fases novas só entram com replay.
 const BOT_IDS := ["passos", "degraus", "giro", "comporta", "derrame", "toca", "setas", "espinhos",
-	"prumo", "vertigem", "agua", "mare", "represa", "naufragio", "mergulho", "fuga", "jeffrey"]
+	"prumo", "vertigem", "agua", "mare", "represa", "naufragio", "mergulho", "fuga", "jeffrey",
+	"a-mecha"]   # a mecha: provada por test_mecha_bot
 
 
 func test_campaign_proof() -> void:
