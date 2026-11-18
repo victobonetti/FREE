@@ -3002,11 +3002,11 @@ func _update_batteries() -> void:
 		_update_lever()
 
 
-## Todas as baterias: a câmera vai até a alavanca, ela se puxa sozinha, e a câmera segue a caixa
-## saindo da calha. A entrada fica travada durante a cena.
+## Todas as baterias: a alavanca se puxa sozinha e a calha solta a caixa. Desde o D110 não há mais cena:
+## o coelho continua andando e a câmera continua nele (antes, a câmera ia até a alavanca e a caixa e
+## a entrada ficava travada).
 func _lever_fire() -> void:
 	lever["t"] = 0
-	input_lock = true
 	sfx.emit("charge")
 
 
@@ -3017,7 +3017,6 @@ func _update_lever() -> void:
 		return
 	var lc := Vector2(lever["rect"].position) + Vector2(8, 8)
 	var cc := Vector2(chute["rect"].position) + Vector2(8, 12)
-	cam_focus = lc if t < LEVER_PAN + LEVER_PULL else cc
 	if t == LEVER_PAN + LEVER_HIT:
 		lever["pulled"] = true
 		sfx.emit("lever")
@@ -3034,9 +3033,6 @@ func _update_lever() -> void:
 	if chute["open"] > 0:
 		chute["open"] += 1
 	lever["t"] = t + 1
-	if t + 1 >= total:
-		input_lock = false
-		cam_focus = null
 
 
 func _draw_batteries() -> void:

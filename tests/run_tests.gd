@@ -2453,13 +2453,11 @@ func test_battery_lever() -> void:
 		if room.bat_got == 2:
 			break
 	check(room.bat_got == 2 and room.lever["t"] >= 0 and got.has("charge"), "com todas as baterias a alavanca dispara sozinha")
-	check(room.input_lock, "a entrada fica travada durante a cena")
-	for i in 10:
-		tick({"move": 1.0})   # ainda desliza um pouco com a velocidade que tinha
+	check(not room.input_lock, "sem cena: a entrada não trava (D110)")
 	var x0: int = room.rabbit.pos.x
 	for i in 50:
 		tick({"move": 1.0})
-	check(room.rabbit.pos.x == x0 and room.cam_focus != null, "o coelho não anda e a câmera vai para a alavanca")
+	check(room.rabbit.pos.x != x0 and room.cam_focus == null, "o coelho continua andando e a câmera fica nele")
 	var total: int = room.LEVER_PAN + room.LEVER_PULL + room.LEVER_WATCH
 	while room.lever["t"] < total - 1:
 		tick()

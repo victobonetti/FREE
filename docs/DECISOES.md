@@ -786,3 +786,7 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Peça:** o broto ganhou "launch" (px/s): crescendo rápido, ao chegar ao alto ele arremessa quem está em cima, como a catapulta dos conectores.
 - **Regra nova do giro:** o giro para o coelho (zera a velocidade), menos quando ele foi **arremessado** por uma catapulta (broto ou conector) e ainda está no ar: aí o embalo gira junto com a sala. É o que transforma o arremesso num voo: girar de volta no ar põe o "para cima" do arremesso de lado.
 - **A fase** (40×14, 1 bateria): o broto-catapulta nasce na parede da esquerda, numa prateleira alta. Encostado nele, girar para a esquerda põe a parede no chão: ele dispara. Girando de volta ainda no ar, o coelho voa de lado por cima do poço de espinhos, pega a bateria no fim do voo e pousa do outro lado, junto da porta. Girar de volta cedo demais (antes do disparo) ou tarde demais encurta o voo.
+
+### D110 — Sem parada depois das baterias; ato 3 sem baterias
+- **Ato 2:** ao pegar a última bateria, não há mais cena: a entrada não trava e a câmera não vai até a alavanca e a caixa. A alavanca se puxa e a calha solta a caixa no mesmo tempo de antes, com o coelho andando. Os replays continuam vencendo.
+- **Ato 3 (Victor):** sai o ciclo de baterias; as fases do fungário são de plataforma, com os cogumelos. Plano das 5 fases a seguir (proposta).
