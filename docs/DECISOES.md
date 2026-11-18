@@ -747,3 +747,8 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Como é:** a flutuação continua (110 quadros). Nos últimos 24 (0,4 s), os propulsores engasgam: a chama pisca, sai fumaça preta, a mecha treme e toca um aviso. Aí ela desliga tudo e despenca (240 px/s na saída, até 460, bem mais rápido que a queda normal). No impacto: tremor forte, poeira e duas ondas de choque rasteiras, uma para cada lado.
 - **Dano:** quem fica embaixo dela na queda leva dano; as ondas ferem quem está no chão onde passam (são baixas: pulando, escapa) e somem a uns 50 px da borda dela (como no D90). No máximo um coração por queda. Se ela já estava no chão quando a flutuação acaba, não há queda.
 - Girar de novo durante a queda faz a mecha flutuar outra vez (e apaga as ondas, que corriam pelo chão de antes).
+
+### D104 — Mecha um pouco mais fácil
+- **Victor:** a mecha estava bem difícil. Duas mudanças pequenas:
+- **Investida:** mais 10 quadros (~0,17 s) de aviso em cada fase (64, 56, 48; antes 54, 46, 38), e o laser aparece 10 quadros mais cedo (46, 42, 38 quadros antes da partida). O jogador vê a direção por mais tempo antes de ela sair.
+- **Queda:** as ondas de choque somem a uns 40 px da borda da mecha (antes ~50).
