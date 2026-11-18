@@ -675,3 +675,6 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 
 ### D90 — Onda de choque mais contida
 - **Victor:** a onda era legal, mas difícil demais. Agora ela anda menos (some a uns 50 px da mecha, antes varria a sala), é mais baixa (fácil de pular), acerta numa faixa mais estreita, uma sentada tira no máximo um coração (as duas ondas param de ferir depois do primeiro acerto) e a sentada espera mais entre uma e outra (320 quadros).
+
+### D91 — A sentada só fere embaixo da mecha
+- **Victor:** o dano tem de ser só literalmente embaixo do Gatsby. As ondas de choque viraram só efeito (poeira, tremor); a sentada fere quem estiver embaixo dela, na largura do corpo, na descida ou no impacto.

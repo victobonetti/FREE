@@ -3024,51 +3024,27 @@ func test_subsoil_and_anchors() -> void:
 
 ## Coelho colado na mecha: ela sobe rápido e volta sentando; a onda de choque pega quem está no chão.
 func test_mecha_stomp() -> void:
-	print("mecha: a sentada e a onda de choque")
+	print("mecha: a sentada")
 	var m = _mecha()
 	m.homers.clear()
 	room.rabbit.pos = Vector2i(int(m.pos.x) - 40, room.rabbit.pos.y)
 	var n := 0
 	var seen := {}
-	while n < 200 and m.lives == 3:
+	while n < 200 and not seen.has("stomp_land"):
 		tick()
 		seen[m.state] = true
 		n += 1
 	check(seen.has("stomp_up") and seen.has("stomp_down"), "perto demais, ela sobe e volta sentando")
-	check(m.lives == 2, "a onda de choque (ou a sentada) pega o coelho parado no chão (vidas %d)" % m.lives)
+	check(m.lives == 3, "ao lado dela, a onda de choque não fere (vidas %d)" % m.lives)
+	# embaixo dela, sim
 	m = _mecha()
 	m.homers.clear()
-	room.rabbit.pos = Vector2i(int(m.pos.x) - 38, room.rabbit.pos.y)
-	m.stomp_cd = 0
 	m.state = "stomp_down"
 	m.t = 0
 	m.pos.y -= 40.0
-	var jumped := false
-	var held := 0
+	room.rabbit.pos = Vector2i(int(m.pos.x) - 6, room.rabbit.pos.y)
 	n = 0
-	while n < 120 and m.state != "idle":
-		var inp := {}
-		if held > 0:
-			inp = {"jump_held": true}
-			held -= 1
-		if not m.waves.is_empty() and not jumped:
-			var w = m.waves[0]
-			if absf(w["x"] - (room.rabbit.pos.x + 6)) < 14.0 and room.rabbit.on_ground:
-				inp = {"jump_pressed": true, "jump_held": true}
-				jumped = true
-				held = 14
-		tick(inp)
-		n += 1
-	check(jumped and m.lives == 3, "pulando, a onda passa por baixo (vidas %d)" % m.lives)
-	# longe (a mais de ~55 px da mecha), a onda some antes de chegar
-	m = _mecha()
-	m.homers.clear()
-	room.rabbit.pos = Vector2i(int(m.pos.x) - 90, room.rabbit.pos.y)
-	m.state = "stomp_down"
-	m.t = 0
-	m.pos.y -= 40.0
-	n = 0
-	while n < 90 and m.state != "idle":
+	while n < 60 and m.state == "stomp_down":
 		tick()
 		n += 1
-	check(m.lives == 3, "a onda é curta: longe da mecha, o coelho parado não é atingido")
+	check(m.lives == 2, "embaixo dela, a sentada tira um coração (vidas %d)" % m.lives)

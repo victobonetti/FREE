@@ -478,8 +478,12 @@ func step(r) -> void:
 	_update_homers()
 
 
-## A sentada bate no chão: tremor, poeira e duas ondas de choque correndo pelo chão.
+## A sentada bate no chão: tremor, poeira e duas ondas de choque (só efeito). Fere só quem está
+## embaixo dela, na largura do corpo.
 func _stomp_impact() -> void:
+	var under := Rect2(pos.x - MW / 2.0, _floor_y() - MH, MW, MH)
+	if room.invuln == 0 and Rect2(room.rabbit.rect).intersects(under):
+		room.kill()
 	state = "stomp_land"
 	t = 0
 	stomp_cd = STOMP_CD
@@ -502,7 +506,7 @@ func _floor_y() -> float:
 	return room.ph - 8.0
 
 
-## Ondas de choque: correm pelo chão; pegam o coelho se ele estiver encostado no chão onde a onda passa.
+## Ondas de choque: correm pelo chão e somem; são só efeito (poeira e tremor), não ferem.
 func _update_waves() -> void:
 	if waves.is_empty():
 		return
@@ -516,15 +520,7 @@ func _update_waves() -> void:
 		if anim % 3 == 0:
 			room.particles.append({"pos": Vector2(w["x"], fy - 1.0), "vel": Vector2(w["dir"] * 10.0, -randf_range(15.0, 40.0)),
 				"life": randi_range(8, 14), "col": C_FIRE, "grav": 160.0})
-		var rr: Rect2i = room.rabbit.rect
-		if not w["hit"] and float(rr.end.y) >= fy - 1.0 - WAVE_H * 0.4 and absf(float(rr.position.x) + 6.0 - w["x"]) < 5.0:
-			# uma sentada tira no máximo um coração: as duas ondas param de ferir
-			for o in waves:
-				o["hit"] = true
-			room.kill()
-			if room.state != "play":
-				return
-		keep.append(w)
+		keep.append(w)   # só efeito: o dano da sentada é só embaixo da mecha (D91)
 	waves = keep
 
 
