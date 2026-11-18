@@ -30,7 +30,7 @@ const MW := 40                   # caixa de colisão: o corpo E a cúpula (depoi
 const MH := 52
 const LIVES := 3                 # corações do coelho, só nesta sala
 const HEARTS := 3                # corações do Gatsby: um por terço da barra
-const ENERGY := 12               # barra da mecha (4 por terço)
+const ENERGY := 24               # barra da mecha (8 por terço; D102: era 12)
 const INVULN := 60
 const INTRO_FREE := 150          # quadros para olhar a sala antes de o Gatsby chegar (1ª vez)
 const INTRO_AGAIN := 30          # depois de perder: a cápsula chega logo
@@ -213,11 +213,12 @@ func absorb_kill(r) -> bool:
 
 
 func on_rotate(r, dir: int) -> void:
-	# a mecha gira com a sala: fica no mesmo lugar em relação a ela (D101). Na investida, o movimento
-	# em curso segue igual NA TELA (mesma direção e velocidade, o laser na mesma direção): só o
-	# ponto de partida acompanha a sala. No desenho, ela acompanha o giro um pouco atrás do
-	# cenário (`_lag_ang`).
+	# a mecha gira com a sala: fica no mesmo lugar em relação a ela (D101, D102). Na investida (e
+	# no aviso com a mira travada), a velocidade e a mira giram junto: ela vai para a mesma parede
+	# que estava mirando. No desenho, acompanha o giro um pouco atrás do cenário (`_lag_ang`).
 	pos = r._rot_point(pos, dir)
+	vel = vel.rotated(PI / 2.0 * dir)
+	dash_dir = dash_dir.rotated(PI / 2.0 * dir)
 	_lag_pending = true
 	cap_pos = r._rot_point(cap_pos, dir)
 	cap_from = r._rot_point(cap_from, dir)
@@ -237,7 +238,7 @@ func on_rotate(r, dir: int) -> void:
 	trail.clear()
 	shove_t = 0
 	if state == "dash":
-		locked = false   # perdeu o alvo: segue reto (na tela) até a parede
+		locked = false   # perdeu o alvo: segue reto até a parede que mirava
 	elif state == "dash_warn" and committed:
 		lost = true      # a mira já estava travada: sai reto, sem corrigir
 	elif state != "inert" and state != "wreck" and state != "dying":

@@ -2903,12 +2903,15 @@ func test_mecha_dash() -> void:
 		tick()
 		n += 1
 	check(m.lives == 2 and m.energy == m.ENERGY, "sem girar, a investida tira um coração do coelho (vidas %d, energia %d)" % [m.lives, m.energy])
-	# girando com a mira travada (antes de partir) ou logo depois de partir: erra e bate na parede
+	# girando com a mira travada (antes de partir) ou logo depois de partir: a investida gira com a
+	# sala e vai para a mesma parede que estava mirando (D102)
 	for when in [-10, -2, 0, 6]:
 		m = _mecha()
 		_mecha_dash(m)
 		n = 0
 		var flipped := false
+		var want := Vector2.ZERO
+		var aim_ok := false
 		while m.state != "stun" and n < 400:
 			var inp := {}
 			var at: int = m.DASH_WARN[0] + when
@@ -2916,9 +2919,13 @@ func test_mecha_dash() -> void:
 			if not flipped and (m.state == "dash_warn" or m.state == "dash") and now >= at:
 				inp = {"rotate": 1}
 				flipped = true
+				var d0: Vector2 = m.vel.normalized() if m.state == "dash" else m.dash_dir
+				want = d0.rotated(PI / 2.0)
 			tick(inp)
+			if flipped and m.state == "dash" and m.vel.length() > 1.0 and not aim_ok:
+				aim_ok = m.vel.normalized().distance_to(want) < 0.05
 			n += 1
-		check(flipped and m.lives == 3 and m.energy == m.ENERGY - 1, "girar %+d quadros da partida: ela erra, bate e leva dano (vidas %d, energia %d)" % [when, m.lives, m.energy])
+		check(flipped and aim_ok and m.state == "stun", "girar %+d quadros da partida: a investida gira com a sala e vai à mesma parede" % when)
 	# girar antes do laser: o laser é posto mirando onde o coelho está naquele instante (D95)
 	m = _mecha()
 	_mecha_dash(m)
@@ -2971,7 +2978,7 @@ func test_mecha_homing() -> void:
 func test_mecha_thirds() -> void:
 	print("mecha: barra em terços e os corações do Gatsby")
 	var m = _mecha()
-	m.energy = 9
+	m.energy = m.ENERGY * 2 / 3 + 1
 	m._damage(1)
 	check(m.hearts == 2 and m.state == "break", "perder um terço: explode por dentro e o Gatsby perde um coração")
 	idle(m.BREAK_FRAMES + 2)
@@ -3082,8 +3089,8 @@ func test_mecha_shove() -> void:
 	check(sign(m.pos.x - x0) == sign(x0 - (room.rabbit.pos.x + 6)) or absf(x0 - (room.rabbit.pos.x + 6)) < 3.0, "para o lado oposto ao do coelho")
 
 
-## No giro, a mecha gira com a sala (fica no mesmo lugar em relação a ela), e a investida mantém
-## a direção na tela e o laser (D101).
+## No giro, a mecha gira com a sala (fica no mesmo lugar em relação a ela), e a investida e o laser
+## giram junto: vão para a mesma parede (D102).
 func test_mecha_screen_lock() -> void:
 	print("mecha: no giro, gira com a sala; a investida mantém a direção")
 	var m = _mecha()
@@ -3096,7 +3103,7 @@ func test_mecha_screen_lock() -> void:
 	var want: Vector2 = room._rot_point(m.pos, 1)
 	tick({"rotate": 1})
 	check(m.pos.distance_to(want) < 2.0, "a posição em relação à sala é a mesma (esperado %s, ficou %s)" % [want, m.pos])
-	check(m.dash_dir == dir0, "a direção do laser não muda")
+	check(m.dash_dir.distance_to(dir0.rotated(PI / 2.0)) < 0.01, "o laser gira com a sala (mira a mesma parede)")
 
 ## Barras: a sólida (= } _ {) bloqueia de todos os lados; a de passagem (↑ → ↓ ←) atravessa por
 ## baixo e segura por cima (D93).

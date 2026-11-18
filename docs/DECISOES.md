@@ -737,3 +737,7 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 ### D101 — Mecha gira com a sala; dinamite sem o círculo
 - **Mecha no giro (muda o D95):** ela não fica mais parada na tela; gira com a sala e continua no mesmo lugar em relação a ela. No desenho, acompanha o giro rápido, mas um pouco atrás do cenário. Na investida (e no aviso com a mira travada), o movimento em curso continua igual na tela: mesma direção, mesma velocidade e o laser na mesma direção; só o ponto de partida acompanha a sala. Por isso girar ainda tira o coelho da linha da investida.
 - **Dinamite do Jeffrey:** saiu o círculo vermelho que marcava o raio da explosão (poluía a tela). A dinamite continua visível no ar, com o pavio aceso.
+
+### D102 — Mecha: mais vida; a investida gira com a sala
+- **Vida:** a barra da mecha dobrou: 24 (8 por terço), antes 12. O Victor derrotava a mecha rápido demais.
+- **Investida no giro (muda o D101):** além da posição, a velocidade e a mira giram com a sala: depois do giro, a mecha vai para a mesma parede que estava mirando (o laser também gira). Ela não corrige mais a rota depois do giro. Consequência: girar não tira a investida do caminho por si só; o coelho escapa se, com a gravidade nova, ele cair para fora da linha.
