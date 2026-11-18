@@ -10,7 +10,10 @@ extends Node2D
 ## Ele NUNCA encosta no coelho: há uma distância mínima garantida a cada quadro (KEEP_MIN), em
 ## qualquer fase do roteiro; se o coelho vem para cima dele, ele dá um arranque para longe.
 ##
-##   "gatsby": {"start": [coluna, linha], "script": [passo, passo, ...]}
+##   "gatsby": {"start": [coluna, linha], "hidden": true (opcional), "script": [passo, passo, ...]}
+##
+## "hidden": ele não aparece (nem acompanha o coelho) até o primeiro passo começar; aí surge em
+## "start" (que pode ficar fora da sala) e segue o roteiro. Para uma aparição só no final (D105).
 ##
 ## Cada passo é um dicionário; tudo é opcional e acontece nesta ordem:
 ##   "when": [coluna, linha, largura, altura]  espera o coelho entrar nesta área
@@ -112,6 +115,8 @@ func on_reset(r) -> void:
 	var g: Dictionary = r.def.get("gatsby", {})
 	pos = _pt(g.get("start", [3, 3]))
 	vel = Vector2.ZERO
+	lurking = bool(g.get("hidden", false))
+	visible = not lurking
 	steps.clear()
 	for s in g.get("script", []):
 		var zone = null
@@ -145,6 +150,9 @@ func on_reset(r) -> void:
 	phase = "when" if not steps.is_empty() else "idle"
 
 
+var lurking := false  # escondido até o primeiro passo ("hidden" no campo "gatsby")
+
+
 func _pt(a: Array) -> Vector2:
 	return Vector2(float(a[0]) * 8.0 + 4.0, float(a[1]) * 8.0 + 4.0)
 
@@ -176,9 +184,12 @@ func step(r) -> void:
 	_update_pulses()
 	match phase:
 		"when":
-			_orbit()
+			if not lurking:
+				_orbit()
 			var zone = steps[si]["zone"]
 			if zone == null or r.overlaps(r.rabbit.rect, zone):
+				lurking = false
+				visible = true
 				_begin()
 		"fly":
 			if _fly_to(path[0]):

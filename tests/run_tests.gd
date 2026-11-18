@@ -2808,7 +2808,9 @@ func test_industrial_levels() -> void:
 	for id in INDUSTRIAL:
 		var raw := FileAccess.get_file_as_string("res://levels/wip/%s.json" % id)
 		var data: RefCounted = LevelData.from_json(raw)
-		check(data != null and _msgs(data) == "", "%s: valida sem erros nem avisos (%s)" % [id, _msgs(data)])
+		# a Prensas e vapor tem duas caixas para um compartimento (a do botão e a da calha): é de propósito
+		var warn := _msgs(data).replace("Há mais caixas do que compartimentos. | ", "") if id == "prensas" else _msgs(data)
+		check(data != null and warn == "", "%s: valida sem erros nem avisos (%s)" % [id, warn])
 		var def: Dictionary = JSON.parse_string(raw)
 		var route: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/route-%s.json" % id))
 		Gatsby.intro_seen = false
@@ -2841,7 +2843,8 @@ func test_industrial_levels() -> void:
 		check(room.bat_got == room.batteries.size() and fired, "%s: pega todas as %d baterias e a alavanca se puxa" % [id, room.batteries.size()])
 		check(room.group_filled(0) or won_at > 0, "%s: a caixa está no compartimento" % id)
 		var tall: int = room.gh
-		check(room.gw * room.gh >= 80 * 40, "%s: é grande (%dx%d tiles)" % [id, room.gw, tall])
+		# D105: contidas, de uma tela a pouco mais (antes eram de 80x40 a 130x50)
+		check(room.gw * room.gh <= 44 * 22, "%s: é contida (%dx%d tiles)" % [id, room.gw, tall])
 		check(room.theme == "industrial" and room.allow_rotate and room.def.get("limiter", false), "%s: tema industrial, giro liberado com limitador" % id)
 	Gatsby.intro_seen = false
 

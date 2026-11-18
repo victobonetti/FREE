@@ -392,6 +392,8 @@ Abrir direto num nível, pulando a abertura: `./run.ps1 -Level 17` no PC, ou `?l
 
 ## 8d. Ato 2: as 5 fases industriais (D76, D77)
 
+**Refeitas no D105** (contidas, de uma tela a pouco mais, com foco no giro): veja `docs/DECISOES.md`. O texto abaixo descreve a primeira versão.
+
 **Estado: cinco rascunhos jogáveis**, em `levels/wip/` (fora da história), cada um provado por um robô (`tools/robot.gd`) e testado. Ninguém jogou ainda. Para jogar: `./run.ps1 -Play montagem` (ou `esteiras`, `prensas`, `dutos`, `forca`) ou, na web, `?play=montagem`. Para colocá-las na história depois do Jeffrey: abrir no editor, jogar e vencer, e canonizar (Campanha…).
 
 | Fase | Tamanho | Baterias | Tempo do robô | Como é |

@@ -28,6 +28,12 @@ extends SceneTree
 ##   ["hold_move", dir, quadros]         anda um tempo, sem olhar o chão
 ##   ["lift", x, y_topo]                 entra na coluna de ar e sobe até y (centro) com `jump` solto
 ##   ["to_door"]                         corre até a porta e entra
+##   ["rotate", dir, move]               gira a sala (1 horário, -1 anti-horário) assim que der, andando
+##                                       `move` (opcional) durante a animação. Depois do giro, as posições
+##                                       dos passos são na sala girada (como ela está na tela)
+##   ["air_to", x0, x1]                  no ar (caindo depois de um giro, p.ex.): dirige até pousar em [x0, x1]
+##   ["wait_revert"]                     espera o limitador desfazer o giro (e a animação acabar)
+##   ["wait_ground"]                     espera o coelho estar no chão
 ##   ["mark", rótulo]
 
 const RoomScript := preload("res://scripts/room.gd")
@@ -161,7 +167,9 @@ func _run_step(s: Array) -> void:
 		"run_to":
 			var x: float = s[1]
 			var n := 0
-			while not dead and absf(cx() - x) > 1.5 and n < 800:
+			var o0: int = room.orientation
+			# para se a sala girar no caminho (o limitador): o x deixou de valer
+			while not dead and absf(cx() - x) > 1.5 and n < 800 and room.orientation == o0:
 				tick(1.0 if cx() < x else -1.0)
 				n += 1
 			wait(2)
@@ -233,8 +241,30 @@ func _run_step(s: Array) -> void:
 		"dbg_mover":
 			var m: Dictionary = room.movers[int(s[1])]
 			print("  mover %d: r=%s want=%s docked=%s t=%d left=%d rabbit=%s ground=%s" % [s[1], str(m["r"]), str(m["want"]), str(room.mover_docked(m)), room.cycle_t, _dock_left(m), str(room.rabbit.pos), str(grounded())])
+		"rotate":
+			var mv: float = float(s[2]) if s.size() > 2 else 0.0
+			until(func(): return room.rot_lock == 0 and not room.rotating and room.rabbit.can_rotate(), 600, "poder girar")
+			var o0: int = room.orientation
+			tick(mv, false, false, int(s[1]))
+			var n := 0
+			while not dead and failed == "" and room.rotating and n < 120:
+				tick(mv)
+				n += 1
+			if room.orientation == o0:
+				fail("não girou")
+		"air_to":
+			air(float(s[1]), float(s[2]), 0, 400)
+		"wait_revert":
+			until(func(): return room.limit_t == 0 and not room.rotating, 400, "o limitador desfazer o giro")
+		"wait_ground":
+			until(func(): return grounded(), 400, "o chão")
 		"mark":
-			print("  %-22s q %4d  pos %-12s bat %d" % [s[1], frame, str(room.rabbit.pos), room.bat_got])
+			var bx := ""
+			for b in room.boxes:
+				bx += " caixa %s" % str(b.pos)
+			if room.water_vol > 0.0:
+				bx += " fluido %.0f" % room.water_vol
+			print("  %-22s q %4d  pos %-12s bat %d%s" % [s[1], frame, str(room.rabbit.pos), room.bat_got, bx])
 		_:
 			fail("passo desconhecido")
 

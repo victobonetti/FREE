@@ -43,6 +43,13 @@ class Level:
         self.objs = {}
         self.steps = []
 
+    def ascii(self, rows):
+        """Desenha a sala a partir de linhas de texto (uma por linha da grade, do mesmo tamanho)."""
+        assert len(rows) == self.h, "altura: %d linhas, esperava %d" % (len(rows), self.h)
+        for r, line in enumerate(rows):
+            assert len(line) == self.w, "linha %d: %d colunas, esperava %d" % (r, len(line), self.w)
+            self.g[r] = list(line)
+
     # ------------------------------------------------------------ geometria
     @property
     def floor_row(self):
