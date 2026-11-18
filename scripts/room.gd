@@ -4191,6 +4191,50 @@ func _draw_hanging(start: Vector2, n: Vector2, length: int, col: Color, wiggle: 
 	return p
 
 
+## Onde uma coisa pendurada na face `dn` do tile (c, r) ocupa (o cabo e o cone da lâmpada).
+func _hang_area(c: int, r: int, dn: Vector2i) -> Rect2i:
+	var a := Rect2i(c * TILE, r * TILE, TILE, TILE)
+	var far := Rect2i((c + dn.x * 5 - absi(dn.y) * 2) * TILE, (r + dn.y * 5 - absi(dn.x) * 2) * TILE, TILE * (1 + absi(dn.y) * 4), TILE * (1 + absi(dn.x) * 4))
+	return a.merge(far)
+
+
+## Os enfeites não ficam em cima das peças da sala: esteira, mola, ventilador, jato, conector, botão,
+## bateria, alavanca, calha, porta, compartimentos, corda, placa de espinhos, saídas.
+func _decor_blocked(area: Rect2i) -> bool:
+	for o in conveyors + springs + fans + vents:
+		if overlaps(area, o["rect"]):
+			return true
+	for m in movers:
+		if overlaps(area, m["off"]) or overlaps(area, m["on"]):
+			return true
+	for pl in plates:
+		if overlaps(area, pl["rect"]):
+			return true
+	for b in batteries:
+		if overlaps(area, b["rect"]):
+			return true
+	if lever != null and overlaps(area, Rect2i(lever["rect"]).grow(4)):
+		return true
+	if chute != null and overlaps(area, Rect2i(chute["rect"]).grow(4)):
+		return true
+	if has_door and overlaps(area, door.grow(4)):
+		return true
+	for sk in sockets:
+		if overlaps(area, sk):
+			return true
+	for rp in ropes:
+		var an: Vector2 = rp["anchor"]
+		if area.has_point(Vector2i(an)) or overlaps(area, Rect2i(Vector2i(an) - Vector2i(6, 6), Vector2i(12, 12))):
+			return true
+	for cr in crushers:
+		if overlaps(area, cr["lane"]):
+			return true
+	for ex in exits:
+		if overlaps(area, ex["rect"]):
+			return true
+	return false
+
+
 ## Fábrica: lâmpadas penduradas (cabo que balança, cone de luz), correntes e listras de aviso.
 ## Penduradas no teto da fase como foi desenhada; depois de um giro, pendem para baixo da tela.
 func _draw_industrial_decor(c: int, r: int, x: int, y: int) -> void:
@@ -4200,7 +4244,7 @@ func _draw_industrial_decor(c: int, r: int, x: int, y: int) -> void:
 	var h := absi((oc.x * 2654435761) ^ (oc.y * 40503))
 	var up := _orig_up()
 	var dn := -up
-	if _cell_empty(c + dn.x, r + dn.y):
+	if _cell_empty(c + dn.x, r + dn.y) and (h % 23 == 0 or h % 17 == 3) and not _decor_blocked(_hang_area(c, r, dn)):
 		if h % 23 == 0:
 			var st := _face_rect(x, y, dn, 4, 0, 1, 1).position
 			var tip := _draw_hanging(st, Vector2(dn), 6 + h % 8, C_RIVET, 0.4, h)
@@ -4222,7 +4266,8 @@ func _draw_industrial_decor(c: int, r: int, x: int, y: int) -> void:
 				var k := minf(1.0, float(i) / 2.5)
 				p += Vector2(dn).lerp(hd2, k).normalized()
 				draw_rect(Rect2(p.round(), Vector2(1, 1)), C_RIVET if i % 2 == 0 else C_STEEL_LIGHT.darkened(0.2))
-	if theme == "industrial" and h % 9 == 0 and _cell_empty(c + up.x, r + up.y):
+	if theme == "industrial" and h % 9 == 0 and _cell_empty(c + up.x, r + up.y) \
+			and not _decor_blocked(Rect2i(c * TILE, r * TILE, TILE, TILE).merge(Rect2i((c + up.x) * TILE, (r + up.y) * TILE, TILE, TILE))):
 		# listras de aviso na borda (amarelo e preto)
 		for i in 4:
 			draw_rect(_face_rect(x, y, up, i * 2, -3, 2, 2), Color("d9b440") if i % 2 == 0 else Color("1c1c20"))
