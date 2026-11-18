@@ -741,3 +741,9 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 ### D102 — Mecha: mais vida; a investida gira com a sala
 - **Vida:** a barra da mecha dobrou: 24 (8 por terço), antes 12. O Victor derrotava a mecha rápido demais.
 - **Investida no giro (muda o D101):** além da posição, a velocidade e a mira giram com a sala: depois do giro, a mecha vai para a mesma parede que estava mirando (o laser também gira). Ela não corrige mais a rota depois do giro. Consequência: girar não tira a investida do caminho por si só; o coelho escapa se, com a gravidade nova, ele cair para fora da linha.
+
+### D103 — A queda da mecha: a onda de choque volta
+- **Pedido do Victor:** a onda de choque volta, no momento em que a mecha, flutuando depois de um giro, desliga os propulsores e cai no chão.
+- **Como é:** a flutuação continua (110 quadros). Nos últimos 24 (0,4 s), os propulsores engasgam: a chama pisca, sai fumaça preta, a mecha treme e toca um aviso. Aí ela desliga tudo e despenca (240 px/s na saída, até 460, bem mais rápido que a queda normal). No impacto: tremor forte, poeira e duas ondas de choque rasteiras, uma para cada lado.
+- **Dano:** quem fica embaixo dela na queda leva dano; as ondas ferem quem está no chão onde passam (são baixas: pulando, escapa) e somem a uns 50 px da borda dela (como no D90). No máximo um coração por queda. Se ela já estava no chão quando a flutuação acaba, não há queda.
+- Girar de novo durante a queda faz a mecha flutuar outra vez (e apaga as ondas, que corriam pelo chão de antes).

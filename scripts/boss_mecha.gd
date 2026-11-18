@@ -43,6 +43,15 @@ const FALL_MAX := 220.0
 const FLOAT_FRAMES := 110        # quadros flutuando depois de um giro
 const FLOAT_FALL := 16.0         # px/s: desce devagar com os propulsores
 const FLOAT_SEEK := 30.0         # px/s: vai para o lado do coelho enquanto flutua
+# A queda (D103): no fim da flutuação, os propulsores falham (aviso) e desligam; ela despenca e o
+# impacto solta duas ondas de choque pelo chão. Fere quem está embaixo dela ou no chão onde a onda
+# passa (pulando, escapa); no máximo um coração por queda.
+const CUT_WARN := 24             # quadros finais da flutuação com os propulsores engasgando
+const DROP_SPEED := 240.0        # px/s: velocidade inicial ao desligar
+const DROP_MAX := 460.0          # px/s: a queda é bem mais rápida que a gravidade normal
+const WAVE_SPEED := 130.0        # onda de choque correndo pelo chão (px/s)
+const WAVE_LIFE := 24            # curta: some a uns 50 px da mecha
+const WAVE_H := 5.0              # baixa: quem está no chão é atingido; pulando, não
 const WALK := 18.0
 const IDLE := [80, 60, 45]       # quadros entre ataques, por fase
 const PLAN := [
@@ -115,6 +124,9 @@ var hearts := HEARTS
 var lives := LIVES
 var plan_i := 0
 var float_t := 0
+var dropping := false       # despencando com os propulsores desligados (D103)
+var drop_hit := false       # esta queda já tirou um coração
+var waves: Array = []       # ondas de choque da queda: {"x", "dir", "life"}
 var markers: Array = []     # {pos, n (normal, para dentro da sala), fire_at, fired}
 var shots: Array = []       # mísseis da mira: {pos, to}
 var homers: Array = []      # teleguiados: {pos, vel, age}
@@ -165,6 +177,8 @@ func on_reset(r) -> void:
 	shove_t = 0
 	vel = Vector2.ZERO
 	float_t = 0
+	dropping = false
+	waves.clear()
 	flash = 0
 	if hearts <= 0 and state == "wreck":
 		# já vencida: a sala só reinicia se o jogador apertar R
@@ -236,6 +250,8 @@ func on_rotate(r, dir: int) -> void:
 	for d in debris:
 		d["pos"] = r._rot_point(d["pos"], dir)
 	trail.clear()
+	waves.clear()       # as ondas corriam pelo chão de antes
+	dropping = false    # flutua de novo na gravidade nova
 	shove_t = 0
 	if state == "dash":
 		locked = false   # perdeu o alvo: segue reto até a parede que mirava
@@ -304,6 +320,7 @@ func step(r) -> void:
 	_smoke()
 	_turn()
 	_update_contact()
+	_update_waves()
 	match state:
 		"inert":
 			if t >= (INTRO_AGAIN if intro_seen else INTRO_FREE):
@@ -386,6 +403,7 @@ func step(r) -> void:
 				vel = dash_dir * DASH_SPEED
 				locked = false
 				dash_hit = false
+				dropping = false
 				float_t = 0
 				state = "dash"
 				t = 0
@@ -510,8 +528,31 @@ func _body(walk: bool) -> void:
 		var dx := _rabbit_c().x - pos.x
 		var want := signf(dx) * FLOAT_SEEK if absf(dx) > 6.0 else 0.0
 		vel.x = move_toward(vel.x, want, 3.0)
-		if anim % 3 == 0:
-			_thrust_puff()
+		if float_t >= CUT_WARN:
+			if anim % 3 == 0:
+				_thrust_puff()
+		else:
+			# os propulsores engasgam: fumaça preta, tranco, chama piscando (o aviso da queda)
+			if float_t == CUT_WARN - 1:
+				room.sfx.emit("mover_warn")
+			if anim % 4 == 0:
+				_thrust_puff()
+			if anim % 2 == 0:
+				room.particles.append({"pos": pos + Vector2(randf_range(-20.0, 20.0), 12), "vel": Vector2(randf_range(-8.0, 8.0), 20.0),
+					"life": randi_range(8, 14), "col": Color(0.12, 0.12, 0.14, 0.9), "grav": -30.0})
+			if float_t == 0 and not _on_floor():
+				dropping = true
+				drop_hit = false
+				vel = Vector2(0.0, DROP_SPEED)
+				room.sfx.emit("steam_burst")
+	elif dropping:
+		vel.x = 0.0
+		vel.y = minf(vel.y + GRAV * 1.6 / 60.0, DROP_MAX)
+		if not drop_hit and room.invuln == 0 and room.overlaps(Rect2i(body_rect()), room.rabbit.rect):
+			drop_hit = true
+			room.kill()
+			if room.state != "play":
+				return
 	else:
 		vel.y = minf(vel.y + GRAV / 60.0, FALL_MAX)
 		if _on_floor() and walk and state == "idle":
@@ -531,13 +572,68 @@ func _body(walk: bool) -> void:
 	pos.x = clampf(pos.x, b.position.x, b.end.x)
 	pos.y = clampf(pos.y, b.position.y, b.end.y)
 	var on := _on_floor()
-	if on:
+	if on and dropping:
+		dropping = false
+		vel.y = 0.0
+		_drop_impact()
+	elif on:
 		vel.y = 0.0
 		if not last_floor and fall > 90.0:
 			room.impact.emit(minf(fall / 120.0, 2.0))
 			room.shake = maxf(room.shake, 2.0)
 			room.sfx.emit("crunch")
 	last_floor = on
+
+
+## A queda bate no chão: tremor forte, poeira e duas ondas de choque correndo pelo chão (D103).
+## Quem ficou embaixo leva dano (se a descida ainda não tirou um coração).
+func _drop_impact() -> void:
+	room.shake = maxf(room.shake, 6.0)
+	room.impact.emit(2.5)
+	room.sfx.emit("slam")
+	if not drop_hit and room.invuln == 0 and room.overlaps(Rect2i(body_rect().grow(1.0)), room.rabbit.rect):
+		drop_hit = true
+		room.kill()
+		if room.state != "play":
+			return
+	var fy := _floor_y()
+	for sd in [-1.0, 1.0]:
+		waves.append({"x": pos.x + sd * (MW / 2.0), "dir": sd, "life": WAVE_LIFE})
+		for i in 10:
+			room.particles.append({"pos": Vector2(pos.x + sd * randf_range(4.0, 20.0), fy - 1.0),
+				"vel": Vector2(sd * randf_range(20.0, 90.0), -randf_range(20.0, 80.0)),
+				"life": randi_range(10, 20), "col": C_RIVET if i % 2 else C_FIRE, "grav": 200.0})
+
+
+## A superfície do chão (px da sala atual).
+func _floor_y() -> float:
+	return room.ph - 8.0
+
+
+## Ondas de choque: correm pelo chão; pegam o coelho encostado no chão onde a onda passa. Uma queda
+## tira no máximo um coração (acertou: as ondas param de ferir).
+func _update_waves() -> void:
+	if waves.is_empty():
+		return
+	var fy := _floor_y()
+	var keep: Array = []
+	for w in waves:
+		w["x"] += w["dir"] * WAVE_SPEED / 60.0
+		w["life"] -= 1
+		if w["life"] <= 0 or w["x"] < 8.0 or w["x"] > room.pw - 8.0:
+			continue
+		if anim % 3 == 0:
+			room.particles.append({"pos": Vector2(w["x"], fy - 1.0), "vel": Vector2(w["dir"] * 10.0, -randf_range(15.0, 40.0)),
+				"life": randi_range(8, 14), "col": C_FIRE, "grav": 160.0})
+		var rr: Rect2i = room.rabbit.rect
+		if not drop_hit and room.state == "play" and room.invuln == 0 and float(rr.end.y) >= fy - 1.0 - WAVE_H * 0.4 \
+				and absf(float(rr.position.x) + 6.0 - w["x"]) < 5.0:
+			drop_hit = true
+			room.kill()
+			if room.state != "play":
+				return
+		keep.append(w)
+	waves = keep
 
 
 func _dash() -> void:
@@ -627,6 +723,7 @@ func _break() -> void:
 	state = "break"
 	t = 0
 	float_t = 0
+	dropping = false
 	puppet.mood = "panic"
 	room.shake = 7.0
 	room.impact.emit(2.5)
@@ -645,6 +742,7 @@ func _die() -> void:
 	state = "dying"
 	t = 0
 	float_t = 0
+	dropping = false
 	puppet.mood = "panic"
 	room.shake = 8.0
 	room.impact.emit(2.5)
@@ -657,6 +755,7 @@ func _clear_projectiles() -> void:
 	homers.clear()
 	shots.clear()
 	markers.clear()
+	waves.clear()
 
 
 # ---------------------------------------------------------------- miras
@@ -917,7 +1016,16 @@ func _pose() -> Dictionary:
 	if shove_t > 0:
 		p["tilt"] += shove_dir * 0.25
 		p["thrust"] = Vector2(-shove_dir, 0.3).normalized()
-	if float_t > 0 and state != "dash":
+	if dropping:
+		p["dangle"] = 4.0
+		p["thrust"] = Vector2.ZERO
+		p["swing"] = 3.0
+	elif float_t > 0 and float_t < CUT_WARN and state != "dash":
+		p["dangle"] = 3.0
+		p["thrust"] = Vector2.DOWN if (anim / 3) % 2 == 0 else Vector2.ZERO
+		p["off"] += Vector2(float((anim * 7) % 3) - 1.0, float((anim * 5) % 3) - 1.0)
+		p["tilt"] += sin(anim * 0.9) * 0.05
+	elif float_t > 0 and state != "dash":
 		p["dangle"] = 3.0
 		p["thrust"] = Vector2.DOWN
 		p["tilt"] += clampf(vel.x / FLOAT_SEEK, -1.0, 1.0) * 0.12
@@ -1004,6 +1112,14 @@ func _draw() -> void:
 		draw_line(a0, b0, Color(C_AIM, 0.85 * fl), 1.0)
 		draw_circle(b0, 2.5 + sin(anim * 0.5), Color(C_AIM, 0.7))
 		draw_circle(b0, 1.0, Color(1, 0.9, 0.9, 0.9))
+	# ondas de choque da queda
+	for w in waves:
+		var kf: float = float(w["life"]) / WAVE_LIFE
+		var fy := _floor_y()
+		var wx: float = w["x"]
+		var hgt := WAVE_H * (0.5 + 0.5 * kf)
+		draw_colored_polygon(PackedVector2Array([Vector2(wx - 6, fy), Vector2(wx - 1, fy - hgt), Vector2(wx + 2, fy - hgt * 0.6), Vector2(wx + 6, fy)]), Color(C_FIRE, 0.75 * kf + 0.2))
+		draw_line(Vector2(wx - 8 * w["dir"], fy - 1), Vector2(wx, fy - 1), Color(1, 0.95, 0.8, 0.6 * kf), 1.0)
 	# rastro
 	for i in trail.size():
 		var tp: Vector2 = trail[i]

@@ -84,6 +84,7 @@ func _init() -> void:
 	test_mecha_lives()
 	test_mecha_shove()
 	test_mecha_screen_lock()
+	test_mecha_drop()
 	test_mecha_bot()
 	print("")
 	if failures == 0:
@@ -3295,3 +3296,65 @@ func test_world() -> void:
 	for ex in room.exits:
 		any_open = any_open or room.exit_open(ex)
 	check(not any_open, "com a sala girada, nenhuma saída deixa passar")
+
+
+## Depois do giro, a mecha flutua; no fim, os propulsores falham e ela despenca: o impacto solta duas
+## ondas de choque curtas que ferem quem está no chão (D103).
+func _mecha_float(m) -> void:
+	m.homers.clear()
+	m.markers.clear()
+	m.shots.clear()
+	m.state = "idle"
+	m.t = -100000          # sem ataques durante o teste
+	m.pos = Vector2(room.pw / 2.0, m._bounds().position.y + 20.0)
+	m.vel = Vector2.ZERO
+	m.float_t = m.CUT_WARN + 2
+
+
+func test_mecha_drop() -> void:
+	print("mecha: a queda depois de flutuar e as ondas de choque")
+	var m = _mecha()
+	var fy: float = m._floor_y()
+	# o coelho no chão, a uns 30 px do lado da mecha
+	_mecha_float(m)
+	room.rabbit.pos = Vector2i(int(room.pw / 2.0 + m.MW / 2.0 + 24.0), int(fy) - 12)
+	room.rabbit.vel = Vector2.ZERO
+	var saw_drop := false
+	var max_v := 0.0
+	var saw_waves := false
+	for i in 200:
+		tick()
+		saw_drop = saw_drop or m.dropping
+		max_v = maxf(max_v, m.vel.y)
+		saw_waves = saw_waves or not m.waves.is_empty()
+		if m.lives < 3:
+			break
+	check(saw_drop and max_v > m.FALL_MAX, "os propulsores desligam e ela despenca (%.0f px/s)" % max_v)
+	check(saw_waves, "o impacto solta as ondas de choque")
+	check(m.lives == 2, "a onda acerta o coelho no chão (vidas %d)" % m.lives)
+	# longe (mais de 50 px da borda dela), a onda some antes de chegar
+	m = _mecha()
+	_mecha_float(m)
+	room.rabbit.pos = Vector2i(int(room.pw / 2.0 + m.MW / 2.0 + 70.0), int(fy) - 12)
+	for i in 200:
+		tick()
+	check(m.lives == 3, "a 70 px, a onda não chega (vidas %d)" % m.lives)
+	# pulando por cima, escapa
+	m = _mecha()
+	_mecha_float(m)
+	room.rabbit.pos = Vector2i(int(room.pw / 2.0 + m.MW / 2.0 + 24.0), int(fy) - 12)
+	var jumped := false
+	for i in 200:
+		var inp := {}
+		if not jumped and not m.waves.is_empty():
+			inp = {"jump_pressed": true, "jump_held": true}
+			jumped = true
+		tick(inp)
+	check(jumped and m.lives == 3, "pulando a onda, escapa (vidas %d)" % m.lives)
+	# embaixo dela, a queda acerta
+	m = _mecha()
+	_mecha_float(m)
+	room.rabbit.pos = Vector2i(int(room.pw / 2.0) - 6, int(fy) - 12)
+	for i in 200:
+		tick()
+	check(m.lives == 2, "embaixo dela, a queda acerta (um coração só: vidas %d)" % m.lives)
