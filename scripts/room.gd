@@ -3582,8 +3582,11 @@ func _draw_spin_block(base: Transform2D) -> void:
 	var t := _ease(float(spin_frame) / float(SPIN_FRAMES))
 	var c := Vector2(spin_rect.position) + Vector2(spin_rect.size) / 2.0
 	var half := Vector2(spin_rect.size) / 2.0
-	draw_rect(Rect2(spin_rect).grow(1.0), C_BG)
-	draw_set_transform_matrix(base * Transform2D(spin_dir * PI / 2.0 * t, c))
+	var ang := spin_dir * PI / 2.0 * t
+	# a sombra do bloco no fundo, inclinada junto com ele (a luz não gira: o deslocamento é o mesmo)
+	draw_set_transform_matrix(base * Transform2D(ang, c + SHADOW_OFF))
+	draw_rect(Rect2(-half, half * 2.0), C_SHADOW)
+	draw_set_transform_matrix(base * Transform2D(ang, c))
 	# o bloco gira com a textura do tema (tile a tile, em volta do centro)
 	var ci := Vector2i(c.round())
 	for ty in range(spin_rect.position.y, spin_rect.end.y, TILE):
@@ -3596,6 +3599,7 @@ func _draw_spin_block(base: Transform2D) -> void:
 				_draw_soil_tile(tx / TILE, ty / TILE, lx, ly)
 			else:
 				draw_rect(Rect2(lx, ly, TILE, TILE), C_WALL)
+			_draw_block_depth(tx, ty, lx, ly)
 	draw_rect(Rect2(-half, half * 2.0), C_EDGE, false, 1.0)
 	for s in spikes:
 		if s.get("block", false):
@@ -3604,6 +3608,24 @@ func _draw_spin_block(base: Transform2D) -> void:
 				pts[i] -= c
 			draw_colored_polygon(pts, C_SPIKE)
 	draw_set_transform_matrix(base)
+
+
+## O volume de um tile do bloco que gira (o mesmo de _draw_wall_depth, olhando só o bloco).
+func _draw_block_depth(tx: int, ty: int, lx: int, ly: int) -> void:
+	var inner := Rect2i(spin_rect.position + Vector2i(TILE, TILE), spin_rect.size - Vector2i(2 * TILE, 2 * TILE))
+	var p := Vector2i(tx, ty)
+	if inner.has_point(p):
+		var deep := Rect2i(inner.position + Vector2i(TILE, TILE), inner.size - Vector2i(2 * TILE, 2 * TILE))
+		draw_rect(Rect2(lx, ly, TILE, TILE), Color(0, 0, 0, 0.30 if deep.has_point(p) else 0.16))
+		return
+	if ty == spin_rect.end.y - TILE:
+		draw_rect(Rect2(lx, ly + TILE - 3, TILE, 2), Color(0, 0, 0, 0.22))
+	if tx == spin_rect.end.x - TILE:
+		draw_rect(Rect2(lx + TILE - 3, ly, 2, TILE), Color(0, 0, 0, 0.18))
+	if ty == spin_rect.position.y:
+		draw_rect(Rect2(lx, ly + 1, TILE, 1), Color(1, 1, 1, 0.07))
+	if tx == spin_rect.position.x:
+		draw_rect(Rect2(lx + 1, ly, 1, TILE), Color(1, 1, 1, 0.05))
 
 
 ## Compartimentos da porta: cinza/amarelo. Compartimentos de comporta: na cor da comporta.
@@ -3629,6 +3651,8 @@ func _draw_walls() -> void:
 		for c in range(c0, c1 + 1):
 			if tiles[r * gw + c] == 0:
 				continue
+			if spinning and spin_rect.has_point(Vector2i(c * TILE, r * TILE)):
+				continue   # o bloco girando é desenhado à parte, com a sombra e o volume dele
 			var x := c * TILE
 			var y := r * TILE
 			var metal := theme == "industrial"
@@ -4042,6 +4066,8 @@ func _ceiling_dust() -> void:
 # ---------------------------------------------------------------- profundidade (D84)
 
 func _solid_at(c: int, r: int) -> bool:
+	if spinning and spin_rect.has_point(Vector2i(c * TILE, r * TILE)):
+		return false   # durante o giro do bloco, ele é desenhado à parte (com a sombra dele)
 	return c >= 0 and r >= 0 and c < gw and r < gh and tiles[r * gw + c] != 0
 
 

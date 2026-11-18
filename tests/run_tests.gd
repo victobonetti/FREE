@@ -71,6 +71,7 @@ func _init() -> void:
 	test_jeffrey_replay()
 	test_jeffrey_lives()
 	test_jeffrey_intro()
+	test_jeffrey_dynamite()
 	test_subsoil_and_anchors()
 	test_pass_bars()
 	test_mecha_intro()
@@ -3129,3 +3130,36 @@ func test_pass_bars() -> void:
 		top = mini(top, room.rabbit.pos.y)
 	check(top >= 6 * 8, "a barra sólida bloqueia o pulo por baixo (topo do coelho %d)" % top)
 	check(room.rabbit.pos.y == y0, "e o coelho volta ao chão")
+
+
+## Jeffrey praticamente em cima do coelho: corre para o canto oposto com a dinamite, joga em
+## parábola, ela cai devagar e explode num raio enorme (D97).
+func test_jeffrey_dynamite() -> void:
+	print("Jeffrey: a dinamite")
+	_jeffrey()
+	var boss = room.actors[0]
+	var n := 0
+	while boss.state != "walk" and n < 400:
+		tick()
+		n += 1
+	boss.nuts.clear()
+	boss.bombs.clear()
+	room.rabbit.pos = Vector2i(int(boss.pos.x) - 6, int(boss.pos.y) - 6)
+	boss.t = 1
+	tick()
+	check(boss.state == "dyn_run", "colado no coelho, ele corre com a dinamite (%s)" % boss.state)
+	var side: float = boss.dyn_x
+	n = 0
+	while boss.dyns.is_empty() and n < 300:
+		boss.lives = boss.LIVES
+		tick()
+		n += 1
+	check(not boss.dyns.is_empty() and absf(boss.pos.x - side) < 1.0, "no canto oposto, ele joga a dinamite")
+	var flight := 0
+	var lost: int = boss.lives
+	while not boss.dyns.is_empty() and flight < 400:
+		tick()
+		flight += 1
+	check(flight > 100, "ela voa devagar (%d quadros)" % flight)
+	check(boss.lives < lost or room.state != "play", "parado onde ela mira, o coelho é atingido")
+	check(boss.DYN_RADIUS >= 3.0 * boss.BOMB_RADIUS, "o raio da dinamite é enorme (%.0f px, a bomba tem %.0f)" % [boss.DYN_RADIUS, boss.BOMB_RADIUS])

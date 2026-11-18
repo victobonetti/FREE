@@ -44,6 +44,20 @@ const NUT_GRAV := 140.0     # nozes lentas: dá para ver e desviar
 const NUT_SIZE := 10
 const NUT_DRAW := 1.45      # o desenho da noz (7 px) ampliado para o tamanho da colisão
 const NUT_FLIGHT := 1.5     # segundos do arremesso até onde o coelho estava
+# Dinamite (D97): com o coelho praticamente embaixo dele, ele corre para o canto oposto com uma
+# dinamite na mão, mira e joga em parábola. Ela voa devagar, com o lugar da explosão marcado no
+# chão, e o raio é enorme.
+const DYN_NEAR := 14.0      # distância entre os centros que dispara a dinamite
+const DYN_CD := 420         # quadros entre duas dinamites
+const DYN_RUN := 150.0      # px/s, a corrida até o canto
+const DYN_AIM := 28         # quadros mirando no canto, antes de jogar
+const DYN_FLIGHT := 150     # quadros de voo (2,5 s)
+const DYN_GRAV := 50.0      # px/s²: cai bem devagar
+const DYN_RADIUS := 52.0    # raio da explosão
+const C_VEST := Color("3e4a3a")       # colete à prova de balas
+const C_VEST_DARK := Color("27301f")
+const C_GLOVE := Color("141416")      # luvas pretas
+const C_DYN := Color("d43a3a")
 
 const C_FUR := Color("c47a3c")
 const C_FUR_DARK := Color("8a4f22")
@@ -99,6 +113,9 @@ var flash := 0           # piscar ao ser atingido
 var thrown := false      # já jogou a noz neste salto
 var nuts: Array = []     # {pos, vel, hits, ang, av}
 var bombs: Array = []    # {pos, vel}
+var dyns: Array = []     # dinamites no ar: {pos, vel, t, target}
+var dyn_cd := 0
+var dyn_x := 0.0         # o canto para onde ele corre
 var blasts: Array = []   # {pos, t}: explosões em andamento (só desenho; o dano é no 1º quadro)
 var throws := 0          # arremessos feitos: alterna noz e bomba
 var anim := 0            # relógio só do desenho
@@ -120,6 +137,8 @@ func on_reset(r) -> void:
 	_build_points()
 	nuts.clear()
 	bombs.clear()
+	dyns.clear()
+	dyn_cd = 0
 	trail.clear()
 	if hearts <= 0:
 		state = "gone"
@@ -306,6 +325,8 @@ func step(r) -> void:
 		room.invuln = maxi(room.invuln - 1, 0)
 	_update_nuts()
 	_update_bombs()
+	_update_dyns()
+	dyn_cd = maxi(dyn_cd - 1, 0)
 	if room.state != "play":
 		if room.state == "dead":
 			laugh += 1
@@ -346,8 +367,33 @@ func step(r) -> void:
 			# corridinha de esquilo: dispara e para, em vez de deslizar
 			if t % WALK_CYCLE < WALK_CYCLE - WALK_PAUSE:
 				pos.x = clampf(pos.x + dir * sp * 1.25, 8 + SIZE / 2.0, room.pw - 8 - SIZE / 2.0)
-			if t >= WALK_TIME[_phase()]:
+			var rc := Vector2(room.rabbit.pos) + Vector2(6, 6)
+			if dyn_cd == 0 and pos.distance_to(rc) < DYN_NEAR:
+				# em cima do coelho: corre para o canto oposto, com a dinamite na mão
+				dyn_x = room.pw - 30.0 if rc.x < room.pw / 2.0 else 30.0
+				dir = 1 if dyn_x > pos.x else -1
+				state = "dyn_run"
+				t = 0
+				dyn_cd = DYN_CD
+				room.sfx.emit("gatsby_laugh")
+			elif t >= WALK_TIME[_phase()]:
 				_start_hops()
+		"dyn_run":
+			spin = 0.0
+			pos.y = _floor_y()
+			pos.x = move_toward(pos.x, dyn_x, DYN_RUN / 60.0)
+			if t % 3 == 0:
+				room.particles.append({"pos": pos + Vector2(-dir * 5, 6), "vel": Vector2(-dir * randf_range(10.0, 30.0), -randf_range(5.0, 20.0)),
+					"life": randi_range(6, 10), "col": C_BELLY, "grav": 60.0})
+			if absf(pos.x - dyn_x) < 0.5:
+				state = "dyn_aim"
+				t = 0
+		"dyn_aim":
+			var rx2: float = room.rabbit.pos.x + 6
+			dir = 1 if rx2 > pos.x else -1
+			if t >= DYN_AIM:
+				_throw_dyn()
+				_start_walk()
 		"hop":
 			_fly()
 			spin += 0.45 * dir
@@ -593,6 +639,60 @@ func _update_bombs() -> void:
 	bombs = keep
 
 
+## Joga a dinamite em parábola até onde o coelho está, com voo lento (DYN_FLIGHT quadros).
+func _throw_dyn() -> void:
+	var from := pos + Vector2(dir * 4, -8)
+	var target := Vector2(room.rabbit.pos) + Vector2(6, 6)
+	var tt := DYN_FLIGHT / 60.0
+	var v := (target - from) / tt - Vector2(0, 0.5 * DYN_GRAV * tt)
+	dyns.append({"pos": from, "vel": v, "t": 0, "target": target, "ang": 0.0})
+	room.sfx.emit("jump")
+
+
+func _update_dyns() -> void:
+	if dyns.is_empty() or room == null:
+		return
+	if room.state != "play":
+		return
+	var keep: Array = []
+	for d in dyns:
+		d["t"] += 1
+		d["vel"].y += DYN_GRAV / 60.0
+		d["pos"] += d["vel"] / 60.0
+		d["ang"] += 0.12
+		if d["t"] % 3 == 0:
+			room.particles.append({"pos": d["pos"] + Vector2(0, -4).rotated(d["ang"]), "vel": Vector2(randf_range(-10.0, 10.0), -randf_range(10.0, 30.0)),
+				"life": randi_range(6, 10), "col": C_FIRE, "grav": 20.0})
+		var r := Rect2i(Vector2i((d["pos"] - Vector2(3, 3)).round()), Vector2i(6, 6))
+		var hit: bool = room.tile_solid_rect(r) or room.overlaps(r, room.rabbit.rect) or d["t"] > DYN_FLIGHT + 120
+		for h in room.spin_hurt_rects():
+			hit = hit or room.overlaps(r, h)
+		if hit:
+			_explode_dyn(d["pos"])
+			if room.state != "play":
+				return
+		else:
+			keep.append(d)
+	dyns = keep
+
+
+## A explosão da dinamite: enorme. Fere o coelho dentro do raio.
+func _explode_dyn(p: Vector2) -> void:
+	blasts.append({"pos": p, "t": 0, "r": DYN_RADIUS})
+	room.shake = maxf(room.shake, 7.0)
+	room.impact.emit(2.5)
+	room.sfx.emit("slam")
+	room.sfx.emit("blast")
+	for i in 30:
+		var a := randf() * TAU
+		room.particles.append({
+			"pos": p, "vel": Vector2(cos(a), sin(a)) * randf_range(60.0, 200.0),
+			"life": randi_range(12, 26), "col": C_FIRE if i % 3 else C_BOMB, "grav": 60.0,
+		})
+	if blast_hits(p, Rect2(room.rabbit.rect), DYN_RADIUS):
+		room.kill()
+
+
 func _bomb_rect(p: Vector2) -> Rect2i:
 	return Rect2i(Vector2i((p - Vector2(BOMB_SIZE, BOMB_SIZE) / 2.0).round()), Vector2i(BOMB_SIZE, BOMB_SIZE))
 
@@ -614,9 +714,9 @@ func _explode(p: Vector2) -> void:
 
 
 ## O raio da explosão alcança o retângulo?
-static func blast_hits(p: Vector2, r: Rect2) -> bool:
+static func blast_hits(p: Vector2, r: Rect2, radius := BOMB_RADIUS) -> bool:
 	var q := Vector2(clampf(p.x, r.position.x, r.end.x), clampf(p.y, r.position.y, r.end.y))
-	return q.distance_to(p) <= BOMB_RADIUS
+	return q.distance_to(p) <= radius
 
 
 func _nut_rect(p: Vector2) -> Rect2i:
@@ -693,9 +793,24 @@ func _draw() -> void:
 	for b in blasts:
 		var k := float(b["t"]) / BLAST_FRAMES
 		var p: Vector2 = b["pos"].round()
-		draw_circle(p, BOMB_RADIUS * minf(1.0, 0.4 + k * 1.5), Color(C_FIRE, 0.55 * (1.0 - k)))
-		draw_circle(p, BOMB_RADIUS * 0.6 * (1.0 - k), Color(1, 1, 1, 0.9 * (1.0 - k)))
-		draw_arc(p, BOMB_RADIUS, 0.0, TAU, 20, Color(C_FIRE, 1.0 - k), 1.0)
+		var br: float = b.get("r", BOMB_RADIUS)
+		draw_circle(p, br * minf(1.0, 0.4 + k * 1.5), Color(C_FIRE, 0.55 * (1.0 - k)))
+		draw_circle(p, br * 0.6 * (1.0 - k), Color(1, 1, 1, 0.9 * (1.0 - k)))
+		draw_arc(p, br, 0.0, TAU, 32, Color(C_FIRE, 1.0 - k), 1.0)
+	# dinamites no ar, e o lugar da explosão marcado (pulsa mais rápido perto de cair)
+	for d in dyns:
+		var tg: Vector2 = d["target"]
+		var urg := clampf(float(d["t"]) / DYN_FLIGHT, 0.0, 1.0)
+		var pul := 0.5 + 0.5 * sin(anim * (0.2 + 0.5 * urg))
+		draw_arc(tg, DYN_RADIUS, 0.0, TAU, 40, Color(C_DYN, 0.25 + 0.35 * pul), 1.0)
+		draw_circle(tg, DYN_RADIUS, Color(C_DYN, 0.05 + 0.06 * pul))
+		draw_set_transform_matrix(base * Transform2D(d["ang"], d["pos"].round()))
+		draw_rect(Rect2(-1.5, -4, 3, 8), C_DYN)
+		draw_rect(Rect2(-1.5, -4, 3, 1), Color(1, 1, 1, 0.5))
+		draw_rect(Rect2(-1.5, 1, 3, 1), C_BOMB_DARK)
+		draw_line(Vector2(0, -4), Vector2(1, -6), C_BELLY, 1.0)
+		draw_rect(Rect2(0, -7, 2, 2), C_FIRE if (anim / 2) % 2 == 0 else Color("fff4c2"))
+		draw_set_transform_matrix(base)
 	if state != "gone" and state != "dead" and state != "wait":
 		if flash == 0 or (flash / 3) % 2 == 0:
 			_draw_squirrel(base)
@@ -799,6 +914,8 @@ func _draw_ball(hurt: bool) -> void:
 	draw_circle(Vector2(-4, -3), 5.0, C_FUR)        # rabo enrolado
 	draw_circle(Vector2(1, 1), 7.0, C_FUR)
 	draw_circle(Vector2(2, 3), 4.0, C_BELLY)
+	draw_rect(Rect2(-3, -1, 9, 4), C_VEST)          # o colete, mesmo enrolado
+	draw_rect(Rect2(-3, -1, 9, 1), C_VEST.lightened(0.18))
 	draw_rect(Rect2(2, -8, 3, 3), C_FUR_DARK)       # orelha
 	if hurt:
 		draw_rect(Rect2(2, -3, 2, 2), Color.WHITE)
@@ -849,13 +966,36 @@ func _draw_upright(mood: String) -> void:
 	draw_rect(Rect2(-5, -4, 10, 9), C_FUR)
 	draw_rect(Rect2(-4, -5, 8, 1), C_FUR)
 	draw_rect(Rect2(-2, -2, 6, 7), C_BELLY)
-	# braços
-	if mood == "aim":
-		draw_rect(Rect2(4, 1, 4, 2), C_FUR_DARK)        # patas à frente, pronto para saltar
+	# colete à prova de balas: placas, alças e bolsinhos
+	draw_rect(Rect2(-5, -4, 10, 6), C_VEST)
+	draw_rect(Rect2(-5, -4, 10, 1), C_VEST.lightened(0.18))
+	draw_rect(Rect2(-5, 1, 10, 1), C_VEST_DARK)
+	draw_rect(Rect2(-1, -4, 1, 6), C_VEST_DARK)              # o fecho do meio
+	draw_rect(Rect2(1, -2, 3, 2), C_VEST_DARK)               # bolsinho
+	draw_rect(Rect2(-4, -2, 2, 2), C_VEST_DARK)
+	draw_rect(Rect2(-4, -5, 2, 1), C_VEST_DARK)              # alças
+	draw_rect(Rect2(2, -5, 2, 1), C_VEST_DARK)
+	# braços, com luvas pretas
+	var holding := state == "dyn_run" or state == "dyn_aim"
+	if holding:
+		var up := state == "dyn_aim"
+		var hp := Vector2(4, -7) if up else Vector2(4, 0)
+		draw_rect(Rect2(3, hp.y + (2 if up else -1), 2, 4 if up else 2), C_FUR_DARK)
+		draw_rect(Rect2(hp, Vector2(3, 2)), C_GLOVE)
+		# a dinamite na mão, com o pavio aceso
+		draw_rect(Rect2(hp + Vector2(1, -6), Vector2(2, 6)), C_DYN)
+		draw_rect(Rect2(hp + Vector2(1, -6), Vector2(2, 1)), Color(1, 1, 1, 0.5))
+		draw_rect(Rect2(hp + Vector2(2, -8), Vector2(1, 2)), C_BELLY)
+		draw_rect(Rect2(hp + Vector2(2 + (anim / 3) % 2, -9), Vector2(1, 1)), C_FIRE)
+	elif mood == "aim":
+		draw_rect(Rect2(4, 1, 2, 2), C_FUR_DARK)        # patas à frente, pronto para saltar
+		draw_rect(Rect2(6, 1, 2, 2), C_GLOVE)
 	elif mood == "laugh":
-		draw_rect(Rect2(3, -2, 3, 2), C_FUR_DARK)       # mão na barriga
+		draw_rect(Rect2(3, -2, 1, 2), C_FUR_DARK)       # mão na barriga
+		draw_rect(Rect2(4, -2, 2, 2), C_GLOVE)
 	else:
-		draw_rect(Rect2(3, -1, 2, 3), C_FUR_DARK)
+		draw_rect(Rect2(3, -1, 2, 1), C_FUR_DARK)
+		draw_rect(Rect2(3, 0, 2, 2), C_GLOVE)
 	var hy := -13
 	if mood == "laugh":
 		hy -= 1 if (laugh / 4) % 2 == 0 else 0
