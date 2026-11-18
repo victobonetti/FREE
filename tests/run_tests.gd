@@ -74,6 +74,7 @@ func _init() -> void:
 	test_jeffrey_dynamite()
 	test_subsoil_and_anchors()
 	test_pass_bars()
+	test_hold_jump()
 	test_mecha_intro()
 	test_mecha_dash()
 	test_mecha_homing()
@@ -1890,13 +1891,18 @@ func test_represa() -> void:
 	check(_water_right_of(208) > 0.95, "ao voltar, a água cai na cuia da direita (%.0f%%)" % (_water_right_of(208) * 100.0))
 	check(not room.door_flooded and room.door_open, "a porta fica seca e abre")
 	check(room.state == "play" and room.rabbit.wet > 0.2, "o coelho caiu junto e boia na cuia da direita (%s)" % where())
-	# sai da cuia pela esquerda e cai de lado na cuia da porta
+	# sai da cuia pela esquerda e cai de lado na cuia da porta (segura o pulo só no ar: segurando
+	# no chão, o coelho pula de novo sozinho, D98)
+	var since := 99
 	for i in 600:
 		if room.state != "play":
 			break
-		var inp := {"move": -1.0, "jump_held": true}
+		since += 1
+		var inp := {"move": -1.0, "jump_held": since < 12}
 		if (room.rabbit.on_ground or room.rabbit.wet > 0.25) and i % 8 == 0:
 			inp["jump_pressed"] = true
+			inp["jump_held"] = true
+			since = 0
 		tick(inp)
 	check(won(), "chega à porta dobrando a borda e pulando sobre os espinhos (%s)" % where())
 	# o giro para o outro lado só devolve a água ao ponto de partida
@@ -3163,3 +3169,21 @@ func test_jeffrey_dynamite() -> void:
 	check(flight > 100, "ela voa devagar (%d quadros)" % flight)
 	check(boss.lives < lost or room.state != "play", "parado onde ela mira, o coelho é atingido")
 	check(boss.DYN_RADIUS >= 3.0 * boss.BOMB_RADIUS, "o raio da dinamite é enorme (%.0f px, a bomba tem %.0f)" % [boss.DYN_RADIUS, boss.BOMB_RADIUS])
+
+
+## Segurando o pulo, o coelho pula de novo a cada vez que toca o chão (D98).
+func test_hold_jump() -> void:
+	print("segurar o pulo")
+	load_def(FLAT)
+	idle(10)
+	var jumps := 0
+	tick({"jump_pressed": true, "jump_held": true})
+	for i in 200:
+		tick({"jump_held": true})
+		if room.rabbit.ev_jump:
+			jumps += 1
+	check(jumps >= 3, "segurando, ele pula várias vezes seguidas (%d pulos)" % jumps)
+	idle(60)
+	var y: int = room.rabbit.pos.y
+	idle(60)
+	check(room.rabbit.on_ground and room.rabbit.pos.y == y, "soltando, ele para no chão")

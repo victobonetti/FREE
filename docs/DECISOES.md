@@ -713,3 +713,7 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Sombras do bloco:** no giro (9 quadros) o bloco era redesenhado sobre um quadrado preto liso, sem volume e sem sombra. Agora ele sai do desenho normal das paredes enquanto gira, projeta a própria sombra (inclinada com ele) e tem o mesmo volume das paredes (miolo escuro, luz e sombra nas faces).
 - **Dinamite:** com o coelho praticamente embaixo dele (centros a menos de 14 px), ele corre para o canto oposto com a dinamite na mão, mira e joga em parábola. Ela voa devagar (~2,5 s), com um círculo vermelho pulsando onde vai explodir, e o raio é de 52 px (a bomba tem 14). Uma a cada ~7 s, no máximo.
 - **Visual:** colete à prova de balas (verde-oliva, com fecho, bolsinhos e alças; aparece também enrolado em bola) e luvas pretas.
+
+### D98 — Segurar o pulo repete o pulo
+- **Pedido do Victor:** com o botão de pulo apertado, o coelho fica pulando: a cada vez que toca o chão, pula de novo (não vale pendurado na corda). Soltar o botão para.
+- **Provas:** as rotas e replays da campanha continuam vencendo. Um bot do ato 1 (Represa) segurava o pulo o tempo todo; passou a segurar só nos primeiros quadros de cada pulo.

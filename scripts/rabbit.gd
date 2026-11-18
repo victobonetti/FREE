@@ -155,6 +155,9 @@ func update(room, inp: Dictionary) -> void:
 		jump_buf = BUFFER_FRAMES
 	else:
 		jump_buf = maxi(jump_buf - 1, 0)
+	# segurando o pulo, o coelho pula de novo a cada vez que toca o chão (D98)
+	if jump_held and on_ground and rope == null:
+		jump_buf = maxi(jump_buf, 1)
 
 	# --- Horizontal ---
 	var top_speed := MAX_SPEED * lerpf(1.0, SWIM_SPEED, clampf(wet / FLOAT_FRAC, 0.0, 1.0))
