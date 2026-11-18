@@ -5,7 +5,7 @@ extends Control
 
 ## Temas do cenário (só aparência): o subsolo do ato 1, em quatro trechos, e a fábrica do ato 2.
 const THEMES := [["", "Padrão"], ["raizes", "Raízes"], ["caverna", "Caverna"], ["aquifero", "Lençol d'água"],
-	["despensa", "Despensa"], ["transicao", "Transição (terra → metal)"], ["industrial", "Industrial"]]
+	["despensa", "Despensa"], ["transicao", "Transição (terra → metal)"], ["industrial", "Industrial"], ["fungos", "Fungário"]]
 
 const LevelData := preload("res://scripts/level_data.gd")
 const LevelStore := preload("res://scripts/level_store.gd")

@@ -24,14 +24,18 @@ const FLIP_FRAMES := 24      # cambalhota do coelho ao girar (passa um pouco do 
 const C_FLIP := Color("8fd0ff")       # faíscas azuis do giro
 const C_PASS := Color("9fe6c1")       # barra de passagem (verde-água: diferente da sólida)
 # Subsoil (ato 1): o subsolo embaixo do campo, em quatro trechos. Só aparência (D82).
-const SUBSOIL := ["raizes", "caverna", "aquifero", "despensa"]
+const SUBSOIL := ["raizes", "caverna", "aquifero", "despensa", "fungos"]   # fungos: o fungário (ato 3, D107)
 const C_SOIL := {
 	"raizes": [Color("3a291f"), Color("43301f"), Color("4e3826")],
 	"caverna": [Color("2a2c37"), Color("30323d"), Color("383b47")],
 	"aquifero": [Color("223038"), Color("283841"), Color("2f424b")],
 	"despensa": [Color("37281d"), Color("402e21"), Color("4a3726")],
+	"fungos": [Color("2b2731"), Color("322c3a"), Color("3a3343")],
 }
-const C_MOSS := {"raizes": Color("6f9e4a"), "caverna": Color("56784a"), "aquifero": Color("3f7a62"), "despensa": Color("7a8a3e")}
+const C_MOSS := {"raizes": Color("6f9e4a"), "caverna": Color("56784a"), "aquifero": Color("3f7a62"), "despensa": Color("7a8a3e"), "fungos": Color("7c6596")}
+const C_FUNGI := [Color("9b6bc4"), Color("b98ee0"), Color("6e5a8c"), Color("c9b6dd")]   # chapéus dos cogumelos
+const C_STALK := Color("cfc6d8")
+const C_MYCEL := Color("d9cfe6")
 const C_ROOT := Color("6b4a33")
 const C_DRIP := Color("9fd4ff")
 const C_SHROOM := [Color("c58cff"), Color("7fe0d0")]
@@ -4009,6 +4013,33 @@ func _draw_soil_tile(c: int, r: int, x: int, y: int) -> void:
 		draw_rect(Rect2(x + (h >> 5) % 7, y + (h >> 9) % 7, 1, 1), Color(pal[0], 1.0).darkened(0.35))
 	if soil == "caverna" and h % 23 == 3:
 		draw_rect(Rect2(x + 2, y + 3, 1, 1), Color(C_CRYSTAL, 0.5))   # veio de cristal na pedra
+	if soil == "fungos" and h % 4 == 1:
+		# manchas de mofo na pedra (lilás, felpudas)
+		var mx := x + (h >> 3) % 5
+		var my := y + (h >> 6) % 5
+		draw_rect(Rect2(mx, my, 3, 2), Color(C_MOSS["fungos"], 0.55))
+		draw_rect(Rect2(mx + 1, my - 1, 1, 1), Color(C_MOSS["fungos"], 0.4))
+		draw_rect(Rect2(mx + 3, my + 1, 1, 1), Color(C_MOSS["fungos"], 0.35))
+
+
+## Um tufo de cogumelos no chão (fungário): de um a três, de alturas e cores diferentes; alguns
+## brilham de leve. Nascem "para cima" como a fase foi desenhada (girada, ficam na parede).
+func _draw_fungi_cluster(x: int, y: int, up: Vector2i, h: int) -> void:
+	var n := 1 + (h >> 3) % 3
+	for i in n:
+		var hh := h >> (i * 4)
+		var a := 1.0 + float((hh >> 2) % 5)
+		var tall := 2 + hh % 5
+		var cw := 4 + (hh >> 6) % 4
+		var col: Color = C_FUNGI[(hh >> 9) % 4]
+		draw_rect(_face_rect(x, y, up, a + floorf(cw / 2.0), 0, 1, tall), C_STALK)
+		var cap := _face_rect(x, y, up, a, tall, cw, 1)
+		var cap2 := _face_rect(x, y, up, a + 1, tall + 1, maxf(cw - 2, 1), 1)
+		if (hh >> 12) % 2 == 0:
+			var pulse := 0.08 + 0.05 * sin(frame * 0.04 + hh % 19)
+			draw_circle(cap.get_center(), 4.0 + cw, Color(col, pulse))
+		draw_rect(cap, col)
+		draw_rect(cap2, col.lightened(0.2))
 
 
 ## Musgo e grama no que era o chão quando a fase foi desenhada (depois de um giro, ficam na parede ou
@@ -4035,6 +4066,8 @@ func _draw_soil_decor(c: int, r: int, x: int, y: int) -> void:
 			draw_circle(cap.get_center(), 5.0, Color(col, pulse))
 			draw_rect(_face_rect(x, y, up, 3, 0, 1, 2), Color("d8cfc0"))
 			draw_rect(cap, col)
+		elif soil == "fungos" and h % 4 == 0:
+			_draw_fungi_cluster(x, y, up, h)
 		elif soil == "despensa" and h % 6 == 0:
 			var nut := _face_rect(x, y, up, 2 + (h >> 5) % 3, 0, 3, 2)
 			draw_rect(nut, C_NUT_DECOR)
@@ -4047,6 +4080,12 @@ func _draw_soil_decor(c: int, r: int, x: int, y: int) -> void:
 			var a0 := 2.0 + float((h >> 2) % 4)
 			var st := _face_rect(x, y, dn, a0, 0, 1, 1).position
 			_draw_hanging(st, Vector2(dn), n, C_ROOT, 1.2, h)
+		elif soil == "fungos" and h % 3 == 0:
+			# fios de micélio pendurados (claros, finos), às vezes com um esporo na ponta
+			var st3 := _face_rect(x, y, dn, 1.0 + float((h >> 2) % 6), 0, 1, 1).position
+			var tip3 := _draw_hanging(st3, Vector2(dn), 2 + (h >> 4) % 9, Color(C_MYCEL, 0.55), 0.6, h)
+			if h % 7 == 0:
+				draw_rect(Rect2(tip3.round(), Vector2(1, 1)), Color(C_FUNGI[1], 0.9))
 		elif soil == "aquifero" and h % 5 == 1:
 			# musgo pendurado (fios verdes) no lençol d'água
 			var st2 := _face_rect(x, y, dn, 2.0 + float((h >> 2) % 4), 0, 1, 1).position
@@ -4062,6 +4101,15 @@ func _draw_soil_decor(c: int, r: int, x: int, y: int) -> void:
 		var fall := float(tt - 30) * float(tt - 30) * 0.02 if tt > 30 else 0.0
 		if fall < 40.0:
 			draw_rect(Rect2(x + 3 + (h >> 3) % 3, y + TILE + 2 + fall, 1, 2), Color(C_DRIP, 0.7))
+	if soil == "fungos" and h % 13 == 4:
+		# orelha-de-pau: um chapéu em meia-lua na parede de lado
+		for side in [Vector2i(-up.y, up.x), Vector2i(up.y, -up.x)]:
+			if _cell_empty(c + side.x, r + side.y):
+				var col2: Color = C_FUNGI[(h >> 5) % 3]
+				draw_rect(_face_rect(x, y, side, 2, 0, 4, 2), col2)
+				draw_rect(_face_rect(x, y, side, 3, 2, 2, 1), col2.darkened(0.2))
+				draw_rect(_face_rect(x, y, side, 2, 0, 4, 1), col2.lightened(0.25))
+				break
 	if soil == "caverna" and h % 19 == 5:
 		for side in [Vector2i(-up.y, up.x), Vector2i(up.y, -up.x)]:
 			if _cell_empty(c + side.x, r + side.y):
@@ -4138,6 +4186,27 @@ func _draw_subsoil_back() -> void:
 					draw_rect(Rect2(gpos, Vector2(1, 1)), Color(C_CRYSTAL, 0.6))
 		"aquifero":
 			pass   # os veios de água escorrem para baixo da tela: estão em _draw_ambient_motion
+		"fungos":
+			# cogumelos gigantes ao fundo (silhuetas) e lâmpadas velhas, abafadas de poeira e mofo
+			for i in range(int(x0 / 46), int(x1 / 46) + 1):
+				var hh := absi(i * 2246822519)
+				var gx := float(i * 46 + hh % 26)
+				if gx < 12 or gx > _bw - 12:
+					continue
+				var ht := 30.0 + float(hh % 60)
+				var cw := 12.0 + float((hh >> 4) % 14)
+				draw_rect(Rect2(gx - 2, _bh - ht, 4, ht), Color(pal[2], 0.45))
+				draw_colored_polygon(PackedVector2Array([Vector2(gx - cw, _bh - ht + 2), Vector2(gx - cw * 0.6, _bh - ht - 6),
+					Vector2(gx + cw * 0.6, _bh - ht - 6), Vector2(gx + cw, _bh - ht + 2)]), Color(C_FUNGI[2], 0.22))
+				draw_line(Vector2(gx - cw, _bh - ht + 2), Vector2(gx + cw, _bh - ht + 2), Color(C_FUNGI[1], 0.10), 1.0)   # lamelas
+				for k in 3:
+					draw_rect(Rect2(gx - cw * 0.4 + k * cw * 0.35, _bh - ht - 4, 2, 1), Color(C_FUNGI[3], 0.12))
+				if hh % 5 == 0:
+					var lp := Vector2(gx + 18.0, 10.0 + float((hh >> 7) % 20))
+					var on := (frame / 9 + hh) % 61 != 0
+					draw_circle(lp, 16.0, Color(0.85, 0.78, 0.9, 0.035 if on else 0.01))
+					draw_circle(lp, 3.0, Color(0.75, 0.7, 0.8, 0.35 if on else 0.15))
+					draw_rect(Rect2(lp - Vector2(3, 3), Vector2(6, 1)), Color(pal[2], 0.8))
 		"despensa":
 			for i in range(int(x0 / 22), int(x1 / 22) + 1):
 				var hh := absi(i * 31337)
@@ -4309,6 +4378,8 @@ func _surface() -> String:
 			return "dirt"
 		"aquifero":
 			return "wet"
+		"fungos":
+			return "dirt"
 	return "stone"
 
 
@@ -4487,6 +4558,15 @@ func _draw_ambient_motion() -> void:
 				var tt := 8.0 + fposmod(float(frame * 2 + hh), maxf(ph - 16.0, 1.0))
 				if tt > y0 and tt < y1:
 					draw_rect(Rect2(vx, tt, 1, 3), Color(C_DRIP, 0.25))
+		"fungos":
+			# esporos caindo devagar (para baixo da tela), balançando
+			for i in 18:
+				var sp2 := Vector2(8.0 + fposmod(float(i * 67) + sin(frame * 0.013 + i * 1.7) * 9.0, maxf(pw - 16.0, 1.0)),
+					8.0 + fposmod(float(i * 89) + frame * 0.14, maxf(ph - 16.0, 1.0)))
+				if sp2.x > x0 and sp2.x < x1 and sp2.y > y0 and sp2.y < y1:
+					var sc2: Color = C_FUNGI[i % 2]
+					draw_circle(sp2, 2.0, Color(sc2, 0.06))
+					draw_rect(Rect2(sp2.round(), Vector2(1, 1)), Color(sc2, 0.55))
 		"caverna":
 			for i in 14:
 				var sp := Vector2(8.0 + fposmod(float(i * 71) + sin(frame * 0.01 + i) * 10.0, maxf(pw - 16.0, 1.0)),

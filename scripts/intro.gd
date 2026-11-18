@@ -284,6 +284,8 @@ static func _thumb_wall(theme: String) -> Color:
 			return Color("40606a")
 		"despensa":
 			return Color("6a4c33")
+		"fungos":
+			return Color("5e5070")
 		"transicao":
 			return Color("6a6458")
 		"industrial":

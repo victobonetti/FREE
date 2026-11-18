@@ -1,0 +1,1 @@
+{"steps": [["wait", 5], ["wait_until", "door_open", 1200], ["to_door"]]}
