@@ -69,8 +69,20 @@ var art             # uma Room fora da árvore, só para gerar os quadros do coe
 var press_label: Label
 var menu_label: Label
 var sel_label: Label          # o seletor de fase (só na build de teste)
-var _eat_start := 0           # quadros ignorando o "start" (o toque foi numa seta do seletor)
-const SEL_Y := 146.0
+var _eat_start := 0           # quadros ignorando o "start" (o toque é do carrossel: decide ao soltar)
+const SEL_Y := 148.0
+# Carrossel do seletor (build de teste): um cartão por fase, com a miniatura; "do início" é o campo.
+const CARD_GAP := 150.0       # distância entre os centros de dois cartões vizinhos
+const ARROW_L := Vector2(26, 109)
+const ARROW_R := Vector2(294, 109)
+const ARROW_R_PX := 10.0
+var _scroll := 0.0            # posição do carrossel, em cartões (anda até beta_sel)
+var _dragging := false
+var _drag_moved := false
+var _drag_x0 := 0.0
+var _drag_s0 := 0.0
+var _tap_go := false          # um toque sem arrastar, fora das setas: começa
+var _thumbs := {}             # índice da fase -> miniatura (ImageTexture)
 var particles: Array = []
 var jolt := 0.0
 var jolt_phase := 0.0
@@ -108,6 +120,11 @@ func _ready() -> void:
 		sel_label.add_theme_color_override("font_color", Color("ffe08a"))
 		add_child(sel_label)
 		beta_sel = clampi(beta_sel, 0, Levels.count())
+		_scroll = float(beta_sel)
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		# os textos de cima sobem um pouco: o cartão do carrossel não encosta neles
+		press_label.position.y = 52
+		menu_label.position.y = 64
 		_update_sel()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
@@ -139,7 +156,10 @@ func _process(_delta: float) -> void:
 func change_sel(d: int) -> void:
 	if sel_label == null or phase != TITLE:
 		return
-	beta_sel = posmod(beta_sel + d, Levels.count() + 1)
+	var nv := clampi(beta_sel + d, 0, Levels.count())
+	if nv == beta_sel:
+		return
+	beta_sel = nv
 	_update_sel()
 	sfx.emit("plate_on")
 
@@ -148,27 +168,126 @@ func _update_sel() -> void:
 	if sel_label == null:
 		return
 	if beta_sel == 0:
-		sel_label.text = "<   BETA · DO INÍCIO   >"
+		sel_label.text = "BETA · DO INÍCIO"
 	else:
-		sel_label.text = "<   BETA · FASE %d · %s   >" % [beta_sel, str(Levels.def_at(beta_sel - 1).get("name", "")).to_upper()]
+		sel_label.text = "BETA · FASE %d DE %d · %s" % [beta_sel, Levels.count(), str(Levels.def_at(beta_sel - 1).get("name", "")).to_upper()]
 
 
-## No celular (ou com o mouse): tocar nas setas do seletor troca a fase, sem começar o jogo.
+## Carrossel (build de teste), com o mouse ou o dedo (o toque também chega como mouse): tocar nas
+## setas troca a fase; arrastar rola os cartões e, ao soltar, encaixa no mais perto; um toque sem
+## arrastar começa. O "start" do toque (touch_controls aperta no dedo baixar) é ignorado aqui: o
+## carrossel decide ao soltar.
 func _input(event: InputEvent) -> void:
 	if sel_label == null or phase != TITLE:
 		return
-	var pressed: bool = (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT)
-	if not pressed:
-		return
-	var p: Vector2 = make_input_local(event).position
-	if absf(p.y - (SEL_Y + 6.0)) > 14.0:
-		return
-	if p.x < 110.0:
-		change_sel(-1)
-		_eat_start = 8
-	elif p.x > 210.0:
-		change_sel(1)
-		_eat_start = 8
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		var p: Vector2 = make_input_local(event).position
+		if event.pressed:
+			_eat_start = 3
+			if p.distance_to(ARROW_L) <= ARROW_R_PX + 4.0:
+				change_sel(-1)
+				return
+			if p.distance_to(ARROW_R) <= ARROW_R_PX + 4.0:
+				change_sel(1)
+				return
+			_dragging = true
+			_drag_moved = false
+			_drag_x0 = p.x
+			_drag_s0 = _scroll
+		elif _dragging:
+			_dragging = false
+			if _drag_moved:
+				var nv := clampi(roundi(_scroll), 0, Levels.count())
+				if nv != beta_sel:
+					beta_sel = nv
+					_update_sel()
+					sfx.emit("plate_on")
+			else:
+				_tap_go = true
+	elif event is InputEventMouseMotion and _dragging:
+		var p2: Vector2 = make_input_local(event).position
+		var dx := p2.x - _drag_x0
+		if absf(dx) > 4.0:
+			_drag_moved = true
+		if _drag_moved:
+			_scroll = clampf(_drag_s0 - dx / CARD_GAP, 0.0, float(Levels.count()))
+
+
+## A miniatura de uma fase: um pixel por tile, nas cores do tema dela, já girada como começa.
+func _thumb(i: int) -> Texture2D:
+	if _thumbs.has(i):
+		return _thumbs[i]
+	var d: Dictionary = Levels.def_at(i)
+	var rows: Array = d.get("rows", [])
+	var w := 1
+	for r in rows:
+		w = maxi(w, String(r).length())
+	var h := maxi(rows.size(), 1)
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color("0c0c12"))
+	var wall := _thumb_wall(str(d.get("theme", "")))
+	for y in rows.size():
+		var line := String(rows[y])
+		for x in line.length():
+			img.set_pixel(x, y, _thumb_col(line[x], wall))
+	var sr := int(d.get("start_rot", 0))
+	for k in absi(sr):
+		img.rotate_90(CLOCKWISE if sr > 0 else COUNTERCLOCKWISE)
+	var tex := ImageTexture.create_from_image(img)
+	_thumbs[i] = tex
+	return tex
+
+
+static func _thumb_wall(theme: String) -> Color:
+	match theme:
+		"raizes":
+			return Color("6b4e35")
+		"caverna":
+			return Color("50546a")
+		"aquifero":
+			return Color("40606a")
+		"despensa":
+			return Color("6a4c33")
+		"transicao":
+			return Color("6a6458")
+		"industrial":
+			return Color("5e6370")
+	return Color("3e3e50")
+
+
+static func _thumb_col(ch: String, wall: Color) -> Color:
+	match ch:
+		"#":
+			return wall
+		".":
+			return Color("0c0c12")
+		"~":
+			return Color("2f86e0")
+		"%":
+			return Color("5fd63a")
+		"^", ">", "v", "<":
+			return Color("e0657c")
+		"D":
+			return Color("f3cf3b")
+		"P":
+			return Color("ffffff")
+		"B":
+			return Color("3aa0ff")
+		"S", "a", "b", "c", "d", "e", "f", "g", "h", "i":
+			return Color("8a8a9a")
+		"=", "}", "_", "{":
+			return Color("9a86d6")
+		"↑", "→", "↓", "←":
+			return Color("9fe6c1")
+		"|", "-":
+			return Color("a07a4a")
+		"+":
+			return Color("ffd23f")
+		"L", "H":
+			return Color("9aa0ad")
+	if "123456789¹²³⁴⁵⁶⁷⁸⁹".contains(ch):
+		return Color("c58cff")
+	return Color("0c0c12")
 
 
 ## Um quadro da cutscene. `pressed`: Enter/Start apertado neste quadro.
@@ -181,6 +300,13 @@ func step(pressed: bool) -> void:
 		if _eat_start > 0:
 			_eat_start -= 1
 			pressed = false
+		if _tap_go:
+			_tap_go = false
+			pressed = true
+		if sel_label != null and not _dragging:
+			_scroll = lerpf(_scroll, float(beta_sel), 0.25)
+			if absf(_scroll - beta_sel) < 0.005:
+				_scroll = float(beta_sel)
 		if pressed and frame > 20:
 			if sel_label != null and beta_sel > 0:
 				level_picked.emit(beta_sel - 1)
@@ -281,12 +407,64 @@ func _draw_title_scene() -> void:
 	if text_a > 0.0:
 		_draw_word("FREE", Vector2(102, 14), 5.0, Color(C_WHITE, text_a))
 
+	if sel_label != null and phase == TITLE:
+		_draw_carousel()
+		return
 	draw_set_transform(WIN.position)
 	_draw_meadow()
 	draw_set_transform(Vector2.ZERO)
 	draw_rect(WIN, C_WHITE, false, 1.0)
 	if phase == FADE:
 		draw_rect(WIN.grow(1.0), Color(0, 0, 0, _smooth(_k())))
+
+
+## O carrossel da build de teste: o cartão do meio do tamanho da janela, os vizinhos menores e
+## apagados dos lados, e as setas redondas.
+func _draw_carousel() -> void:
+	var n := Levels.count() + 1
+	var order: Array = []
+	for i in range(maxi(0, int(floor(_scroll)) - 2), mini(n, int(floor(_scroll)) + 3)):
+		order.append(i)
+	order.sort_custom(func(a, b): return absf(a - _scroll) > absf(b - _scroll))   # os de longe primeiro
+	for i in order:
+		var off: float = float(i) - _scroll
+		var k := minf(absf(off), 1.0)
+		if absf(off) > 1.8:
+			continue
+		var sc := 1.0 - 0.42 * k
+		var size := WIN.size * sc
+		var cx := 160.0 + off * CARD_GAP
+		var rect := Rect2(Vector2(cx - size.x / 2.0, WIN.position.y + (WIN.size.y - size.y) / 2.0), size)
+		if i == 0:
+			draw_set_transform(rect.position, 0.0, Vector2(sc, sc))
+			_draw_meadow()
+			draw_set_transform(Vector2.ZERO)
+		else:
+			draw_rect(rect, Color(0.04, 0.04, 0.06))
+			var tex := _thumb(i - 1)
+			var ts := Vector2(tex.get_width(), tex.get_height())
+			var fit := minf((rect.size.x - 4.0) / ts.x, (rect.size.y - 4.0) / ts.y)
+			var tsz := ts * fit
+			draw_texture_rect(tex, Rect2(rect.get_center() - tsz / 2.0, tsz), false)
+		draw_rect(rect, Color(C_WHITE, 1.0 - 0.6 * k), false, 1.0)
+		if k > 0.02:
+			draw_rect(rect, Color(0, 0, 0, 0.55 * k))
+	# setas
+	for side in [-1, 1]:
+		var c: Vector2 = ARROW_L if side < 0 else ARROW_R
+		var live: bool = (side < 0 and beta_sel > 0) or (side > 0 and beta_sel < n - 1)
+		var a := 0.9 if live else 0.25
+		draw_circle(c, ARROW_R_PX, Color(0.05, 0.05, 0.08, 0.85))
+		draw_arc(c, ARROW_R_PX, 0.0, TAU, 24, Color(C_WHITE, a), 1.0)
+		var dx: float = 2.5 * side
+		draw_line(c + Vector2(-dx, -4), c + Vector2(dx, 0), Color(C_WHITE, a), 2.0)
+		draw_line(c + Vector2(dx, 0), c + Vector2(-dx, 4), Color(C_WHITE, a), 2.0)
+	# pontinhos: onde está no carrossel
+	var dots := mini(n, 27)
+	var x0 := 160.0 - (dots - 1) * 2.5
+	for i in dots:
+		var on := i == beta_sel
+		draw_rect(Rect2(x0 + i * 5.0 - (1.0 if on else 0.5), 143.0 - (1.0 if on else 0.5), 2.0 if on else 1.0, 2.0 if on else 1.0), Color(C_WHITE, 0.9 if on else 0.3))
 
 
 func _draw_word(word: String, at: Vector2, px: float, col: Color) -> void:

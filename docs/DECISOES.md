@@ -692,3 +692,8 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Regra:** a de passagem bloqueia só o retângulo que encosta na primeira linha dela vindo de cima; subindo (coelho: `query_up`; caixas: passo para cima), atravessa sempre, inclusive o último pixel.
 - **Fuga (fase 16):** as 21 barras viraram de passagem; o bot da fase continua vencendo. A água continua apoiada nas duas.
 - **Editor:** os quatro símbolos novos na paleta, com giro e espelho.
+
+### D94 — Seletor da build de teste vira carrossel
+- **Pedido do Victor:** seletor rolável, uma fase por vez, com miniatura e botões de carrossel. O cartão do meio tem o tamanho da janela do campo; os vizinhos aparecem menores e apagados dos lados; pontinhos mostram a posição.
+- **Miniaturas:** geradas do mapa de cada fase (um pixel por tile, nas cores do tema, giradas como a fase começa) e guardadas enquanto a tela está aberta. "Do início" mostra o campo da abertura.
+- **Controles:** setas do teclado/controle ou as setas redondas na tela; arrastar (dedo ou mouse) rola e encaixa ao soltar; um toque sem arrastar, ou Enter, começa. Só na build de teste (`BETA`).
