@@ -1,0 +1,22 @@
+{
+	"hint": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço",
+	"hint_touch": "Ande com o joystick  ·  Pule com o botão grande",
+	"name": "Primeiros passos",
+	"notes": "início do mundo. A caixa no buraco abre a saída da direita.",
+	"rotate": false,
+	"rows": [
+		"####################",
+		"#..................#",
+		"#..................#",
+		"#..................#",
+		"#..................#",
+		"#.PP...BB..........Z",
+		"#.PP...BB..........Z",
+		"###########SS#######",
+		"###########SS#######",
+		"####################"
+	],
+	"start_rot": 0,
+	"theme": "raizes",
+	"version": 1
+}

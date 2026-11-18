@@ -3,7 +3,8 @@ extends RefCounted
 ## desfazível. Não conhece mouse nem janela; a interface só chama estas funções.
 ##
 ## Regras que o modelo garante:
-##  - a borda da sala nunca é alterada (só `resize` mexe nela);
+##  - a borda da sala só muda por `resize` e pelas saídas (X e Z, modo mundo): fora dos cantos, uma
+##    casa da borda pode virar saída, e apagar a saída devolve a parede;
 ##  - peças de 2x2 (coelho, caixa, compartimentos) entram e saem inteiras;
 ##  - só existe uma porta: desenhar outra apaga a anterior;
 ##  - tudo que muda a grade entra no histórico como um traço.
@@ -81,7 +82,7 @@ func _as_stroke(fn: Callable) -> void:
 
 
 func _put(c: int, r: int, ch: String) -> void:
-	if not _editable(c, r):
+	if not _editable(c, r) and not (_border(c, r) and (ch == "#" or is_exit(ch))):
 		return
 	var k := Vector2i(c, r)
 	var old: String = data.cell(c, r)
@@ -90,6 +91,20 @@ func _put(c: int, r: int, ch: String) -> void:
 	else:
 		_stroke[k] = [old, ch]
 	data.set_cell(c, r, ch)
+
+
+## Uma casa da borda, fora dos cantos: onde cabe uma saída (X ou Z).
+func _border(c: int, r: int) -> bool:
+	var w: int = data.width()
+	var h: int = data.height()
+	if c < 0 or r < 0 or c >= w or r >= h or _editable(c, r):
+		return false
+	var corner := (c == 0 or c == w - 1) and (r == 0 or r == h - 1)
+	return not corner
+
+
+static func is_exit(ch: String) -> bool:
+	return ch == "X" or ch == "Z"
 
 
 func _editable(c: int, r: int) -> bool:
@@ -186,7 +201,13 @@ func _clear_owner(c: int, r: int) -> void:
 
 ## Põe uma peça de um tile (ou apaga, com "."). Peças de 2x2 e porta têm funções próprias.
 func paint(c: int, r: int, ch: String) -> void:
-	if not _editable(c, r) or is_block(ch) or ch == "D":
+	if _border(c, r):
+		# na borda: só saídas; apagar (ou desenhar outra peça) numa saída devolve a parede
+		var nv := ch if is_exit(ch) else "#"
+		if nv != data.cell(c, r) and (is_exit(ch) or is_exit(data.cell(c, r))):
+			_as_stroke(func(): _put(c, r, nv))
+		return
+	if is_exit(ch) or not _editable(c, r) or is_block(ch) or ch == "D":
 		return
 	_as_stroke(func():
 		_clear_owner(c, r)

@@ -16,6 +16,8 @@ const NAMES := {
 	"P": "Coelho (2x2)", "B": "Caixa (2x2)", "S": "Compartimento da porta (2x2)", "D": "Porta",
 	"+": "Bateria (1 a 3 por fase)", "L": "Alavanca (2x2): puxa sozinha com todas as baterias",
 	"H": "Calha (2x2): solta a caixa quando a alavanca é puxada",
+	"X": "Saída livre (na borda): leva à sala vizinha no mapa do mundo",
+	"Z": "Saída trancada (na borda): abre quando a sala é resolvida (o compartimento da porta)",
 }
 
 static var _art = null
@@ -115,6 +117,16 @@ static func draw(ci: CanvasItem, g: String, r: Rect2, ctx := {}) -> void:
 				ci.draw_rect(Rect2(Vector2(r.end.x - s * 0.18, y - s * 0.15), Vector2(s * 0.18, s * 0.3)), Color(1, 1, 1, a))
 		"D":
 			ci.draw_rect(r, Color(RoomScript.C_DOOR_OPEN, 0.28 * a))
+		"X":
+			ci.draw_rect(r, Color(RoomScript.C_DOOR_OPEN, 0.35 * a))
+			ci.draw_rect(r, Color(RoomScript.C_DOOR_OPEN, a), false, 1.0)
+			_label(ci, "X", r, Color(RoomScript.C_DOOR_OPEN, a))
+		"Z":
+			ci.draw_rect(r, Color(RoomScript.C_DOOR_LOCKED_DARK, a))
+			for k in 3:
+				var x := r.position.x + s * (0.2 + 0.3 * k)
+				ci.draw_line(Vector2(x, r.position.y), Vector2(x, r.end.y), Color(RoomScript.C_DOOR_LOCKED, a), 1.0)
+			_label(ci, "Z", r, Color(1, 1, 1, 0.8 * a))
 		"1", "2", "3", "4", "5", "6", "7", "8", "9":
 			ci.draw_rect(r, Color(RoomScript.C_GATE_DARK, a))
 			ci.draw_rect(Rect2(r.position + Vector2(0, s * 0.25), Vector2(s, 1)), Color(RoomScript.C_GATE, a))

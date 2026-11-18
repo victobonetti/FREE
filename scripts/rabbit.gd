@@ -327,11 +327,17 @@ func _update_rope(room, jump_pressed: bool, climb: float) -> void:
 
 func _grounded(room) -> bool:
 	var r := Rect2i(pos + Vector2i(0, 1), Vector2i(SIZE, SIZE))
-	return room.solid_static(r) or room.box_at(r, null) != null
+	room.query_rabbit = true
+	var g: bool = room.solid_static(r) or room.box_at(r, null) != null
+	room.query_rabbit = false
+	return g
 
 
 func _free(room, r: Rect2i) -> bool:
-	return not room.solid_static(r) and room.box_at(r, null) == null
+	room.query_rabbit = true   # só o coelho passa pelo vão das saídas (modo mundo)
+	var f: bool = not room.solid_static(r) and room.box_at(r, null) == null
+	room.query_rabbit = false
+	return f
 
 
 func _move_x(room, amount: float) -> void:
@@ -342,7 +348,10 @@ func _move_x(room, amount: float) -> void:
 	while steps != 0:
 		var nxt := Rect2i(pos + Vector2i(s, 0), Vector2i(SIZE, SIZE))
 		var blocked := false
-		if room.solid_static(nxt):
+		room.query_rabbit = true   # só o coelho passa pelo vão das saídas (modo mundo)
+		var wall: bool = room.solid_static(nxt)
+		room.query_rabbit = false
+		if wall:
 			blocked = true
 		else:
 			var b = room.box_at(nxt, null)

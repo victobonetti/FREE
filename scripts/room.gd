@@ -7,6 +7,7 @@ extends Node2D
 ## desenho faz a animação (de -90° até 0°). Assim a física nunca precisa saber de orientação.
 
 signal completed
+signal exited(side: int, vel: Vector2)   # modo mundo: o coelho saiu por uma saída (lado como desenhado: 0 N, 1 L, 2 S, 3 O)
 ## "jump" | "death" | "win" | "sensor_on" | "sensor_off" | "gate_open" | "gate_close" | "platform"
 ## | "rope" (agarrou a corda) | "splash" (caiu na água)
 signal sfx(name: String)
@@ -62,6 +63,11 @@ const INVERSE_GATES := "¹²³⁴⁵⁶⁷⁸⁹"   # comporta inversa: fecha qu
 const GATE_SOCKETS := "abcdefghi"  # compartimento "a" abre a comporta "1", e assim por diante
 const PLATFORM_CHARS := "=}_{"     # barra sólida (bloqueia de todos os lados): seta para cima, direita, baixo, esquerda
 const PASS_CHARS := "↑→↓←"         # barra de passagem (mão única: atravessa por baixo, pousa por cima), D93
+# Saídas na parede de fora (modo mundo, D100): X livre, Z trancada (abre como a porta: caixa no
+# compartimento, sem água). Uma por lado; levam à sala vizinha desse lado no mapa do mundo.
+const EXIT_FREE := "X"
+const EXIT_LOCKED := "Z"
+const EXIT_DEPTH := 48             # quanto o coelho pode sair da sala pela abertura (px)
 const WATER_REACH := [1, 2, 4, 8, 16, 32, 64, 128]  # distâncias (px) em que duas colunas trocam água
 const WATER_NU := 0.5          # parcela do desnível que colunas vizinhas igualam por subpasso
 const WATER_NU_FAR := 0.3      # idem para as trocas a distância: dá a velocidade com que a água corre
@@ -266,6 +272,9 @@ const STEP_PX := 11.0          # um passo a cada tantos px andados no chão
 var bubbles: Array = []        # bolhas subindo no líquido (só desenho): {"k": vão, "y", "r", "vy", "ph"}
 var _step_idx := 0
 var query_up := false          # o coelho está testando um passo para cima (a barra de passagem deixa passar)
+var query_rabbit := false      # a consulta de colisão é do coelho (só ele passa pelas saídas)
+var exits: Array = []          # {"side": lado como desenhado, "rect": Rect2i (as células da abertura), "locked", "flooded"}
+var exits_unlocked := false    # as saídas trancadas já abriram (ou a sala já foi resolvida antes: "_solved")
 var _vignette: Texture2D       # escurecimento nas bordas da tela (gerado uma vez)
 var cycle_t := 0         # quadros de simulação desde o início: os conectores em ciclo seguem este relógio
 var plate_on := {}       # canal -> true enquanto um botão de pressão dele está apertado
@@ -477,6 +486,8 @@ func reset() -> void:
 	var water_tiles: Array = []
 	fluid_acid = false
 	batteries.clear()
+	exits.clear()
+	exits_unlocked = bool(def.get("_solved", false))
 	bat_got = 0
 	lever = null
 	chute = null
@@ -512,6 +523,8 @@ func reset() -> void:
 	for i in 300:
 		_update_ropes()
 	_update_sockets()
+	if int(def.get("_entry", -1)) >= 0:
+		_place_at_entry(int(def["_entry"]), def.get("_entry_vel", Vector2.ZERO))
 	look = Vector2.ZERO
 	cam = _cam_target()
 	_init_spin_block()
@@ -1240,6 +1253,9 @@ func _body_can_move(b, st: Vector2i, ignore_rect: Rect2i) -> bool:
 	for p in platforms:
 		if _plat_blocks(p, nxt, st.y < 0):
 			return false
+	for ex in exits:
+		if not exit_open(ex) and overlaps(nxt, ex["rect"]):
+			return false
 	for o in movers:
 		if overlaps(nxt, o["r"]) and o["r"] != ignore_rect and not overlaps(b.rect, o["r"]):
 			return false
@@ -1430,6 +1446,7 @@ func _crush_debris(p: Vector2, dir: int) -> void:
 func _parse(rows: Array, water_tiles: Array) -> void:
 	var visited := {}
 	var door_cells: Array = []
+	var exit_cells: Array = []
 	var gate_cells := {}  # id (negativo: comporta inversa) -> Array[Rect2i]
 	var rope_cells := {}  # Vector2i -> "|" ou "-"
 	for r in gh:
@@ -1461,6 +1478,20 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 				rope_cells[key] = ch
 			elif ch == "D":
 				door_cells.append(key)
+			elif ch == EXIT_FREE or ch == EXIT_LOCKED:
+				var side := -1
+				if r == 0:
+					side = 0
+				elif r == gh - 1:
+					side = 2
+				elif c == 0:
+					side = 3
+				elif c == gw - 1:
+					side = 1
+				if side < 0:
+					tiles[r * gw + c] = 1   # saída fora da parede de fora: vira parede (a validação avisa)
+				else:
+					exit_cells.append([side, cell, ch == EXIT_LOCKED])
 			elif ch >= "1" and ch <= "9":
 				var gid := int(ch)
 				if not gate_cells.has(gid):
@@ -1499,6 +1530,17 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 			hi = Vector2i(maxi(hi.x, k.x), maxi(hi.y, k.y))
 		door = Rect2i(lo * TILE, (hi - lo + Vector2i.ONE) * TILE)
 		has_door = true
+	for side in 4:
+		var rect := Rect2i()
+		var locked := false
+		var any := false
+		for ec in exit_cells:
+			if ec[0] == side:
+				rect = ec[1] if not any else rect.merge(ec[1])
+				locked = locked or ec[2]
+				any = true
+		if any:
+			exits.append({"side": side, "rect": rect, "locked": locked, "flooded": false})
 	_parse_ropes(rows, rope_cells)
 	var ids := gate_cells.keys()
 	ids.sort()
@@ -1643,6 +1685,8 @@ func _rotate_logic(dir: int) -> void:
 		o["rect"] = _rot_rect(o["rect"], dir)
 		o["dir"] = posmod(o["dir"] + dir, 4)
 	belt_acc.clear()
+	for ex in exits:
+		ex["rect"] = _rot_rect(ex["rect"], dir)
 	for an in anchors:
 		an["rect"] = _rot_rect(an["rect"], dir)
 		an["facing"] = posmod(an["facing"] + dir, 4)
@@ -1842,7 +1886,15 @@ func tile_solid_rect(r: Rect2i) -> bool:
 	var x1 := r.position.x + r.size.x - 1
 	var y1 := r.position.y + r.size.y - 1
 	if x0 < 0 or y0 < 0 or x1 >= pw or y1 >= ph:
-		return true
+		# fora da sala: só o coelho, e só pelo vão de uma saída aberta
+		if not query_rabbit or not _in_exit_corridor(r):
+			return true
+		x0 = maxi(x0, 0)
+		y0 = maxi(y0, 0)
+		x1 = mini(x1, pw - 1)
+		y1 = mini(y1, ph - 1)
+		if x1 < x0 or y1 < y0:
+			return false
 	for ty in range(y0 >> 3, (y1 >> 3) + 1):
 		for tx in range(x0 >> 3, (x1 >> 3) + 1):
 			if tiles[ty * gw + tx] != 0:
@@ -1850,10 +1902,157 @@ func tile_solid_rect(r: Rect2i) -> bool:
 	return false
 
 
+# ---------------------------------------------------------------- saídas (modo mundo, D100)
+
+## A saída deixa passar? Só com a sala de pé do jeito que foi desenhada (a saída no lado dela): o
+## mapa liga as salas pelos lados desenhados, e girada ela levaria para o lugar errado.
+func exit_open(ex: Dictionary) -> bool:
+	if exit_cur_side(ex) != int(ex["side"]):
+		return false
+	return not ex["locked"] or (exits_unlocked and not ex["flooded"])
+
+
+## Em que lado da sala de agora a saída está (0 cima, 1 direita, 2 baixo, 3 esquerda).
+func exit_cur_side(ex: Dictionary) -> int:
+	var er: Rect2i = ex["rect"]
+	if er.position.y == 0:
+		return 0
+	if er.end.y == ph:
+		return 2
+	if er.position.x == 0:
+		return 3
+	return 1
+
+
+## O vão por onde o coelho pode sair: a abertura, esticada para fora da sala (e um pouco para dentro).
+func _exit_corridor(ex: Dictionary) -> Rect2i:
+	var er: Rect2i = ex["rect"]
+	match exit_cur_side(ex):
+		0:
+			return Rect2i(er.position.x, -EXIT_DEPTH, er.size.x, EXIT_DEPTH + 2 * TILE + 12)
+		2:
+			return Rect2i(er.position.x, ph - 2 * TILE - 12, er.size.x, EXIT_DEPTH + 2 * TILE + 12)
+		3:
+			return Rect2i(-EXIT_DEPTH, er.position.y, EXIT_DEPTH + 2 * TILE + 12, er.size.y)
+	return Rect2i(pw - 2 * TILE - 12, er.position.y, EXIT_DEPTH + 2 * TILE + 12, er.size.y)
+
+
+## O tile logo para dentro da sala, colado na abertura (para ver se a água a cobre).
+func _exit_inner(ex: Dictionary) -> Rect2i:
+	var er: Rect2i = ex["rect"]
+	match exit_cur_side(ex):
+		0:
+			return Rect2i(er.position.x, er.end.y, er.size.x, TILE)
+		2:
+			return Rect2i(er.position.x, er.position.y - TILE, er.size.x, TILE)
+		3:
+			return Rect2i(er.end.x, er.position.y, TILE, er.size.y)
+	return Rect2i(er.position.x - TILE, er.position.y, TILE, er.size.y)
+
+
+func _in_exit_corridor(r: Rect2i) -> bool:
+	for ex in exits:
+		if exit_open(ex) and _exit_corridor(ex).encloses(r):
+			return true
+	return false
+
+
+## Entrando pela saída `side` (como desenhada): o coelho aparece logo para dentro dela, já entrando.
+func _place_at_entry(side: int, vel_in: Vector2) -> void:
+	for ex in exits:
+		if ex["side"] != side:
+			continue
+		var er: Rect2i = ex["rect"]
+		var cx := er.position.x + er.size.x / 2 - 6
+		var cy := er.position.y + er.size.y / 2 - 6
+		var spd := clampf(vel_in.length(), 30.0, 90.0)
+		match exit_cur_side(ex):
+			3:
+				rabbit.pos = Vector2i(er.end.x + 1, er.end.y - Rabbit.SIZE)
+				rabbit.vel = Vector2(spd, 0)
+				rabbit.facing = 1
+			1:
+				rabbit.pos = Vector2i(er.position.x - Rabbit.SIZE - 1, er.end.y - Rabbit.SIZE)
+				rabbit.vel = Vector2(-spd, 0)
+				rabbit.facing = -1
+			0:
+				rabbit.pos = Vector2i(cx, er.end.y + 1)
+				rabbit.vel = Vector2(0, 40)
+			2:
+				# subindo pelo chão: um impulso para cima e para o lado, para não cair de volta no buraco
+				var dirx := 1.0 if er.position.x < pw / 2 else -1.0
+				rabbit.pos = Vector2i(cx, er.position.y - Rabbit.SIZE - 1)
+				rabbit.vel = Vector2(dirx * 70.0, -190.0)
+				rabbit.facing = int(dirx)
+		return
+
+
+## O coelho saiu da sala por uma saída? (o centro dele passou da borda)
+func _check_exit() -> bool:
+	if exits.is_empty():
+		return false
+	var rc := Vector2(rabbit.pos) + Vector2(6, 6)
+	if rc.x >= 0.0 and rc.y >= 0.0 and rc.x <= pw and rc.y <= ph:
+		return false
+	var best: Dictionary = {}
+	var bd := INF
+	for ex in exits:
+		var d := Rect2(ex["rect"]).get_center().distance_to(rc)
+		if d < bd:
+			bd = d
+			best = ex
+	state = "exit"
+	exited.emit(int(best["side"]), rabbit.vel)
+	return true
+
+
+## As saídas na parede: aberta, um vão com batente dourado e uma seta pulsando para fora; trancada,
+## a grade azul com um cadeado (coberta de água, azul-água).
+func _draw_exits() -> void:
+	for ex in exits:
+		var er := Rect2(ex["rect"])
+		var cs := exit_cur_side(ex)
+		var open := exit_open(ex)
+		var vertical := cs == 1 or cs == 3          # abertura numa parede do lado (vão em pé)
+		var col := C_DOOR_OPEN if open else C_DOOR_LOCKED
+		if ex["flooded"]:
+			col = C_WATER_TOP
+		var outward: Vector2 = [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][cs]
+		if open:
+			draw_rect(er, Color(C_DOOR_OPEN, 0.10 + 0.05 * sin(frame * 0.1)))
+			var k := float(frame % 40) / 40.0
+			var c := er.get_center() + outward * (k * 6.0 - 3.0)
+			var side_v := Vector2(-outward.y, outward.x)
+			var ac := Color(C_DOOR_OPEN, 0.7 * sin(k * PI))
+			draw_line(c - outward * 2.0 + side_v * 3.0, c + outward * 1.0, ac, 1.0)
+			draw_line(c - outward * 2.0 - side_v * 3.0, c + outward * 1.0, ac, 1.0)
+		else:
+			draw_rect(er, C_DOOR_LOCKED_DARK if not ex["flooded"] else Color(C_WATER, 0.8))
+			var n := int((er.size.y if vertical else er.size.x) / 3.0)
+			for i in range(1, n):
+				if vertical:
+					draw_rect(Rect2(er.position.x, er.position.y + i * 3, er.size.x, 1), col)
+				else:
+					draw_rect(Rect2(er.position.x + i * 3, er.position.y, 1, er.size.y), col)
+			var lc := er.get_center()
+			draw_rect(Rect2(lc - Vector2(1.5, 0.5), Vector2(3, 3)), C_DOOR_OPEN if door_flash == 0 else Color.WHITE)
+			draw_arc(lc + Vector2(0, -0.5), 1.5, PI, TAU, 6, C_DOOR_OPEN, 1.0)
+		# batentes nas duas pontas da abertura
+		if vertical:
+			draw_rect(Rect2(er.position.x, er.position.y - 2, er.size.x, 2), col)
+			draw_rect(Rect2(er.position.x, er.end.y, er.size.x, 2), col)
+		else:
+			draw_rect(Rect2(er.position.x - 2, er.position.y, 2, er.size.y), col)
+			draw_rect(Rect2(er.end.x, er.position.y, 2, er.size.y), col)
+
+
 ## Paredes, comportas fechadas e plataformas sólidas. A porta nunca bloqueia ninguém.
 func solid_static(r: Rect2i) -> bool:
 	if tile_solid_rect(r):
 		return true
+	for ex in exits:
+		if not exit_open(ex) and overlaps(r, ex["rect"]):
+			return true
 	for g in gates:
 		if g["closed"]:
 			for gr in g["rects"]:
@@ -1991,6 +2190,8 @@ func step(inp: Dictionary) -> void:
 	_update_fans()
 	rabbit.update(self, inp)
 	if state != "play":
+		return
+	if _check_exit():
 		return
 	if rabbit.ev_jump:
 		_dust(3, 30.0)
@@ -2195,6 +2396,15 @@ func _update_sockets() -> void:
 	if open != door_open:
 		door_open = open
 		door_flash = 14
+	if not exits.is_empty():
+		if not exits_unlocked and (group_filled(0) or def.get("door_open", false)):
+			exits_unlocked = true
+			door_flash = 14
+			if state == "play":
+				sfx.emit("gate_open")
+		for ex in exits:
+			# água encostada na saída trancada a mantém fechada ("com água, a porta se fecha")
+			ex["flooded"] = ex["locked"] and water_frac(_exit_inner(ex)) >= DOOR_FLOOD
 
 
 ## Todos os compartimentos do grupo têm caixa? (grupo 0 = porta; sem compartimentos = não)
@@ -3247,6 +3457,7 @@ func _draw() -> void:
 		_draw_door_beam()
 
 	_draw_walls()
+	_draw_exits()
 	_draw_conveyors()
 	_draw_gates()
 	_draw_platforms()

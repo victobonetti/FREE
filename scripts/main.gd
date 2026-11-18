@@ -8,6 +8,8 @@ const Levels := preload("res://scripts/levels.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const InputSetup := preload("res://scripts/input_setup.gd")
 const IntroScript := preload("res://scripts/intro.gd")
+const World := preload("res://scripts/world.gd")
+const WorldMap := preload("res://scripts/world_map.gd")
 const LevelEditor := preload("res://scripts/editor/editor.gd")
 const LevelData := preload("res://scripts/level_data.gd")
 const LevelStore := preload("res://scripts/level_store.gd")
@@ -70,7 +72,13 @@ var belt_player: AudioStreamPlayer
 var alarm_t := 0
 var rec_runs: Array = []    # comandos gravados no teste do editor (replay)
 var rec_state := {}         # estado de partida dos atores, para o replay
-var custom := ""            # "", "editor" (teste a partir do editor) ou "list" (fase da lista)
+var custom := ""            # "", "editor" (teste a partir do editor), "list" (fase da lista), "sandbox" ou "world"
+# Modo mundo (teste metroidvania, D100)
+var world: Dictionary = {}
+var world_room := ""
+var world_visited := {}
+var world_solved := {}
+var world_map: Node2D
 var list_label: Label       # tela "Minhas fases"
 var list_items: Array = []
 var list_sel := 0
@@ -749,6 +757,7 @@ func _show_intro() -> void:
 		_stop_music()
 		_load_room(i))
 	intro.sandbox_picked.connect(_play_sandbox)
+	intro.world_picked.connect(play_world)
 
 
 ## A sala em que a abertura termina: o coelho anda até a porta para começar o nível 1.
@@ -779,6 +788,7 @@ func _spawn_room(def: Dictionary, i: int, title_text: String) -> void:
 	add_child(r)
 	r.setup(def)
 	r.completed.connect(_on_completed)
+	r.exited.connect(_on_room_exited)
 	r.sfx.connect(_play_sfx)
 	r.music_request.connect(_play_music)
 	r.impact.connect(_on_impact)
@@ -901,6 +911,9 @@ func _tick() -> void:
 	if custom == "editor":
 		Replay.record(rec_runs, inp)   # teste do editor: grava para o replay
 	room.step(inp)
+	if custom == "world" and room != null and room.exits_unlocked and not world_solved.has(world_room):
+		world_solved[world_room] = true
+		room.def["_solved"] = true   # morrer depois de abrir não tranca de novo
 
 
 # ---------------------------------------------------------------- editor e fases do jogador
@@ -966,7 +979,9 @@ func _end_custom(won: bool) -> void:
 	_clear_scene()
 	hint.text = ""
 	title.text = ""
-	if from == "sandbox":
+	if from == "sandbox" or from == "world":
+		if world_map != null:
+			world_map.visible = false
 		_show_intro()
 		return
 	if from == "editor":
@@ -976,6 +991,59 @@ func _end_custom(won: bool) -> void:
 		editor.play_finished(won, rec_runs, rec_state)
 	else:
 		show_list()
+
+
+# ---------------------------------------------------------------- modo mundo (teste metroidvania, D100)
+
+## Começa o mundo pela sala inicial (levels/world/mundo.json).
+func play_world() -> void:
+	_stop_music()
+	world = World.load_world()
+	if world.is_empty() or str(world.get("start", "")) == "":
+		return
+	world_visited.clear()
+	world_solved.clear()
+	if world_map == null:
+		world_map = WorldMap.new()
+		ui_layer.add_child(world_map)
+	world_map.world = world
+	world_map.sides.clear()
+	world_map.visible = true
+	_world_enter(str(world["start"]), -1, Vector2.ZERO)
+
+
+## Entra na sala `id` pela saída do lado `entry` (-1: no começo, no "P" da sala).
+func _world_enter(id: String, entry: int, vel: Vector2) -> void:
+	var def := World.load_room_def(id)
+	if def.is_empty():
+		_end_custom(false)
+		return
+	def["_entry"] = entry
+	def["_entry_vel"] = vel
+	def["_solved"] = world_solved.has(id)
+	custom = "world"
+	world_room = id
+	world_visited[id] = true
+	_spawn_room(def, -1, "")
+	world_map.current = id
+	world_map.visited = world_visited
+	world_map.screen_w = get_viewport().get_visible_rect().size.x
+
+
+## A sala avisou que o coelho saiu por uma saída. No mundo: vai para a vizinha desse lado. Fora
+## dele (sandbox, teste do editor), sair por uma saída vale como chegar à porta.
+func _on_room_exited(side: int, vel: Vector2) -> void:
+	if custom != "world":
+		_on_completed()
+		return
+	if room != null and room.exits_unlocked:
+		world_solved[world_room] = true
+	var nb := World.neighbor(world, world_room, side)
+	if nb == "":
+		# saída para fora do mapa: fim do teste
+		call_deferred("_end_custom", true)
+		return
+	call_deferred("_world_enter", nb, (side + 2) % 4, vel)
 
 
 ## Build de teste: a sandbox (sala -1, todos os componentes). Esc ou a porta voltam ao início.

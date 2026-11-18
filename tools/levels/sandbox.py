@@ -9,7 +9,7 @@ fluido (a sandbox usa água).
 Da esquerda para a direita, no chão: o botão por tempo que chama o elevador; a comporta e a
 inversa (no alto, ligadas ao compartimento "a"); espinhos; barras sólidas e de passagem; a corda;
 o poço de água (com o ralo no alto); bateria, alavanca e calha; esteira, mola, ventilador e jato
-de vapor; a caixa da porta. No alto: plataforma em ciclo, estampador, catapulta, chapas soltas e a
+de vapor; a caixa da porta. Nas paredes, as saídas do modo mundo: a livre (esquerda) e a trancada (direita). No alto: plataforma em ciclo, estampador, catapulta, chapas soltas e a
 placa de espinhos (num corredor fechado, começa depois de 6 s).
 """
 import sys, os
@@ -78,6 +78,12 @@ lv.block(93, F - 2, "B")
 lv.block(96, F, "S")
 for r in (F - 3, F - 2, F - 1):
     lv.put(100, r, "DD")
+
+# --- saídas na parede (modo mundo, D100): a livre na esquerda, a trancada (abre com a caixa) na
+# direita. Fora do mundo, sair por uma delas vale como chegar à porta.
+for r in (F - 2, F - 1):
+    lv.put(0, r, "X")
+    lv.put(103, r, "Z")
 
 # --- no alto: plataforma em ciclo, estampador, catapulta, chapas soltas
 lv.ledge(20, 24, F - 14)

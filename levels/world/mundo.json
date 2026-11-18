@@ -1,0 +1,47 @@
+{
+	"start": "passos",
+	"rooms": [
+		{
+			"id": "passos",
+			"pos": [
+				0,
+				0
+			]
+		},
+		{
+			"id": "degraus",
+			"pos": [
+				1,
+				0
+			]
+		},
+		{
+			"id": "setas",
+			"pos": [
+				2,
+				0
+			]
+		},
+		{
+			"id": "comporta",
+			"pos": [
+				1,
+				1
+			]
+		},
+		{
+			"id": "giro",
+			"pos": [
+				2,
+				1
+			]
+		},
+		{
+			"id": "toca",
+			"pos": [
+				3,
+				1
+			]
+		}
+	]
+}

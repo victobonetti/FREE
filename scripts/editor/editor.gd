@@ -13,6 +13,8 @@ const Levels := preload("res://scripts/levels.gd")
 const CampaignStore := preload("res://scripts/campaign_store.gd")
 const Replay := preload("res://scripts/replay.gd")
 const ObjectsPanel := preload("res://scripts/editor/objects_panel.gd")
+const WorldPanel := preload("res://scripts/editor/world_panel.gd")
+const World := preload("res://scripts/world.gd")
 const EditModel := preload("res://scripts/editor/edit_model.gd")
 const EditTools := preload("res://scripts/editor/edit_tools.gd")
 const EditorCanvas := preload("res://scripts/editor/editor_canvas.gd")
@@ -38,6 +40,8 @@ var tools: RefCounted
 var canvas: Control
 var current_id := ""                    # arquivo em user://levels, ou "" se ainda não foi salvo
 var campaign_id := ""                   # fase da campanha que está aberta, ou ""
+var world_room := ""                    # sala do mundo aberta (levels/world/rooms), ou "" (D100)
+var world_panel: Window
 var last_replay := {}                   # replay da última vitória (vale só para a versão vencida)
 var playing := false
 
@@ -139,6 +143,8 @@ func _build() -> void:
 		top.add_child(VSeparator.new())
 		_campaign_btn = _btn(top, "Campanha…", _show_campaign)
 		_campaign_btn.tooltip_text = "Só em desenvolvimento: a história em ordem; canonizar, mudar a ordem, tirar."
+		var wb := _btn(top, "Mundo…", _show_world)
+		wb.tooltip_text = "Só em desenvolvimento: o mapa do mundo (teste metroidvania). Salas ligadas pelas saídas X e Z da borda."
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(spacer)
@@ -227,7 +233,7 @@ func _build_left(left: VBoxContainer) -> void:
 	pal.add_theme_constant_override("h_separation", 2)
 	pal.add_theme_constant_override("v_separation", 2)
 	left.add_child(pal)
-	var all := ["#", "~", "%", "o", "+", "L", "H", "^", ">", "v", "<", "=", "}", "_", "{", "↑", "→", "↓", "←", "|", "-", "D",
+	var all := ["#", "~", "%", "o", "+", "L", "H", "^", ">", "v", "<", "=", "}", "_", "{", "↑", "→", "↓", "←", "|", "-", "D", "X", "Z",
 		"P", "B", "S", "1", "2", "3", "4", "5", "6", "7", "8", "9",
 		"¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹",
 		"a", "b", "c", "d", "e", "f", "g", "h", "i"]
@@ -441,6 +447,7 @@ func new_level() -> void:
 
 func load_level(level: RefCounted, id: String, campaign := "") -> void:
 	campaign_id = campaign
+	world_room = ""
 	last_replay = CampaignStore.load_replay(campaign) if campaign != "" else {}
 	if model == null:
 		model = EditModel.new(level)
@@ -682,6 +689,17 @@ func _on_save() -> void:
 	if model.data.name.strip_edges() == "":
 		model.data.name = "Sem nome"
 		_name_edit.text = model.data.name
+	if world_room != "":
+		# sala do mundo: grava no arquivo dela (levels/world/rooms)
+		if not World.save_room(world_room, model.data):
+			toast("Não consegui salvar a sala do mundo")
+			return
+		model.dirty = false
+		model.version += 1
+		toast("Sala do mundo salva: %s" % world_room)
+		if world_panel != null and world_panel.visible:
+			world_panel.refresh()
+		return
 	var id: String = LevelStore.save(model.data, current_id)
 	if id == "":
 		toast("Não consegui salvar")
@@ -694,6 +712,7 @@ func _on_save() -> void:
 
 func _on_save_as() -> void:
 	current_id = ""
+	world_room = ""   # "Salvar como" vira fase comum (user://levels)
 	_on_save()
 
 
@@ -783,6 +802,22 @@ func _build_campaign_dialog() -> void:
 	_campaign_info.custom_minimum_size = Vector2(520, 0)
 	box.add_child(_campaign_info)
 	add_child(_dialog_campaign)
+
+
+func _show_world() -> void:
+	if world_panel == null:
+		world_panel = WorldPanel.new()
+		add_child(world_panel)
+		world_panel.setup(self)
+	world_panel.open()
+
+
+## Abre uma sala do mundo no editor: Salvar grava nela.
+func open_world_room(id: String, data: RefCounted) -> void:
+	_confirm_discard(func():
+		load_level(data, "")
+		world_room = id
+		toast("Sala do mundo: %s (Salvar grava nela)" % id))
 
 
 func _show_objects() -> void:

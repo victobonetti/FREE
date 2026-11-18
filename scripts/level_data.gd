@@ -18,7 +18,7 @@ const MAX_TIME := 30.0
 const MIN_W := 6
 const MIN_H := 6
 const INVERSE_GATES := "¹²³⁴⁵⁶⁷⁸⁹"   # comporta inversa 1..9
-const GLYPHS := "#.PBSD123456789abcdefghi=}_{↑→↓←^>v<~%o|-+LH¹²³⁴⁵⁶⁷⁸⁹"
+const GLYPHS := "#.PBSD123456789abcdefghi=}_{↑→↓←^>v<~%o|-+LHXZ¹²³⁴⁵⁶⁷⁸⁹"
 const BLOCK_GLYPHS := "PBSLHabcdefghi"   # peças de 2x2
 const GATE_SOCKETS := "abcdefghi"
 const MAX_BATTERIES := 3
@@ -271,7 +271,7 @@ func validate() -> Array:
 				out.append({"erro": true, "msg": "Peça desconhecida '%s'." % ch, "pos": Vector2i(c, r)})
 				return out
 			var edge := r == 0 or r == h - 1 or c == 0 or c == w - 1
-			if edge and ch != "#":
+			if edge and ch != "#" and ch != "X" and ch != "Z":
 				out.append({"erro": true, "msg": "A borda da sala tem de ser parede.", "pos": Vector2i(c, r)})
 				return out
 
@@ -325,9 +325,21 @@ func validate() -> Array:
 				dcount += 1
 				lo = Vector2i(mini(lo.x, c), mini(lo.y, r))
 				hi = Vector2i(maxi(hi.x, c), maxi(hi.y, r))
-	if dcount == 0:
+	# saídas na parede (modo mundo, D100): só no contorno; com elas, a porta é opcional
+	var exits_by_side := {}
+	for r in h:
+		for c in w:
+			var g := cell(c, r)
+			if g == "X" or g == "Z":
+				var edge := r == 0 or r == h - 1 or c == 0 or c == w - 1
+				if not edge:
+					out.append({"erro": true, "msg": "A saída (X ou Z) precisa ficar na parede de fora.", "pos": Vector2i(c, r)})
+				else:
+					var sd := "cima" if r == 0 else ("baixo" if r == h - 1 else ("esquerda" if c == 0 else "direita"))
+					exits_by_side[sd] = true
+	if dcount == 0 and exits_by_side.is_empty():
 		out.append({"erro": true, "msg": "Falta a porta.", "pos": no_pos})
-	elif dcount != (hi.x - lo.x + 1) * (hi.y - lo.y + 1):
+	elif dcount > 0 and dcount != (hi.x - lo.x + 1) * (hi.y - lo.y + 1):
 		out.append({"erro": true, "msg": "A porta tem de ser um retângulo inteiro.", "pos": lo})
 
 	# comportas, compartimentos e caixas

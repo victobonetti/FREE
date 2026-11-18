@@ -76,6 +76,7 @@ func _init() -> void:
 	test_pass_bars()
 	test_hold_jump()
 	test_sandbox()
+	test_world()
 	test_mecha_intro()
 	test_mecha_dash()
 	test_mecha_homing()
@@ -3226,3 +3227,63 @@ func test_sandbox() -> void:
 	load_def(d)
 	idle(120)
 	check(room.state == "play", "a sandbox começa e o coelho fica vivo parado")
+
+
+## Modo mundo (D100): o mapa fecha (toda saída tem a vizinha com a saída de volta), as salas validam,
+## entrar por cada saída não mata nem sai de novo sozinho, a saída trancada segura até resolver, e
+## sair emite o lado certo.
+func test_world() -> void:
+	print("mundo: salas ligadas pelas saídas")
+	var World = load("res://scripts/world.gd")
+	var w: Dictionary = World.load_world()
+	check(not w.is_empty(), "levels/world/mundo.json existe")
+	check(World.problems(w).is_empty(), "o mapa do mundo fecha (%s)" % str(World.problems(w)))
+	for r in World.rooms(w):
+		var id := str(r["id"])
+		var data: RefCounted = World.load_room_data(id)
+		check(data != null and _msgs(data, true) == "", "%s valida (%s)" % [id, _msgs(data, true) if data != null else "?"])
+		for side in World.exit_sides(data.rows):
+			if side == 2:
+				continue   # as saídas do chão são quedas: ninguém entra subindo por elas
+			var d: Dictionary = World.load_room_def(id)
+			d["_entry"] = side
+			d["_entry_vel"] = Vector2(60, 0)
+			load_def(d)
+			var out := [-1]
+			room.exited.connect(func(sd, _v): out[0] = sd)
+			idle(120)
+			check(room.state != "dead" and out[0] == -1, "%s: entrar pela %s não mata nem sai (estado %s, saiu %d)" % [id, World.SIDE_NAMES[side], room.state, out[0]])
+	# a trancada segura até a sala ser resolvida; aberta, sair à direita emite o lado 1
+	load_def({"rows": [
+		"##########",
+		"#........#",
+		"#........#",
+		"#.PP.....Z",
+		"#.PP.....Z",
+		"##########"], "rotate": false})
+	var got := [-1]
+	room.exited.connect(func(sd, _v): got[0] = sd)
+	walk_until(1.0, func(): return got[0] != -1, 400)
+	check(got[0] == -1 and cx() < room.pw - 8, "a saída trancada segura o coelho")
+	room.exits_unlocked = true
+	walk_until(1.0, func(): return got[0] != -1, 400)
+	check(got[0] == 1 and room.state == "exit", "aberta, sair pela direita emite o lado 1 (%d)" % got[0])
+	# a saída livre do chão (o vão dos Degraus): cair nele emite o lado 2
+	var d3: Dictionary = World.load_room_def("degraus")
+	d3["_entry"] = 3
+	load_def(d3)
+	var got3 := [-1]
+	room.exited.connect(func(sd, _v): got3[0] = sd)
+	room.rabbit.pos = Vector2i(15 * 8 + 2, 9 * 8)   # logo acima do vão
+	idle(90)
+	check(got3[0] == 2, "cair no vão do chão sai por baixo (%d)" % got3[0])
+	# girada, a saída não deixa passar (o mapa liga os lados desenhados)
+	var d4: Dictionary = World.load_room_def("giro")
+	d4["_solved"] = true
+	load_def(d4)
+	check(room.exit_open(room.exits[1]) or room.exit_open(room.exits[0]), "resolvida, a sala abre as saídas")
+	room._rotate_logic(1)
+	var any_open := false
+	for ex in room.exits:
+		any_open = any_open or room.exit_open(ex)
+	check(not any_open, "com a sala girada, nenhuma saída deixa passar")
