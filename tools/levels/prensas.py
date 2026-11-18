@@ -1,61 +1,54 @@
-"""Fase 3 do ato 2: Prensas e vapor (28x13, 2 baterias). Refeita no D105: uma tela, foco no giro.
+"""Fase 3 do ato 2: Prensas e vapor (36x14, 2 baterias). Refeita no D105 (2ª versão): uma ideia só.
 
-O botão está no teto. Empurra-se a caixa até o rebaixo do chão, bem embaixo dele, e gira-se 180°: o
-rebaixo segura a caixa no meio do giro e ela cai em cima do botão, que abre a comporta da bateria (e
-fica aberta). Depois, a prensa (no ritmo) guarda a segunda bateria, e um jato de vapor, a passagem.
+A prensa fecha a passagem para o resto da sala e só sobe com o botão do chão apertado. A caixa está
+numa prateleira alta, fora do alcance. Girando a sala para a direita, a caixa escorrega pela
+prateleira até a divisória; quando a sala volta, ela cai no rebaixo do botão, bem na frente da prensa,
+e a prensa sobe. Do outro lado, um jato de vapor no ritmo antes da porta.
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from levelkit import Level
 
-lv = Level("prensas", "Prensas e vapor", 28, 13,
-           hint="O botão está no teto: ponha a caixa embaixo dele e vire a sala",
-           notes="Ato 2, fase 3 (D105). Uma tela. Caixa no rebaixo embaixo do botão do teto; girar 180° derruba a "
-                 "caixa no botão, que abre a comporta da bateria. A prensa no ritmo guarda a outra bateria e um "
-                 "jato de vapor, a passagem.",
+lv = Level("prensas", "Prensas e vapor", 36, 14,
+           hint="A prensa só sobe com o botão apertado. Gire: a caixa escorrega até ele",
+           notes="Ato 2, fase 3 (D105, 2ª versão). A prensa fecha a passagem e sobe com o botão do chão apertado. A "
+                 "caixa está numa prateleira alta; girando para a direita, ela escorrega até a divisória e, na volta "
+                 "da sala, cai no botão. Depois, um jato de vapor no ritmo antes da porta.",
            extra={"music": "res://music/industrial-theme.mp3"})
 lv.ascii([
-    "############################",
-    "#...+..................HH..#",
-    "#......................HH..#",
-    "######.....................#",
-    "#..........................#",
-    "#..........................#",
-    "#.LL.....................DD#",
-    "#.LL.....................DD#",
-    "#......PPBB..............DD#",
-    "#.....#PPBB...+..........DD#",
-    "###########..##########SS###",
-    "#######################SS###",
-    "############################",
+    "####################################",
+    "#..........LL....##...........HH...#",
+    "#......BB..LL....##...........HH...#",
+    "#......BB..........................#",
+    "#.....####.........................#",
+    "#..................................#",
+    "#..................................#",
+    "#................................DD#",
+    "#................................DD#",
+    "#PP..............................DD#",
+    "#PP.#................+......+....DD#",
+    "###############..#############SS####",
+    "###############..#############SS####",
+    "####################################",
 ])
-lv.add("plates", {"rect": [11, 1, 2], "ch": 0})
-lv.add("movers", {"ch": 0, "off": [6, 1, 1, 2], "on": [6, 3], "speed": 90.0})
-lv.add("movers", {"ch": 1, "off": [17, 1, 2, 2], "on": [17, 7], "speed": 150.0, "spikes": 2, "cycle": 2.0})
-lv.add("vents", {"rect": [21, 4, 2, 6], "dir": 0, "period": 2.5, "on": 0.8, "phase": 0.0})
+lv.add("plates", {"rect": [15, 12, 2], "ch": 0})
+lv.add("movers", {"ch": 0, "off": [17, 7, 2, 4], "on": [17, 3], "speed": 90.0, "spikes": 2})
+lv.add("vents", {"rect": [25, 4, 2, 7], "dir": 0, "period": 2.5, "on": 0.8, "phase": 0.0})
 cx = lv.cx
-W = 28 * 8
 lv.step("wait", 5)
-lv.step("push_box", 88)
-lv.mark("caixa no rebaixo")
-lv.step("rotate", -1)
-lv.step("rotate", -1)
-lv.step("wait_ground")
-lv.mark("girada")
-lv.step("run_to", W - cx(4))       # sala girada: x espelhado; entra no nicho
-lv.mark("bateria do nicho")
-lv.step("run_to", W - cx(8))       # e sai antes de a sala voltar
+lv.step("rotate", 1)
 lv.step("wait_revert")
-lv.step("wait_ground")
-lv.mark("voltou")
-lv.step("run_to", cx(9) - 2)
-lv.jump_from(1, 14, 15, 10, ledge=False)   # por cima da caixa, que voltou para o rebaixo
-lv.step("run_to", cx(15))
+lv.step("wait_until", "box_settled")
+lv.mark("caixa no botão")
+lv.step("wait", 40)
+lv.step("jump_in_place", 1, 22, *lv.xr(6, 10), 11)
+lv.step("run_to", cx(12))
+lv.step("run_to", cx(21))
+lv.mark("bateria 1")
+lv.step("wait_vent", 0, 60)
+lv.step("run_to", cx(28))
 lv.mark("bateria 2")
 lv.step("wait_cutscene")
-lv.step("wait_mover", 1, "off", 70)
-lv.step("run_to", cx(19) + 4)
-lv.step("wait_vent", 0, 50)
 lv.step("wait_until", "door_open")
 lv.step("to_door")
 lv.save()

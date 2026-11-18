@@ -1,67 +1,53 @@
 {
-	"hint": "O botão está no teto: ponha a caixa embaixo dele e vire a sala",
-	"hint_touch": "O botão está no teto: ponha a caixa embaixo dele e vire a sala",
+	"hint": "A prensa só sobe com o botão apertado. Gire: a caixa escorrega até ele",
+	"hint_touch": "A prensa só sobe com o botão apertado. Gire: a caixa escorrega até ele",
 	"limiter": true,
 	"movers": [
 		{
 			"ch": 0.0,
 			"off": [
-				6.0,
-				1.0,
-				1.0,
-				2.0
+				17.0,
+				7.0,
+				2.0,
+				4.0
 			],
 			"on": [
-				6.0,
+				17.0,
 				3.0
 			],
-			"speed": 90.0
-		},
-		{
-			"ch": 1.0,
-			"cycle": 2.0,
-			"off": [
-				17.0,
-				1.0,
-				2.0,
-				2.0
-			],
-			"on": [
-				17.0,
-				7.0
-			],
-			"speed": 150.0,
+			"speed": 90.0,
 			"spikes": 2.0
 		}
 	],
 	"music": "res://music/industrial-theme.mp3",
 	"name": "Prensas e vapor",
-	"notes": "Ato 2, fase 3 (D105). Uma tela. Caixa no rebaixo embaixo do botão do teto; girar 180° derruba a caixa no botão, que abre a comporta da bateria. A prensa no ritmo guarda a outra bateria e um jato de vapor, a passagem.",
+	"notes": "Ato 2, fase 3 (D105, 2ª versão). A prensa fecha a passagem e sobe com o botão do chão apertado. A caixa está numa prateleira alta; girando para a direita, ela escorrega até a divisória e, na volta da sala, cai no botão. Depois, um jato de vapor no ritmo antes da porta.",
 	"plates": [
 		{
 			"ch": 0.0,
 			"rect": [
-				11.0,
-				1.0,
+				15.0,
+				12.0,
 				2.0
 			]
 		}
 	],
 	"rotate": true,
 	"rows": [
-		"############################",
-		"#...+..................HH..#",
-		"#......................HH..#",
-		"######.....................#",
-		"#..........................#",
-		"#..........................#",
-		"#.LL.....................DD#",
-		"#.LL.....................DD#",
-		"#......PPBB..............DD#",
-		"#.....#PPBB...+..........DD#",
-		"###########..##########SS###",
-		"#######################SS###",
-		"############################"
+		"####################################",
+		"#..........LL....##...........HH...#",
+		"#......BB..LL....##...........HH...#",
+		"#......BB..........................#",
+		"#.....####.........................#",
+		"#..................................#",
+		"#..................................#",
+		"#................................DD#",
+		"#................................DD#",
+		"#PP..............................DD#",
+		"#PP.#................+......+....DD#",
+		"###############..#############SS####",
+		"###############..#############SS####",
+		"####################################"
 	],
 	"start_rot": 0,
 	"theme": "industrial",
@@ -72,14 +58,14 @@
 			"period": 2.5,
 			"phase": 0.0,
 			"rect": [
-				21.0,
+				25.0,
 				4.0,
 				2.0,
-				6.0
+				7.0
 			]
 		}
 	],
 	"verified": true,
-	"verified_hash": "2b5d81e13ffa7dd73b3546a0d8d42f2eaccc5e74cd0e6ad8e3b5369ef88d43a5",
+	"verified_hash": "0561b9ee63a9335f3d59ba58deeeb6f705729aef03146044650bf97a2d594442",
 	"version": 1
 }

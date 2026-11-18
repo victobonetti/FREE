@@ -4161,17 +4161,26 @@ func _sway() -> float:
 
 
 ## A direção de uma coisa pendurada numa face de normal `n`: para baixo da tela (com o balanço),
-## sem entrar na parede (no máximo 75° da normal).
+## sem entrar na parede (no máximo 75° da normal). Numa face que virou chão (sala de cabeça para
+## baixo), ela tomba e fica deitada rente ao chão, como a corda (até 88°).
 func _hang_dir(n: Vector2) -> Vector2:
 	var want := PI / 2.0 + _sway()
 	var na := n.angle()
 	var diff := wrapf(want - na, -PI, PI)
-	return Vector2.from_angle(na + clampf(diff, -1.31, 1.31))
+	var lim := 1.54 if _on_floor_face(n) else 1.31
+	return Vector2.from_angle(na + clampf(diff, -lim, lim))
+
+
+## A face de normal `n` está virada para cima na tela (é chão agora)?
+func _on_floor_face(n: Vector2) -> bool:
+	return n.y < -0.7
 
 
 ## Uma coisa pendurada (raiz, musgo, cabo): nasce reta para fora da face e se curva para baixo.
 func _draw_hanging(start: Vector2, n: Vector2, length: int, col: Color, wiggle: float, seed_v: int) -> Vector2:
 	var hd := _hang_dir(n)
+	if _on_floor_face(n):
+		wiggle *= 0.15   # deitada no chão: quase não mexe
 	var p := start
 	for i in length:
 		var k := minf(1.0, float(i) / 2.5)
@@ -4198,8 +4207,10 @@ func _draw_industrial_decor(c: int, r: int, x: int, y: int) -> void:
 			var hd := _hang_dir(Vector2(dn))
 			var nrm := hd.orthogonal()
 			var lamp_on := (frame / 7 + h) % 97 != 0   # pisca de vez em quando
+			# no chão, deitada: o cone de luz quase some (só o brilho da lâmpada)
+			var cone_a := 0.055 * clampf(hd.dot(Vector2(dn)) * 2.0 + 0.2, 0.0, 1.0)
 			draw_colored_polygon(PackedVector2Array([tip + nrm * 2.0, tip + hd * 34.0 + nrm * 13.0, tip + hd * 34.0 - nrm * 13.0, tip - nrm * 2.0]),
-				Color(1.0, 0.86, 0.55, 0.055 if lamp_on else 0.0))
+				Color(1.0, 0.86, 0.55, cone_a if lamp_on else 0.0))
 			draw_circle(tip + hd * 2.0, 5.0, Color(1.0, 0.86, 0.55, 0.10 if lamp_on else 0.02))
 			draw_rect(Rect2(tip - Vector2(2, 1), Vector2(5, 2)), C_STEEL_LIGHT)
 			draw_rect(Rect2((tip + hd * 2.0).round(), Vector2(1, 1)), Color("ffe6a8") if lamp_on else C_SEAM)

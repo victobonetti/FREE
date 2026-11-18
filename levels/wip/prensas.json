@@ -6,28 +6,29 @@
 	"version": 1,
 	"theme": "industrial",
 	"rows": [
-		"############################",
-		"#...+..................HH..#",
-		"#......................HH..#",
-		"######.....................#",
-		"#..........................#",
-		"#..........................#",
-		"#.LL.....................DD#",
-		"#.LL.....................DD#",
-		"#......PPBB..............DD#",
-		"#.....#PPBB...+..........DD#",
-		"###########..##########SS###",
-		"#######################SS###",
-		"############################"
+		"####################################",
+		"#..........LL....##...........HH...#",
+		"#......BB..LL....##...........HH...#",
+		"#......BB..........................#",
+		"#.....####.........................#",
+		"#..................................#",
+		"#..................................#",
+		"#................................DD#",
+		"#................................DD#",
+		"#PP..............................DD#",
+		"#PP.#................+......+....DD#",
+		"###############..#############SS####",
+		"###############..#############SS####",
+		"####################################"
 	],
-	"hint": "O botão está no teto: ponha a caixa embaixo dele e vire a sala",
-	"hint_touch": "O botão está no teto: ponha a caixa embaixo dele e vire a sala",
-	"notes": "Ato 2, fase 3 (D105). Uma tela. Caixa no rebaixo embaixo do botão do teto; girar 180° derruba a caixa no botão, que abre a comporta da bateria. A prensa no ritmo guarda a outra bateria e um jato de vapor, a passagem.",
+	"hint": "A prensa só sobe com o botão apertado. Gire: a caixa escorrega até ele",
+	"hint_touch": "A prensa só sobe com o botão apertado. Gire: a caixa escorrega até ele",
+	"notes": "Ato 2, fase 3 (D105, 2ª versão). A prensa fecha a passagem e sobe com o botão do chão apertado. A caixa está numa prateleira alta; girando para a direita, ela escorrega até a divisória e, na volta da sala, cai no botão. Depois, um jato de vapor no ritmo antes da porta.",
 	"plates": [
 		{
 			"rect": [
-				11,
-				1,
+				15,
+				12,
 				2
 			],
 			"ch": 0
@@ -37,41 +38,26 @@
 		{
 			"ch": 0,
 			"off": [
-				6,
-				1,
-				1,
-				2
+				17,
+				7,
+				2,
+				4
 			],
 			"on": [
-				6,
+				17,
 				3
 			],
-			"speed": 90.0
-		},
-		{
-			"ch": 1,
-			"off": [
-				17,
-				1,
-				2,
-				2
-			],
-			"on": [
-				17,
-				7
-			],
-			"speed": 150.0,
-			"spikes": 2,
-			"cycle": 2.0
+			"speed": 90.0,
+			"spikes": 2
 		}
 	],
 	"vents": [
 		{
 			"rect": [
-				21,
+				25,
 				4,
 				2,
-				6
+				7
 			],
 			"dir": 0,
 			"period": 2.5,
