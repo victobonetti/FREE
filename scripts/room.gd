@@ -4185,7 +4185,10 @@ func _draw_hanging(start: Vector2, n: Vector2, length: int, col: Color, wiggle: 
 ## Fábrica: lâmpadas penduradas (cabo que balança, cone de luz), correntes e listras de aviso.
 ## Penduradas no teto da fase como foi desenhada; depois de um giro, pendem para baixo da tela.
 func _draw_industrial_decor(c: int, r: int, x: int, y: int) -> void:
-	var h := absi((c * 2654435761) ^ (r * 40503))
+	# o hash sai da célula na fase como foi desenhada: girar não muda onde ficam as lâmpadas
+	# (antes saía da célula de agora, e a cada giro lâmpadas sumiam e apareciam em outras)
+	var oc := _orig_cell(c, r)
+	var h := absi((oc.x * 2654435761) ^ (oc.y * 40503))
 	var up := _orig_up()
 	var dn := -up
 	if _cell_empty(c + dn.x, r + dn.y):
@@ -4285,6 +4288,12 @@ func _solid_at(c: int, r: int) -> bool:
 ## Da fase como foi desenhada para a sala de agora (depois dos giros). O fundo do meio é pintado
 ## nas coordenadas da fase como foi desenhada e desenhado com esta transformação: gira junto com a
 ## sala, como as paredes, em vez de ser recalculado (e pular) a cada giro.
+## A célula (c, r) da sala de agora, na fase como foi desenhada.
+func _orig_cell(c: int, r: int) -> Vector2i:
+	var p: Vector2 = _orig_xform().affine_inverse() * Vector2(c * TILE + TILE / 2.0, r * TILE + TILE / 2.0)
+	return Vector2i(floori(p.x / TILE), floori(p.y / TILE))
+
+
 func _orig_xform() -> Transform2D:
 	match posmod(orientation, 4):
 		1:
