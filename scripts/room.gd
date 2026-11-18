@@ -525,6 +525,7 @@ func reset() -> void:
 	_update_sockets()
 	_update_mechanisms(true)
 	_settle_water()
+	_spawn_snails()
 	for i in 300:
 		_update_ropes()
 	_update_sockets()
@@ -1726,6 +1727,12 @@ func _rotate_logic(dir: int) -> void:
 	belt_acc.clear()
 	for ex in exits:
 		ex["rect"] = _rot_rect(ex["rect"], dir)
+	for sn in snails:
+		# o caramujo se solta: cai na gravidade nova (e quica nos cogumelos)
+		sn["pos"] = _rot_point(sn["pos"], dir)
+		sn["state"] = "fall"
+		sn["vel"] = Vector2(snail_rng.randf_range(-20.0, 20.0), 0.0)
+		sn["bounces"] = 0
 	for an in anchors:
 		an["rect"] = _rot_rect(an["rect"], dir)
 		an["facing"] = posmod(an["facing"] + dir, 4)
@@ -2272,6 +2279,7 @@ func step(inp: Dictionary) -> void:
 	if state != "play":
 		return
 	_acid_bubbles()
+	_update_snails()
 	_update_crumbles()
 	_update_crushers()
 	_update_danger()
@@ -3505,6 +3513,7 @@ func _draw() -> void:
 	_draw_fans()
 	_draw_vents()
 	_draw_movers()
+	_draw_snails()
 	_draw_crumbles()
 	_draw_plates()
 	_draw_drains()
@@ -3636,6 +3645,142 @@ func _draw_movers() -> void:
 			for q in 2:
 				var cx := mr.position.x + mr.size.x * (0.3 + 0.4 * q)
 				draw_polyline(PackedVector2Array([Vector2(cx - 2, mr.position.y + mr.size.y - 2), Vector2(cx, mr.position.y + mr.size.y - 4), Vector2(cx + 2, mr.position.y + mr.size.y - 2)]), C_PAINT, 1.0)
+
+
+# ---------------------------------------------------------------- caramujos (fungário, só enfeite, D111)
+
+var snails: Array = []
+var snail_rng := RandomNumberGenerator.new()
+const SNAIL_SPEED := 3.0
+const SNAIL_GRAV := 520.0
+
+
+## Uns caramujos andando no chão do fungário, perto dos cogumelos. Não interferem no jogo.
+func _spawn_snails() -> void:
+	snails.clear()
+	snail_rng.seed = 7331 + gw * 31 + gh
+	if theme != "fungos":
+		return
+	var cands: Array = []
+	for r in range(1, gh - 1):
+		for c in range(1, gw - 1):
+			if tiles[r * gw + c] != 0 and tiles[(r - 1) * gw + c] == 0 and _cell_empty(c, r - 1):
+				var h := absi((c * 2654435761) ^ (r * 40503))
+				if h % 4 == 0 and not _snail_bad(Vector2(c * TILE + 4, r * TILE - 1)):
+					cands.append(Vector2(c * TILE + 4, r * TILE))
+	var n := mini(cands.size(), 2 + gw / 12)
+	for i in n:
+		var k := (i * 7919 + 13) % cands.size()
+		var p: Vector2 = cands[k]
+		cands.remove_at(k)
+		snails.append({"pos": p, "vel": Vector2.ZERO, "state": "walk", "dir": 1.0 if i % 2 == 0 else -1.0,
+			"spin": 0.0, "bounces": 0, "t": snail_rng.randi_range(0, 200)})
+		if cands.is_empty():
+			break
+
+
+## Um ponto com espinho (o caramujo não anda por cima).
+func _snail_bad(p: Vector2) -> bool:
+	for sp in spikes:
+		if Rect2(sp["rect"]).grow(1.0).has_point(p):
+			return true
+	return false
+
+
+func _snail_solid(p: Vector2) -> bool:
+	if p.x < 0.0 or p.y < 0.0 or p.x >= pw or p.y >= ph:
+		return true
+	var c := int(p.x) >> 3
+	var r := int(p.y) >> 3
+	if tiles[r * gw + c] != 0:
+		return true
+	for m in movers:
+		if Rect2(m["r"]).has_point(p):
+			return true
+	return false
+
+
+func _snail_on_shroom(p: Vector2) -> bool:
+	for m in movers:
+		if m.get("sprout", false) and Rect2(m["r"]).grow(2.0).has_point(p):
+			return true
+	return false
+
+
+func _update_snails() -> void:
+	for sn in snails:
+		sn["t"] += 1
+		var p: Vector2 = sn["pos"]
+		match sn["state"]:
+			"walk":
+				var dx: float = sn["dir"] * SNAIL_SPEED * DT
+				var ahead := p + Vector2(sn["dir"] * 3.0, -2.0)
+				var under := p + Vector2(sn["dir"] * 3.0, 1.0)
+				if _snail_solid(ahead) or not _snail_solid(under) or _snail_bad(under + Vector2(0, -2)):
+					sn["dir"] = -sn["dir"]
+				else:
+					p.x += dx
+				if not _snail_solid(p + Vector2(0, 1)):
+					sn["state"] = "fall"
+					sn["vel"] = Vector2.ZERO
+			"fall":
+				var v: Vector2 = sn["vel"]
+				v.y += SNAIL_GRAV * DT
+				sn["spin"] += v.x * 0.01 + (0.25 if sn["bounces"] > 0 else 0.05)
+				var np := p + v * DT
+				if _snail_solid(np + Vector2(0, 1)) and v.y > 0.0:
+					# bateu: nos primeiros quiques (e sempre num cogumelo) sai voando de novo
+					var shroom := _snail_on_shroom(np + Vector2(0, 2))
+					if sn["bounces"] < 2 or shroom:
+						sn["bounces"] += 1
+						var up: float = 260.0 if shroom else 150.0 - 40.0 * float(sn["bounces"])
+						v = Vector2(snail_rng.randf_range(-90.0, 90.0), -up)
+						if shroom or sn["bounces"] == 1:
+							particles.append({"pos": np, "vel": Vector2(0, -20), "life": 10, "col": C_FUNGI[1], "grav": 0.0, "ring": 2.0})
+						if sn["bounces"] > 6:
+							v.y = 0.0
+							sn["state"] = "walk"
+					else:
+						v = Vector2.ZERO
+						sn["state"] = "walk"
+						sn["spin"] = 0.0
+						np.y = floorf((np.y + 1.0) / TILE) * TILE
+				elif _snail_solid(np + Vector2(signf(v.x) * 3.0, -2.0)):
+					v.x = -v.x * 0.5
+					np.x = p.x
+				p = np
+				sn["vel"] = v
+		p.x = clampf(p.x, 2.0, pw - 2.0)
+		p.y = clampf(p.y, 2.0, ph - 1.0)
+		sn["pos"] = p
+
+
+func _draw_snails() -> void:
+	for sn in snails:
+		var p: Vector2 = sn["pos"]
+		if (p - cam).length() > VIEW.length() / 2.0 + 20.0:
+			continue
+		var face: float = sn["dir"]
+		var flying: bool = sn["state"] == "fall"
+		var t: int = sn["t"]
+		draw_set_transform_matrix(_base * Transform2D(sn["spin"] if flying else 0.0, p.round()))
+		# corpo (lesma clara), com a cabeça na frente e os olhos em antenas
+		var stretch := 0.0 if flying else 0.5 + 0.5 * sin(t * 0.08)
+		draw_rect(Rect2(-3, -2, 7 + stretch, 2), Color("d7cdb8"))
+		var hx := 3.0 + stretch if face > 0 else -3.0
+		var ex := hx + (1.0 if face > 0 else -1.0)
+		draw_line(Vector2(ex, -2), Vector2(ex + face, -5), Color("d7cdb8"), 1.0)
+		draw_line(Vector2(ex - face * 2.0, -2), Vector2(ex - face, -5), Color("d7cdb8"), 1.0)
+		draw_rect(Rect2(ex + face - 0.5, -6, 1, 1), Color("1a1820"))
+		draw_rect(Rect2(ex - face - 0.5, -6, 1, 1), Color("1a1820"))
+		# concha em espiral
+		draw_circle(Vector2(-face * 0.5, -4), 3.0, Color("8a5f9e"))
+		draw_circle(Vector2(-face * 0.5, -4), 1.8, Color("6e4a82"))
+		draw_rect(Rect2(-face * 0.5 - 0.5, -4.5, 1, 1), Color("c9a6dd"))
+		if flying and sn["bounces"] > 0:
+			# susto: olhos arregalados e um "!" de leve
+			draw_rect(Rect2(ex + face - 1, -7, 2, 2), Color(1, 1, 1, 0.9))
+		draw_set_transform_matrix(_base)
 
 
 ## O broto: talo claro da face onde nasce até o chapéu: uma cúpula roxa (com pintas claras e lamelas
