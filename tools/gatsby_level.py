@@ -145,8 +145,7 @@ script = [
     {"when": [22, 26, 4, 3], "mood": "furious", "lever": True, "toggle": 2},
     {"when": [31, 1, 8, 14], "mood": "furious", "lever": True, "crusher": 1, "wait": 0.2},
     {"when": [66, 1, 4, 14], "mood": "nervous", "lever": True, "toggle": 0, "repeat": 40, "wait": 1.4},
-    {"when": [100, 1, 3, 14], "mood": "nervous", "lever": True, "rotate": 1, "wait": 0.2},
-    {"when": [131, 9, 5, 6], "mood": "nervous", "lever": True, "rotate": -1},
+    {"when": [100, 1, 3, 14], "mood": "nervous"},   # ele não gira mais a sala (D88): o giro é do coelho
     {"when": [139, 1, 3, 14], "mood": "panic"},
     {"when": [150, 1, 3, 14], "mood": "smirk", "wait": 0.3, "flee": True},
 ]

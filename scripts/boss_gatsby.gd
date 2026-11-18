@@ -389,6 +389,13 @@ func _keep_clear() -> void:
 
 
 ## A sala chama quando o coelho morre: ele ri. Nunca absorve a morte.
+## Na corrida, o Gatsby faz o papel do amortecedor: o laser do limitador sai da cápsula dele.
+func limiter_source() -> Variant:
+	if phase == "gone" or phase == "puppet" or not visible:
+		return null
+	return pos
+
+
 func absorb_kill(r) -> bool:
 	r.sfx.emit("gatsby_laugh")
 	return false
