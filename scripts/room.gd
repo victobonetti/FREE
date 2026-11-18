@@ -657,7 +657,7 @@ func _init_sprouts() -> void:
 		movers.append({
 			"off": off, "on": on, "r": off, "pf": Vector2(off.position),
 			"ch": -1, "speed": float(d.get("speed", 40.0)), "back": float(d.get("back", 16.0)),
-			"spikes": -1, "fx": 0, "launch": 0.0, "last": Vector2i.ZERO,
+			"spikes": -1, "fx": 0, "launch": float(d.get("launch", 0.0)), "last": Vector2i.ZERO,
 			"cycle": 0, "phase": 0, "bat": 0, "delay": 0,
 			"raw": false, "eff": false, "trig_t": 0, "want": false, "warn": false,
 			"sprout": true, "seed": int(o[0]) * 31 + int(o[1]) * 17,
@@ -773,6 +773,8 @@ func _update_movers() -> void:
 					return
 			if m["r"].position == tgt.position and m.get("sprout", false):
 				m["pf"] = Vector2(tgt.position)
+				if mover_wants_on(m) and m["launch"] > 0.0:
+					_mover_launch(m)   # broto-catapulta: chega ao alto e arremessa quem está em cima
 			elif m["r"].position == tgt.position:
 				# encaixou: um estalo curto, com o brilho do encaixe
 				m["pf"] = Vector2(tgt.position)
@@ -791,6 +793,7 @@ func _mover_launch(m: Dictionary) -> void:
 	if not overlaps(Rect2i(rr.position.x, rr.end.y, rr.size.x, 1), m["r"]):
 		return
 	rabbit.vel.y = -float(m["launch"])
+	rabbit.launched = true
 	rabbit.var_jump = 0
 	rabbit.on_ground = false
 	rabbit.coyote = 0
@@ -1735,7 +1738,7 @@ func _rotate_logic(dir: int) -> void:
 			a.on_rotate(self, dir)
 	var slivers := _water_slivers(dir)
 	rabbit.pos = _rot_rect(rabbit.rect, dir).position
-	rabbit.on_rotate()
+	rabbit.on_rotate(dir)
 	cam = _rot_point(cam, dir)
 	_prev_cam = _rot_point(_prev_cam, dir)
 	look = Vector2.ZERO   # depois do giro, a vista volta para o coelho

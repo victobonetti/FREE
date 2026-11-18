@@ -94,6 +94,7 @@ const TYPES := {
 			{"key": "len", "label": "Altura máxima (tiles)", "kind": "int", "min": 1, "max": 30, "def": 5},
 			{"key": "speed", "label": "Crescendo (px/s)", "kind": "float", "min": 5.0, "max": 200.0, "step": 5.0, "def": 40.0},
 			{"key": "back", "label": "Recolhendo (px/s)", "kind": "float", "min": 5.0, "max": 200.0, "step": 5.0, "def": 16.0},
+			{"key": "launch", "label": "Catapulta (px/s; 0 = não)", "kind": "float", "min": 0.0, "max": 700.0, "step": 10.0, "def": 0.0},
 		],
 		"rects": ["rect"], "dirs": ["dir"],
 	},

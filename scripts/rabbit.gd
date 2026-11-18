@@ -57,6 +57,7 @@ var ext := Vector2.ZERO
 var ext_dir := Vector2.ZERO
 var ext_cap := 0.0
 var air_rot := true  # um giro no ar por pulo
+var launched := false   # arremessado por uma catapulta (broto, conector) e ainda no ar: o giro mantém o embalo
 var pushing := false
 var impact := 0.0
 var squash := Vector2.ONE
@@ -96,7 +97,7 @@ func free_rotate() -> bool:
 	return on_ground or rope != null or wet >= SWIM_MIN
 
 
-func on_rotate() -> void:
+func on_rotate(dir := 0) -> void:
 	if rope != null:
 		# a sala já girou a âncora e o coelho: o pêndulo continua, a partir do novo ângulo
 		var d: Vector2 = Vector2(pos) + Vector2(6, 6) - rope["anchor"]
@@ -105,7 +106,8 @@ func on_rotate() -> void:
 		return
 	# "jumping" continua valendo: quem pulou e girou no ar pode agarrar a corda que o giro
 	# acabou de pôr no teto. Quem girou do chão está com ele falso e passa pela corda.
-	vel = Vector2.ZERO
+	# arremessado (catapulta) e no ar: o embalo gira junto com a sala, em vez de parar (D109)
+	vel = (Vector2(-vel.y, vel.x) if dir > 0 else Vector2(vel.y, -vel.x)) if launched and dir != 0 else Vector2.ZERO
 	rem = Vector2.ZERO
 	coyote = 0
 	jump_buf = 0
@@ -143,6 +145,8 @@ func update(room, inp: Dictionary) -> void:
 		coyote = COYOTE_FRAMES
 		air_rot = true
 		jumping = false
+		if vel.y >= 0.0:
+			launched = false   # (no quadro do arremesso ele ainda encosta na peça, subindo)
 		last_rope = null
 		if not was_ground and impact > 60.0:
 			var k := clampf(impact / MAX_FALL, 0.0, 1.0)
