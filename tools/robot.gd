@@ -34,6 +34,7 @@ extends SceneTree
 ##   ["air_to", x0, x1]                  no ar (caindo depois de um giro, p.ex.): dirige até pousar em [x0, x1]
 ##   ["wait_revert"]                     espera o limitador desfazer o giro (e a animação acabar)
 ##   ["wait_ground"]                     espera o coelho estar no chão
+##   ["apex", x0, x1]                    no ar, subindo: dirige até perto do alto do pulo
 ##   ["steer", x0, x1, quadros]          dirige no ar para [x0, x1] por um tempo (quicando em molas)
 ##   ["mark", rótulo]
 
@@ -257,6 +258,30 @@ func _run_step(s: Array) -> void:
 			air(float(s[1]), float(s[2]), 0, 400)
 		"wait_revert":
 			until(func(): return room.limit_t == 0 and not room.rotating, 400, "o limitador desfazer o giro")
+		"apex":
+			# no ar, subindo: dirige para [x0, x1] até chegar perto do alto do pulo (ou do quique)
+			var tg2 := (float(s[1]) + float(s[2])) / 2.0
+			var n2 := 0
+			while not dead and failed == "" and room.rabbit.vel.y < -25.0 and n2 < 200:
+				var d2 := tg2 - cx()
+				tick(0.0 if absf(d2) < 2.0 else clampf(d2 / 10.0, -1.0, 1.0))
+				n2 += 1
+		"wait_spores":
+			# espera não haver nuvem de esporos entre x0 e x1 e nenhuma bufa dali soltar outra nos próximos N quadros
+			var x0 := float(s[1])
+			var x1 := float(s[2])
+			var nf := int(s[3])
+			until(func():
+				for sp in room.spores:
+					if sp["pos"].x > x0 - 10.0 and sp["pos"].x < x1 + 10.0 and sp["pos"].y > float(room.rabbit.pos.y) - 34.0:
+						return false   # (as que ainda estão lá no alto demoram a descer)
+				for pf in room.puffs:
+					var pc: float = Rect2(pf["rect"]).get_center().x
+					if pc > x0 and pc < x1:
+						var tt: int = (room.cycle_t + pf["phase"]) % pf["period"]
+						if pf["period"] - tt < nf:
+							return false
+				return true, 1200, "folga nos esporos")
 		"jump":
 			# pula já, segurando o botão `hold` quadros, andando para `dir` (sem esperar pousar)
 			tick(float(s[1]), true, true)

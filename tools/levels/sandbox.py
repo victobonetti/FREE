@@ -108,4 +108,10 @@ lv.add("sprouts", {"rect": [101, F - 6, 2, 2], "dir": 3, "len": 6, "speed": 80.0
 # --- cogumelo-mola (ato 3), no chão perto da caixa da porta
 lv.add("bouncers", {"rect": [90, F - 1, 2, 1], "power": 300.0, "dir": 0})
 
+# --- cogumelos murchos (ato 3), no alto, à direita das chapas soltas
+lv.add("wilts", {"rect": [79, F - 15, 3, 1], "regrow": 2.5})
+
+# --- bufa-esporos (ato 3), no teto do começo, longe do caminho
+lv.add("puffs", {"rect": [8, 1, 2, 2], "period": 3.0, "phase": 0.0})
+
 lv.save()

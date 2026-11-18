@@ -95,6 +95,23 @@ const TYPES := {
 		],
 		"rects": ["rect"], "dirs": ["dir"],
 	},
+	"puffs": {
+		"label": "Bufa-esporos (solta nuvens que caem e ferem)", "color": Color("b9a3cf"),
+		"fields": [
+			{"key": "rect", "label": "Cogumelo", "kind": "rect"},
+			{"key": "period", "label": "Solta uma nuvem a cada (s)", "kind": "float", "min": 0.5, "max": 30.0, "step": 0.25, "def": 3.0},
+			{"key": "phase", "label": "Defasagem (s)", "kind": "float", "min": 0.0, "max": 30.0, "step": 0.25, "def": 0.0},
+		],
+		"rects": ["rect"], "dirs": [],
+	},
+	"wilts": {
+		"label": "Cogumelo murcho (murcha ao pisar, rebrota)", "color": Color("8e72b0"),
+		"fields": [
+			{"key": "rect", "label": "Chapéu (plataforma)", "kind": "rect"},
+			{"key": "regrow", "label": "Rebrota depois de (s)", "kind": "float", "min": 0.5, "max": 30.0, "step": 0.25, "def": 2.5},
+		],
+		"rects": ["rect"], "dirs": [],
+	},
 	"sprouts": {
 		"label": "Broto (cogumelo que cresce)", "color": Color("b98ee0"),
 		"fields": [
@@ -121,7 +138,7 @@ const TYPES := {
 }
 
 ## A ordem em que os tipos aparecem na interface.
-const ORDER := ["crushers", "movers", "plates", "crumbles", "conveyors", "springs", "fans", "vents", "sprouts", "bouncers"]
+const ORDER := ["crushers", "movers", "plates", "crumbles", "conveyors", "springs", "fans", "vents", "sprouts", "bouncers", "wilts", "puffs"]
 
 
 static func label(kind: String) -> String:
@@ -155,6 +172,10 @@ static func make_default(kind: String, c: int, r: int) -> Variant:
 			rect = [c, r, 2, 2]
 		"bouncers":
 			rect = [c, r, 2, 1]
+		"wilts":
+			rect = [c, r, 3, 1]
+		"puffs":
+			rect = [c, r, 2, 2]
 		_:
 			rect = [c, r, 2, 6]
 	if t.get("scalar", false):

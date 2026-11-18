@@ -512,6 +512,12 @@ func reset() -> void:
 			"timed": str(pd.get("mode", "hold")) == "timed", "time": seconds_to_frames(float(pd.get("time", 4.0))), "left": 0})
 	for cr in def.get("crumbles", []):
 		crumbles.append({"rect": Rect2i(int(cr[0]) * TILE, int(cr[1]) * TILE, int(cr[2]) * TILE, int(cr[3]) * TILE), "t": -1})
+	# cogumelo murcho (campo "wilts", ato 3, D111): como a chapa solta, mas um chapéu que murcha logo
+	# depois de pisado e rebrota "regrow" segundos depois
+	for wd in def.get("wilts", []):
+		var wr: Array = wd["rect"]
+		crumbles.append({"rect": Rect2i(int(wr[0]) * TILE, int(wr[1]) * TILE, int(wr[2]) * TILE, (int(wr[3]) if wr.size() > 3 else 1) * TILE),
+			"t": -1, "shroom": true, "regrow": seconds_to_frames(float(wd.get("regrow", 2.5))), "gone": false, "rt": 0})
 	_water_build()
 	for t in water_tiles:
 		for dx in TILE:
@@ -842,6 +848,12 @@ func _init_dynamics() -> void:
 			"rect": _tile_rect(d["rect"]), "power": float(d.get("power", 280.0)), "dir": posmod(int(d.get("dir", 0)), 4),
 			"k": 0.0, "cd": 0,
 		})
+	# bufa-esporos (campo "puffs", ato 3, D111)
+	puffs.clear()
+	spores.clear()
+	for d in def.get("puffs", []):
+		puffs.append({"rect": _tile_rect(d["rect"]), "period": maxi(seconds_to_frames(float(d.get("period", 3.0))), 30),
+			"phase": seconds_to_frames(float(d.get("phase", 0.0))), "cd": 0, "k": 0.0})
 	# cogumelo-mola (campo "bouncers", ato 3, D111): uma mola orgânica, com o mesmo formato
 	for d in def.get("bouncers", []):
 		springs.append({
@@ -1239,6 +1251,16 @@ func _update_crumbles() -> void:
 	var feet := Rect2i(rr.position.x, rr.end.y, rr.size.x, 1)
 	var fell := false
 	for c in crumbles:
+		if c.get("gone", false):
+			c["rt"] -= 1
+			if c["rt"] <= 0 and not overlaps(rabbit.rect, c["rect"]) and box_at(c["rect"], null) == null:
+				c["gone"] = false   # rebrotou
+				c["t"] = -1
+				c["rt"] = -12      # (para o desenho: o "pop" de quem rebrota)
+				sfx.emit("plate_on")
+			continue
+		if c.get("rt", 0) < 0:
+			c["rt"] += 1
 		if c["t"] < 0:
 			if rabbit.on_ground and overlaps(feet, c["rect"]):
 				c["t"] = 0
@@ -1248,14 +1270,18 @@ func _update_crumbles() -> void:
 			if c["t"] >= CRUMBLE_FRAMES:
 				fell = true
 				var r: Rect2i = c["rect"]
+				var sh: bool = c.get("shroom", false)
 				for i in maxi(r.size.x / 4, 2):
 					particles.append({
 						"pos": Vector2(r.position.x + randf() * r.size.x, r.position.y + randf() * r.size.y),
 						"vel": Vector2(randf_range(-25.0, 25.0), randf_range(-10.0, 40.0)),
-						"life": randi_range(16, 28), "col": C_RUST if i % 2 == 0 else C_STEEL_LIGHT, "grav": 420.0,
+						"life": randi_range(16, 28), "col": (C_FUNGI[i % 3] if sh else (C_RUST if i % 2 == 0 else C_STEEL_LIGHT)), "grav": 420.0 if not sh else 120.0,
 					})
+				if sh:
+					c["gone"] = true
+					c["rt"] = c["regrow"]
 	if fell:
-		crumbles = crumbles.filter(func(c): return c["t"] < CRUMBLE_FRAMES)
+		crumbles = crumbles.filter(func(c): return c.get("shroom", false) or c["t"] < CRUMBLE_FRAMES)
 		sfx.emit("crumble")
 		shake = maxf(shake, 0.8)
 
@@ -1328,7 +1354,7 @@ func _body_can_move(b, st: Vector2i, ignore_rect: Rect2i) -> bool:
 		if overlaps(nxt, o["r"]) and o["r"] != ignore_rect and not overlaps(b.rect, o["r"]):
 			return false
 	for c in crumbles:
-		if overlaps(nxt, c["rect"]):
+		if not c.get("gone", false) and overlaps(nxt, c["rect"]):
 			return false
 	return box_at(nxt, b) == null
 
@@ -1755,6 +1781,10 @@ func _rotate_logic(dir: int) -> void:
 	belt_acc.clear()
 	for ex in exits:
 		ex["rect"] = _rot_rect(ex["rect"], dir)
+	for sp in spores:
+		sp["pos"] = _rot_point(sp["pos"], dir)
+	for pf in puffs:
+		pf["rect"] = _rot_rect(pf["rect"], dir)
 	for sn in snails:
 		# o caramujo se solta: cai na gravidade nova (e quica nos cogumelos)
 		sn["pos"] = _rot_point(sn["pos"], dir)
@@ -2139,7 +2169,7 @@ func solid_static(r: Rect2i) -> bool:
 		if overlaps(r, m["r"]):
 			return true
 	for c in crumbles:
-		if overlaps(r, c["rect"]):
+		if not c.get("gone", false) and overlaps(r, c["rect"]):
 			return true
 	return false
 
@@ -2308,6 +2338,9 @@ func step(inp: Dictionary) -> void:
 		return
 	_acid_bubbles()
 	_update_snails()
+	_update_spores()
+	if state != "play":
+		return
 	_update_crumbles()
 	_update_crushers()
 	_update_danger()
@@ -3542,6 +3575,7 @@ func _draw() -> void:
 	_draw_vents()
 	_draw_movers()
 	_draw_snails()
+	_draw_puffs()
 	_draw_crumbles()
 	_draw_plates()
 	_draw_drains()
@@ -3678,6 +3712,16 @@ func _draw_movers() -> void:
 # ---------------------------------------------------------------- caramujos (fungário, só enfeite, D111)
 
 var snails: Array = []
+# Bufa-esporos (campo "puffs": {"rect": [coluna, linha, largura, altura], "period": s, "phase": s}): um
+# cogumelo redondo que, a cada período (e quando o coelho encosta nele), solta uma nuvem de esporos. A
+# nuvem cai devagar para o chão de agora (o giro muda para onde ela vai), cresce, se desfaz ao bater
+# numa parede ou depois de um tempo, e fere quem encosta.
+var puffs: Array = []
+var spores: Array = []       # {"pos", "age", "seed"}
+const PUFF_WARN := 30        # quadros inchando antes de soltar
+const SPORE_FALL := 26.0     # px/s
+const SPORE_LIFE := 330
+const SPORE_R := 7.0
 var snail_rng := RandomNumberGenerator.new()
 const SNAIL_SPEED := 3.0
 const SNAIL_GRAV := 520.0
@@ -3705,6 +3749,74 @@ func _spawn_snails() -> void:
 			"spin": 0.0, "bounces": 0, "t": snail_rng.randi_range(0, 200)})
 		if cands.is_empty():
 			break
+
+
+func _update_spores() -> void:
+	for pf in puffs:
+		pf["cd"] = maxi(pf["cd"] - 1, 0)
+		var t: int = (cycle_t + pf["phase"]) % pf["period"]
+		var touch: bool = pf["cd"] == 0 and overlaps(rabbit.rect, Rect2i(pf["rect"]).grow(1))
+		pf["k"] = clampf(float(t - (pf["period"] - PUFF_WARN)) / float(PUFF_WARN), 0.0, 1.0)
+		if t == 0 or touch:
+			pf["cd"] = 40
+			var c := Vector2(Rect2(pf["rect"]).get_center())
+			spores.append({"pos": c, "age": 0, "seed": spores.size() * 13 + cycle_t % 97})
+			if Vector2(c).distance_to(cam) < VIEW.length() * 0.7:
+				sfx.emit("steam_burst")
+			for i in 6:
+				particles.append({"pos": c, "vel": Vector2(randf_range(-30.0, 30.0), randf_range(-30.0, 10.0)),
+					"life": randi_range(10, 18), "col": Color(C_FUNGI[1], 0.8), "grav": 20.0})
+	var keep: Array = []
+	for sp in spores:
+		sp["age"] += 1
+		var p: Vector2 = sp["pos"]
+		p += Vector2(sin((sp["age"] + sp["seed"]) * 0.05) * 6.0, SPORE_FALL) * DT
+		sp["pos"] = p
+		var rad := _spore_r(sp)
+		if sp["age"] > SPORE_LIFE or _snail_solid(p + Vector2(0, rad * 0.5)):
+			continue   # se desfaz
+		keep.append(sp)
+		if state == "play" and invuln == 0 and _circle_hits(p, rad * 0.75, Rect2(rabbit.rect)):
+			kill()
+	spores = keep
+
+
+func _spore_r(sp: Dictionary) -> float:
+	return minf(3.0 + float(sp["age"]) * 0.08, SPORE_R)
+
+
+static func _circle_hits(c: Vector2, rad: float, r: Rect2) -> bool:
+	var q := Vector2(clampf(c.x, r.position.x, r.end.x), clampf(c.y, r.position.y, r.end.y))
+	return q.distance_to(c) <= rad
+
+
+func _draw_puffs() -> void:
+	for pf in puffs:
+		var r := Rect2(pf["rect"])
+		if (r.get_center() - cam).length() > VIEW.length() / 2.0 + 30.0:
+			continue
+		var k: float = pf["k"]
+		var c := r.get_center()
+		var rad := minf(r.size.x, r.size.y) * 0.5 * (0.85 + 0.25 * k)
+		draw_circle(c, rad + 2.0, Color(C_FUNGI[1], 0.10 + 0.15 * k))
+		draw_circle(c, rad, Color("b9a3cf"))
+		draw_circle(c + Vector2(-rad * 0.3, -rad * 0.3), rad * 0.45, Color("d6c8e4"))
+		for q in 4:
+			var a := q * 1.6 + 0.4
+			draw_rect(Rect2(c + Vector2(cos(a), sin(a)) * rad * 0.6, Vector2(1, 1)), Color(C_FUNGI[0], 0.9))
+		if k > 0.0 and (frame / 4) % 2 == 0:
+			draw_circle(c, rad + 1.0 + 3.0 * k, Color(C_FUNGI[1], 0.15 * k))
+	for sp in spores:
+		var p: Vector2 = sp["pos"]
+		if (p - cam).length() > VIEW.length() / 2.0 + 20.0:
+			continue
+		var rad := _spore_r(sp)
+		var fade := clampf(float(SPORE_LIFE - sp["age"]) / 40.0, 0.0, 1.0)
+		draw_circle(p, rad + 1.5, Color(C_FUNGI[1], 0.12 * fade))
+		draw_circle(p, rad, Color(C_FUNGI[0], 0.32 * fade))
+		for q in 5:
+			var a: float = float(q) * 1.26 + float(sp["age"]) * 0.02
+			draw_rect(Rect2(p + Vector2(cos(a), sin(a)) * rad * 0.65, Vector2(1, 1)), Color(C_FUNGI[3], 0.8 * fade))
 
 
 ## Um ponto com espinho (o caramujo não anda por cima).
@@ -3857,6 +3969,9 @@ func _draw_crumbles() -> void:
 		var r := Rect2(c["rect"])
 		if (r.get_center() - cam).length() > VIEW.length() / 2.0 + 40.0:
 			continue
+		if c.get("shroom", false):
+			_draw_wilt(c, r)
+			continue
 		if c["t"] >= 0:
 			r.position += Vector2(float((frame / 2) % 2) * 2.0 - 1.0, float(c["t"]) / float(CRUMBLE_FRAMES) * 2.0)
 		draw_rect(r, C_SEAM)
@@ -3867,6 +3982,36 @@ func _draw_crumbles() -> void:
 		draw_polyline(PackedVector2Array([Vector2(mx - 1, r.position.y + 1), Vector2(mx + 1, r.position.y + r.size.y / 2.0), Vector2(mx - 1, r.end.y - 1)]), C_SEAM, 1.0)
 		draw_rect(Rect2(r.position + Vector2(2, r.size.y / 2.0 - 0.5), Vector2(1, 1)), C_RIVET)
 		draw_rect(Rect2(Vector2(r.end.x - 3, r.position.y + r.size.y / 2.0 - 0.5), Vector2(1, 1)), C_RIVET)
+
+
+## Cogumelo murcho: um chapéu largo e chato (a plataforma), num talo que desce até a face onde nasce.
+## Pisado, treme e murcha (escurece, cai); sumido, um brotinho cresce de volta no lugar.
+func _draw_wilt(c: Dictionary, r: Rect2) -> void:
+	var col: Color = C_FUNGI[2]
+	if c["gone"]:
+		var k := 1.0 - float(c["rt"]) / float(maxi(c["regrow"], 1))
+		var cc := r.get_center()
+		draw_rect(Rect2(cc - Vector2(1, -2), Vector2(2, 2.0 + 3.0 * k)), Color(C_STALK, 0.5))
+		draw_circle(cc + Vector2(0, 2), 1.0 + 3.0 * k, Color(col, 0.3 + 0.4 * k))
+		return
+	var k2 := 0.0
+	if c["t"] >= 0:
+		k2 = float(c["t"]) / float(CRUMBLE_FRAMES)
+		r.position += Vector2(float((frame / 2) % 2) * 2.0 - 1.0, k2 * 2.0)
+		col = col.darkened(0.35 * k2)
+	var pop := 0.0
+	if int(c["rt"]) < 0:
+		pop = float(-int(c["rt"])) / 12.0
+	# talo até a face onde nasce (para baixo, se cabe)
+	var cx := r.get_center().x
+	draw_rect(Rect2(cx - 1, r.end.y, 2, 6), C_STALK.darkened(0.15 + 0.3 * k2))
+	draw_rect(r.grow(pop), col)
+	draw_rect(Rect2(r.position + Vector2(1, 0), Vector2(r.size.x - 2, 2)), col.lightened(0.22))
+	draw_line(Vector2(r.position.x, r.end.y), Vector2(r.end.x, r.end.y), col.darkened(0.4), 1.0)
+	for q in int(r.size.x / 8.0):
+		draw_rect(Rect2(r.position + Vector2(3 + q * 8, 2 + (q % 2)), Vector2(2, 1)), C_FUNGI[3])
+	if k2 > 0.5:
+		draw_rect(Rect2(r.position + Vector2(r.size.x * 0.3, 1), Vector2(1, r.size.y - 2)), col.darkened(0.5))
 
 
 func _draw_dock(d: Rect2, col: Color, lit: bool, fx: float) -> void:
@@ -4603,8 +4748,8 @@ func _surface() -> String:
 	if box_at(q, null) != null:
 		return "wood"
 	for cr in crumbles:
-		if cr["t"] < 0 and overlaps(q, cr["rect"]):
-			return "plate"
+		if cr["t"] < 0 and not cr.get("gone", false) and overlaps(q, cr["rect"]):
+			return "dirt" if cr.get("shroom", false) else "plate"
 	for pl in platforms:
 		if pl["solid"] and overlaps(q, pl["rect"]):
 			return "plate"

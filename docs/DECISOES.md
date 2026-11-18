@@ -790,3 +790,14 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 ### D110 — Sem parada depois das baterias; ato 3 sem baterias
 - **Ato 2:** ao pegar a última bateria, não há mais cena: a entrada não trava e a câmera não vai até a alavanca e a caixa. A alavanca se puxa e a calha solta a caixa no mesmo tempo de antes, com o coelho andando. Os replays continuam vencendo.
 - **Ato 3 (Victor):** sai o ciclo de baterias; as fases do fungário são de plataforma, com os cogumelos. Plano das 5 fases a seguir (proposta).
+
+### D111 — Ato 3: as cinco fases de plataforma com cogumelos
+- **Sem baterias** (D110): a porta já está aberta ("door_open"); o desafio é chegar até ela.
+- **Peças novas** (todas no editor, em Objetos…, e na sandbox):
+  - **Cogumelo-mola** (`bouncers`): uma mola orgânica (chapéu que achata ao quicar), na direção para onde aponta; gira com a sala.
+  - **Cogumelo murcho** (`wilts`): chapéu-plataforma que murcha logo depois de pisado (como a chapa solta) e rebrota depois de "regrow" segundos, com um brotinho crescendo no lugar.
+  - **Bufa-esporos** (`puffs`): cogumelo redondo que, a cada "period" (incha antes) e quando o coelho encosta, solta uma nuvem de esporos. A nuvem cai devagar para o chão de agora (girar muda para onde ela vai), se desfaz ao bater numa parede e fere ao encostar.
+  - Molas (de metal e de cogumelo) também contam como arremesso: o embalo sobrevive a um giro no ar (D109).
+- **Caramujos** (só enfeite, Victor: "é para ser engraçado"): andam no chão do fungário perto dos cogumelos; no giro, caem rodopiando, quicam (mais alto num cogumelo) e saem voando até se acalmarem e voltarem a andar.
+- **As fases:** 1 **Broto** (dois voos de broto-catapulta; o segundo atravessa a porta no alto); 2 **Chapéus** (corrente de chapéus-mola e o muro com a fresta: girar no alto do quique para cair de lado); 3 **Murchos** (corrente de murchos sem parar e, no vão largo, girar para cair de lado até a estalactite); 4 **Esporos** (chapéus sob bufas no ritmo, o muro com a fresta e a volta à porta debaixo da chuva; girar faz as nuvens caírem para a parede, junto com o coelho: é preciso voltar logo); 5 **Colônia** (tudo junto e, perto da porta, a terra treme e uma sombra enorme de olhos roxos passa ao fundo: o chefe se anunciando, ator `scripts/omen.gd`).
+- **Robô:** passos novos `jump`, `steer`, `apex` (girar no alto do quique) e `wait_spores` (folga na chuva de esporos).
