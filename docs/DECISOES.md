@@ -678,3 +678,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 
 ### D91 — A sentada só fere embaixo da mecha
 - **Victor:** o dano tem de ser só literalmente embaixo do Gatsby. As ondas de choque viraram só efeito (poeira, tremor); a sentada fere quem estiver embaixo dela, na largura do corpo, na descida ou no impacto.
+
+### D92 — Recarga do giro em 0,4 s; o limitador conta do primeiro giro e volta num giro só
+- **Jogadores não gostavam da recarga longa (2,5 s).** A recarga padrão do giro do coelho passou a 0,4 s (`DEFAULT_RELOAD`); o limitador continua com 2,5 s (`DEFAULT_LIMITER`, agora separado). O bloco do Jeffrey mantém a recarga própria.
+- **O furo que isso abriria:** cada giro reiniciava a contagem do limitador; com 0,4 s, daria para ficar girado para sempre. Agora a contagem começa no primeiro giro e não recomeça; voltar à orientação de antes (à mão) a desliga.
+- **A volta:** ao fim da contagem, a sala volta à orientação de antes do primeiro giro **num giro só** (90° ou 180°; o de 180° com animação um pouco mais longa), com o laser do amortecedor.
+- **Provas:** a recarga entra no hash; os hashes foram refeitos e os replays continuam vencendo (`tools/rehash_campaign.gd`). O aviso "o limitador dura mais que a recarga" saiu (virou a regra).
+- **Riscos:** quebra-cabeças do ato 1 podem ganhar atalhos (virar 180° rápido); a mecha fica mais fácil (girar cedo demais não é mais punido como antes). Ajustar jogando.

@@ -13,7 +13,7 @@ extends RefCounted
 const CODE_PREFIX := "FREE1:"
 const MAX_W := 512   # teto técnico, não de design (D72)
 const MAX_H := 512
-const MIN_TIME := 0.5   # s, recarga e limitador
+const MIN_TIME := 0.3   # s, recarga e limitador
 const MAX_TIME := 30.0
 const MIN_W := 6
 const MIN_H := 6
@@ -29,7 +29,7 @@ var music := ""
 var door_open := false
 var rotate := true
 var limiter := false
-var reload_time := 2.5      # s: recarga do giro
+var reload_time := 0.4      # s: recarga do giro (D92)
 var limiter_time := 2.5     # s: tempo até o limitador desfazer o giro
 var start_rot := 0
 var rows: Array = []        # Array[String]
@@ -66,7 +66,7 @@ static func from_def(def: Dictionary) -> RefCounted:
 	d.door_open = bool(def.get("door_open", false))
 	d.rotate = bool(def.get("rotate", true))
 	d.limiter = bool(def.get("limiter", false))
-	d.reload_time = float(def.get("reload_time", 2.5))
+	d.reload_time = float(def.get("reload_time", 0.4))
 	d.limiter_time = float(def.get("limiter_time", 2.5))
 	d.start_rot = int(def.get("start_rot", 0))
 	d.rows = []
@@ -102,7 +102,7 @@ func to_def() -> Dictionary:
 		def["door_open"] = true
 	if limiter:
 		def["limiter"] = true
-	if not is_equal_approx(reload_time, 2.5):
+	if not is_equal_approx(reload_time, 0.4):
 		def["reload_time"] = reload_time
 	if not is_equal_approx(limiter_time, 2.5):
 		def["limiter_time"] = limiter_time
@@ -425,8 +425,6 @@ func validate() -> Array:
 		out.append({"erro": true, "msg": "A recarga do giro tem de ficar entre %.1f e %.0f s." % [MIN_TIME, MAX_TIME], "pos": no_pos})
 	if limiter and (limiter_time < MIN_TIME or limiter_time > MAX_TIME):
 		out.append({"erro": true, "msg": "O tempo do limitador tem de ficar entre %.1f e %.0f s." % [MIN_TIME, MAX_TIME], "pos": no_pos})
-	if limiter and rotate and limiter_time > reload_time + 0.05:
-		out.append({"erro": false, "msg": "O limitador dura mais que a recarga: dá para girar de novo antes de ele desfazer.", "pos": no_pos})
 	if limiter and not rotate:
 		out.append({"erro": false, "msg": "O limitador não faz nada sem giro.", "pos": no_pos})
 	return out

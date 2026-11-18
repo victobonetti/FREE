@@ -239,8 +239,9 @@ func hop_to(x: int, max_frames := 180) -> void:
 
 
 func wait_rot_ready() -> void:
+	# a recarga é curta (0,4 s): espera também o coelho poder girar (no ar, só um giro por pulo)
 	for i in 400:
-		if room.rot_lock == 0:
+		if room.rot_lock == 0 and room.rabbit.can_rotate():
 			return
 		tick()
 
@@ -648,15 +649,15 @@ func test_platforms() -> void:
 func test_rot_cooldown() -> void:
 	print("recarga do giro")
 	load_def(FLAT)
+	check(room.reload_frames <= 25, "a recarga padrão é curta, 0,4 s (%d quadros)" % room.reload_frames)
 	idle(5)
 	tick({"rotate": 1})
 	check(room.rotating, "primeiro giro acontece")
-	idle(20)
-	check(not room.rotating and room.rot_lock > 0, "depois da animação o giro fica bloqueado")
+	idle(4)
 	var before: int = room.rot_lock
 	tick({"rotate": 1})
 	idle(3)
-	check(not room.rotating and room.rot_lock < before, "apertar durante a recarga não gira")
+	check(room.orientation == 1 and room.rot_lock < before, "apertar no meio da animação não gira")
 	check(room.rot_ratio() > 0.0 and room.rot_ratio() < 1.0, "a barra está no meio do caminho")
 	wait_rot_ready()
 	check(room.rot_ratio() == 1.0, "a barra enche")
@@ -677,11 +678,31 @@ func test_limiter() -> void:
 	check(room.limit_t > 0 and room.orientation == 1, "girar liga o limitador")
 	idle(60)
 	check(room.orientation == 1 and room.limiter_ratio() > 0.3 and room.limiter_ratio() < 0.7, "a barra desce com o tempo (%.2f)" % room.limiter_ratio())
+	# um segundo giro no mesmo sentido: a contagem NÃO recomeça
+	var t0: int = room.limit_t
+	wait_rot_ready()
+	tick({"rotate": 1})
+	check(room.orientation == 2 and room.limit_t < t0, "girar de novo não reinicia a contagem")
+	var turns := 0
+	var was: bool = room.rotating
+	var n := 0
+	while room.limit_t > 0 and n < 300:
+		tick()
+		n += 1
+	for i in 40:
+		if room.rotating and not was:
+			turns += 1
+		was = room.rotating
+		tick()
+	check(room.orientation == 0 and got.has("limiter"), "ao fim dos 2,5 s, a sala volta à orientação de antes do primeiro giro")
+	check(room.limit_t == 0 and room.limit_net == 0, "desfeito, o limitador para")
+	# voltar à mão antes do tempo desliga o limitador
+	load_def(d)
+	idle(5)
+	tick({"rotate": 1})
+	wait_rot_ready()
 	tick({"rotate": -1})
-	check(room.orientation == 1, "durante a recarga não dá para desfazer à mão")
-	idle(100)
-	check(room.orientation == 0 and got.has("limiter"), "ao fim dos 2,5 s o giro é desfeito, com som")
-	check(room.limit_t == 0 and room.rot_lock > 100, "desfeito, a recarga recomeça e o limitador para")
+	check(room.orientation == 0 and room.limit_t == 0, "desfazer o giro à mão desliga o limitador")
 	load_def(FLAT)
 	tick({"rotate": 1})
 	idle(300)
@@ -1028,7 +1049,7 @@ func test_reload_params() -> void:
 	print("recarga e limitador parametrizados")
 	load_def(FLAT)
 	tick({"rotate": 1})
-	check(room.rot_lock == 150 and room.reload_frames == 150 and room.limiter_frames == 150, "sem campos, valem 2,5 s (150 quadros)")
+	check(room.rot_lock == 24 and room.reload_frames == 24 and room.limiter_frames == 150, "sem campos, a recarga é 0,4 s (24 quadros) e o limitador 2,5 s (150)")
 	var d: Dictionary = FLAT.duplicate()
 	d["reload_time"] = 1.0
 	d["limiter"] = true
@@ -1881,7 +1902,7 @@ func test_naufragio() -> void:
 	idle(40)
 	check(room.boxes.size() == 2 and room.sockets.size() == 2 and not room.door_open, "duas caixas, dois compartimentos do outro lado, porta fechada")
 	rot(1)
-	idle(120)
+	idle(150)   # as caixas terminam de cair antes de voltar (com a recarga antiga, isso era automático)
 	check(room.state == "play", "girando, o coelho e as caixas caem rente à parede e passam do poço (%s)" % where())
 	rot(-1)
 	idle(200)

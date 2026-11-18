@@ -42,8 +42,9 @@ const SHADOW_OFF := Vector2(4, 5)
 const C_SHADOW := Color(0, 0, 0, 0.42)
 const PARALLAX := 0.2          # o fundo pintado na sala anda um pouco mais devagar que ela
 const FAR_K := [0.18, 0.32]    # o mundo lá fora (duas profundidades): anda bem mais devagar e não gira
-const ROT_COOLDOWN := 134    # espera extra depois do giro: com a animação, 2,5 s (150 quadros)
-const DEFAULT_RELOAD := 2.5   # s: recarga do giro e tempo do limitador, se a fase não disser outro
+const ROT_COOLDOWN := 134    # recarga padrão do bloco que gira (Jeffrey): com a animação, 2,5 s
+const DEFAULT_RELOAD := 0.4   # s: recarga do giro do coelho, se a fase não disser outro (D92)
+const DEFAULT_LIMITER := 2.5  # s: tempo até o limitador desfazer, contado do primeiro giro
 const ROT_BUFFER := 6        # apertar até 6 quadros antes do fim da recarga ainda vale
 const DT := 1.0 / 60.0
 const BOX_GRAVITY := 900.0
@@ -355,6 +356,7 @@ var invuln := 0              # quadros em que o coelho pisca e nada o mata (dano
 var flip_dir := 1        # sentido da cambalhota (o mesmo do giro)
 var rot_frame := 0
 var rot_from := 0.0
+var rot_len := ROT_FRAMES   # duração da animação deste giro (a volta de 180° do limitador é mais longa)
 var view_angle := 0.0
 var pending_rot := 0
 var rot_lock := 0  # quadros até poder girar de novo (animação + recarga)
@@ -388,7 +390,7 @@ func setup(room_def: Dictionary) -> void:
 	allow_rotate = room_def.get("rotate", true)
 	reload_frames = seconds_to_frames(float(room_def.get("reload_time", DEFAULT_RELOAD)))
 	rot_lock_max = reload_frames
-	limiter_frames = seconds_to_frames(float(room_def.get("limiter_time", DEFAULT_RELOAD)))
+	limiter_frames = seconds_to_frames(float(room_def.get("limiter_time", DEFAULT_LIMITER)))
 	for path in room_def.get("actors", []):
 		var a: Node = load(path).new()
 		add_child(a)
@@ -1680,17 +1682,53 @@ func _begin_rotate(dir: int, forced := false) -> void:
 	if not forced and not rabbit.free_rotate():
 		rabbit.air_rot = false
 	if def.get("limiter", false):
+		# a contagem começa no primeiro giro e não recomeça com os seguintes; voltar à orientação
+		# de antes (à mão) a desliga
+		if limit_net == 0:
+			limit_t = limiter_frames
 		limit_net += dir
-		limit_t = limiter_frames if limit_net != 0 else 0
+		if posmod(limit_net, 4) == 0:
+			limit_net = 0
+			limit_t = 0
 	_rotate_logic(dir)
 	if not forced:
 		_flip_fx(dir)
 	rotating = true
 	rot_frame = 0
+	rot_len = ROT_FRAMES
 	rot_from = -dir * PI / 2.0
 	view_angle = rot_from
 	rot_lock_max = reload_frames
 	rot_lock = rot_lock_max
+
+
+## O limitador desfaz tudo de uma vez: a sala volta à orientação de antes do primeiro giro, num giro
+## só (de 90° ou 180°), com o laser do amortecedor e o som distorcido.
+func _limiter_revert() -> void:
+	var n := posmod(limit_net, 4)
+	var d := -signi(limit_net)
+	limit_net = 0
+	limit_t = 0
+	if n == 0:
+		return
+	var k := 1
+	if n == 2:
+		k = 2
+	elif n == 1:
+		d = -1
+	else:
+		d = 1
+	for i in k:
+		_rotate_logic(d)
+	rotating = true
+	rot_frame = 0
+	rot_len = ROT_FRAMES if k == 1 else ROT_FRAMES * 3 / 2
+	rot_from = -d * k * PI / 2.0
+	view_angle = rot_from
+	rot_lock_max = reload_frames
+	rot_lock = rot_lock_max
+	anchor_fx = 24
+	sfx.emit("limiter")
 
 
 ## O coelho "faz" o giro: cambalhota encolhida e faíscas azuis saindo do corpo.
@@ -1886,18 +1924,19 @@ func step(inp: Dictionary) -> void:
 	rot_lock = maxi(rot_lock - 1, 0)
 	if limit_t > 0:
 		limit_t -= 1
-		if limit_t == 0 and not rotating:
-			pending_rot = 0
-			_begin_rotate(-signi(limit_net), true)
-			anchor_fx = 24
-			sfx.emit("limiter")
-			return
+		if limit_t == 0:
+			if rotating:
+				limit_t = 1   # espera a animação do giro acabar
+			else:
+				pending_rot = 0
+				_limiter_revert()
+				return
 	var req: int = inp.get("rotate", 0)
 	if req != 0 and rot_lock <= ROT_BUFFER:
 		pending_rot = req
 	if rotating:
 		rot_frame += 1
-		var t := float(rot_frame) / float(ROT_FRAMES)
+		var t := float(rot_frame) / float(rot_len)
 		if t >= 1.0:
 			rotating = false
 			view_angle = 0.0
@@ -1911,6 +1950,7 @@ func step(inp: Dictionary) -> void:
 		_rotate_logic(ad)
 		rotating = true
 		rot_frame = 0
+		rot_len = ROT_FRAMES
 		rot_from = -ad * PI / 2.0
 		view_angle = rot_from
 		sfx.emit("limiter")
