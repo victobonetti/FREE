@@ -237,9 +237,9 @@ func update(room, inp: Dictionary) -> void:
 		push_t = maxi(push_t - 1, 0)
 	squash = squash.lerp(Vector2.ONE, 0.18)
 
-	# Só agarra a corda quem pulou (ou acabou de soltar outra): caindo depois de um giro, o
-	# coelho passa por ela.
-	if rope_cd == 0 and not on_ground and jumping:
+	# No ar (pulando ou caindo), o coelho sempre agarra a corda que encosta; andando, não (D95).
+	# A que acabou de soltar só volta a valer depois de pousar.
+	if rope_cd == 0 and not on_ground:
 		var rp = room.rope_at(rect)
 		if rp != null and rp != last_rope:
 			_grab(rp)

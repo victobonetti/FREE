@@ -697,3 +697,9 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Pedido do Victor:** seletor rolável, uma fase por vez, com miniatura e botões de carrossel. O cartão do meio tem o tamanho da janela do campo; os vizinhos aparecem menores e apagados dos lados; pontinhos mostram a posição.
 - **Miniaturas:** geradas do mapa de cada fase (um pixel por tile, nas cores do tema, giradas como a fase começa) e guardadas enquanto a tela está aberta. "Do início" mostra o campo da abertura.
 - **Controles:** setas do teclado/controle ou as setas redondas na tela; arrastar (dedo ou mouse) rola e encaixa ao soltar; um toque sem arrastar, ou Enter, começa. Só na build de teste (`BETA`).
+
+### D95 — Corda, ralo, mecha (empurrão no lugar da sentada; parada na tela no giro)
+- **Corda:** no ar (pulando ou caindo), o coelho sempre agarra a corda que encosta; andando no chão, não. O alcance ficou generoso: 3 px de folga em volta do coelho e os trechos entre os pontos da corda contam. Consequência: na Prumo, girar do chão sem usar a corda não mata mais (caindo, ele agarra a corda).
+- **Ralo:** engole 2,5 vezes mais rápido (2,5 px de altura por quadro em cada coluna).
+- **Mecha, sem a sentada:** no lugar, o empurrão: com o coelho encostado nela por 0,75 s (parada, mirando ou lançando mísseis), ela dá um dash curto para o lado oposto, sem dano.
+- **Mecha parada na tela no giro:** a mecha não gira mais com a sala; fica no mesmo ponto da tela (também durante a animação), e a investida mantém a rota e o laser. A sala e o coelho giram em volta dela: girar tira o coelho da linha. Girar antes do laser também tende a esquivar (o coelho cai pela gravidade nova enquanto o laser é posto); com a recarga de 0,4 s, é coerente.

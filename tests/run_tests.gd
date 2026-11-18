@@ -78,7 +78,8 @@ func _init() -> void:
 	test_mecha_homing()
 	test_mecha_thirds()
 	test_mecha_lives()
-	test_mecha_stomp()
+	test_mecha_shove()
+	test_mecha_screen_lock()
 	test_mecha_bot()
 	print("")
 	if failures == 0:
@@ -1245,12 +1246,15 @@ func test_rope() -> void:
 	for i in 40:
 		tick()
 	check(room.rabbit.rope == null, "não agarra a mesma corda de novo antes de pousar")
-	# caindo (sem ter pulado), passa pela corda
+	# caindo (sem ter pulado), também agarra (D95: no ar, sempre agarra)
 	load_def(ROPE_ROOM)
 	idle(10)
 	room.rabbit.pos = Vector2i(70, 20)
-	idle(60)
-	check(room.rabbit.rope == null and room.rabbit.on_ground, "caindo sem ter pulado, passa pela corda")
+	var caught2 := false
+	for i in 60:
+		tick()
+		caught2 = caught2 or room.rabbit.rope != null
+	check(caught2, "caindo sem ter pulado, agarra a corda")
 	# corda fora do teto: frouxa, não dá para agarrar
 	load_def(ROPE_ROOM)
 	idle(10)
@@ -1796,7 +1800,13 @@ func test_prumo() -> void:
 	load_def(Levels.by_id("prumo"))
 	idle(10)
 	rot(1)
-	check(dies_within(300), "girar do chão, sem a corda, é cair nos espinhos")
+	var grabbed := false
+	for i in 300:
+		tick()
+		grabbed = grabbed or room.rabbit.rope != null
+		if room.state != "play":
+			break
+	check(grabbed, "girar do chão: caindo, o coelho agarra a corda (D95; antes caía nos espinhos)")
 
 
 func _mare_bot(stage: int) -> Array:
@@ -2900,16 +2910,17 @@ func test_mecha_dash() -> void:
 			tick(inp)
 			n += 1
 		check(flipped and m.lives == 3 and m.energy == m.ENERGY - 1, "girar %+d quadros da partida: ela erra, bate e leva dano (vidas %d, energia %d)" % [when, m.lives, m.energy])
-	# girar cedo demais (antes de travar a mira): ela mira de novo e pega
+	# girar antes do laser: o laser é posto mirando onde o coelho está naquele instante (D95)
 	m = _mecha()
 	_mecha_dash(m)
 	idle(10)
 	tick({"rotate": 1})
 	n = 0
-	while m.state != "stun" and n < 400:
+	while not m.committed and n < 200:
 		tick()
 		n += 1
-	check(m.lives == 2, "girar cedo demais não esquiva (vidas %d)" % m.lives)
+	var aim: Vector2 = (Vector2(room.rabbit.pos) + Vector2(6, 6) - m.pos).normalized()
+	check(m.committed and m.dash_dir.dot(aim) > 0.95, "girar antes do laser: ele mira no coelho onde ele está ao ser posto")
 	idle(200)
 	check(room.orientation == 1 and not room.def.get("limiter", false), "sem limitador: o giro fica")
 
@@ -3044,33 +3055,38 @@ func test_subsoil_and_anchors() -> void:
 	check(room.awaken_t == -1, "depois de desperto, a fase não repete a cena")
 
 
-## Coelho colado na mecha: ela sobe rápido e volta sentando; a onda de choque pega quem está no chão.
-func test_mecha_stomp() -> void:
-	print("mecha: a sentada")
+## O coelho encostado na mecha por um tempo: ela dá um dash curto para longe dele, sem dano (D95).
+func test_mecha_shove() -> void:
+	print("mecha: o empurrão (sai de baixo dela)")
 	var m = _mecha()
 	m.homers.clear()
-	room.rabbit.pos = Vector2i(int(m.pos.x) - 40, room.rabbit.pos.y)
-	var n := 0
-	var seen := {}
-	while n < 200 and not seen.has("stomp_land"):
-		tick()
-		seen[m.state] = true
-		n += 1
-	check(seen.has("stomp_up") and seen.has("stomp_down"), "perto demais, ela sobe e volta sentando")
-	check(m.lives == 3, "ao lado dela, a onda de choque não fere (vidas %d)" % m.lives)
-	# embaixo dela, sim
-	m = _mecha()
-	m.homers.clear()
-	m.state = "stomp_down"
-	m.t = 0
-	m.pos.y -= 40.0
+	m.t = -100000
+	var x0: float = m.pos.x
 	room.rabbit.pos = Vector2i(int(m.pos.x) - 6, room.rabbit.pos.y)
-	n = 0
-	while n < 60 and m.state == "stomp_down":
+	var n := 0
+	while n < 120 and m.shove_t == 0:
 		tick()
 		n += 1
-	check(m.lives == 2, "embaixo dela, a sentada tira um coração (vidas %d)" % m.lives)
+	check(m.shove_t > 0 and n >= m.SHOVE_AFTER - 1, "encostado, ela espera um tempo e dá o empurrão (%d quadros)" % n)
+	idle(m.SHOVE_FRAMES + 5)
+	check(absf(m.pos.x - x0) > 25.0 and m.lives == 3, "ela se afasta do coelho, sem tirar coração (andou %.0f px)" % absf(m.pos.x - x0))
+	check(sign(m.pos.x - x0) == sign(x0 - (room.rabbit.pos.x + 6)) or absf(x0 - (room.rabbit.pos.x + 6)) < 3.0, "para o lado oposto ao do coelho")
 
+
+## No giro, a mecha fica no mesmo ponto da tela, e a investida mantém a rota e o laser (D95).
+func test_mecha_screen_lock() -> void:
+	print("mecha: no giro, fica parada na tela")
+	var m = _mecha()
+	m.homers.clear()
+	_mecha_dash(m)
+	while not m.committed:
+		tick()
+	var off0: Vector2 = m.pos - room.cam
+	var dir0: Vector2 = m.dash_dir
+	wait_rot_ready()
+	tick({"rotate": 1})
+	check((m.pos - room.cam).distance_to(off0) < 1.0, "a posição na tela não muda no giro (antes %s, depois %s)" % [off0, m.pos - room.cam])
+	check(m.dash_dir == dir0, "a direção do laser não muda")
 
 ## Barras: a sólida (= } _ {) bloqueia de todos os lados; a de passagem (↑ → ↓ ←) atravessa por
 ## baixo e segura por cima (D93).

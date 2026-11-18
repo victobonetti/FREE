@@ -66,17 +66,9 @@ const DASH_WARN := [54, 46, 38]
 const DASH_SPEED := 260.0
 const KEEP := [72.0, 130.0]     # distância que ela mantém do coelho, andando (perto: recua)
 const DASH_LASER := [36, 32, 28] # quadros finais do aviso com o laser posto: a direção não muda mais
-const STOMP_NEAR := 46.0         # coelho mais perto que isto (na horizontal): a sentada
-const STOMP_CD := 320            # quadros entre duas sentadas
-const STOMP_PREP := 12           # agacha antes de subir
-const STOMP_UP := 14             # subida rápida
-const STOMP_RISE := 56.0         # altura da subida (px)
-const STOMP_HANG := 6
-const STOMP_FALL := 420.0        # px/s na descida
-const STOMP_LAND := 34           # se recompõe depois da sentada
-const WAVE_SPEED := 130.0        # onda de choque correndo pelo chão (px/s)
-const WAVE_LIFE := 24            # curta: some a uns 50 px da mecha (não varre a sala)
-const WAVE_H := 5.0              # baixa: quem está no chão é atingido; pulando, não
+const SHOVE_AFTER := 45          # quadros com o coelho encostado nela até ela dar o empurrão (D95)
+const SHOVE_FRAMES := 20         # duração do dash para longe do coelho
+const SHOVE_SPEED := 190.0       # px/s
 const DASH_MAX := 120
 const STUN := [80, 70, 60]
 const BREAK_FRAMES := 100        # explosão de um terço: a mecha fica parada, faiscando
@@ -132,9 +124,9 @@ var dash_dir := Vector2.LEFT  # mira travada no fim do aviso (direção de tela)
 var committed := false
 var lost := false           # girou depois da mira travada: a investida sai sem alvo
 var dash_hit := false       # a investida pegou o coelho (então a batida na parede não a fere)
-var stomp_cd := 0
-var stomp_y0 := 0.0
-var waves: Array = []       # ondas de choque da sentada: {"x", "dir", "life", "hit"}
+var contact_t := 0          # quadros seguidos com o coelho encostado nela
+var shove_t := 0            # quadros restantes do empurrão (dash para longe do coelho)
+var shove_dir := 0.0
 var launched := 0           # teleguiados lançados neste ataque
 var flash := 0              # pisca branco ao levar dano
 var hud_hit := 0
@@ -166,8 +158,8 @@ func on_reset(r) -> void:
 	homers.clear()
 	blasts.clear()
 	trail.clear()
-	waves.clear()
-	stomp_cd = 0
+	contact_t = 0
+	shove_t = 0
 	vel = Vector2.ZERO
 	float_t = 0
 	flash = 0
@@ -218,7 +210,12 @@ func absorb_kill(r) -> bool:
 
 
 func on_rotate(r, dir: int) -> void:
-	pos = r._rot_point(pos, dir)
+	# a mecha fica onde está NA TELA (D95): não gira com a sala. A sala (e o coelho) giram em volta
+	# dela; a investida segue na mesma rota e o laser fica no mesmo lugar. (A câmera ainda não girou.)
+	if state != "inert" and state != "arrive":
+		pos = r._rot_point(r.cam, dir) + (pos - r.cam)
+	else:
+		pos = r._rot_point(pos, dir)
 	cap_pos = r._rot_point(cap_pos, dir)
 	cap_from = r._rot_point(cap_from, dir)
 	for m in markers:
@@ -235,10 +232,7 @@ func on_rotate(r, dir: int) -> void:
 	for d in debris:
 		d["pos"] = r._rot_point(d["pos"], dir)
 	trail.clear()
-	waves.clear()
-	if state.begins_with("stomp"):
-		state = "idle"
-		t = 0
+	shove_t = 0
 	if state == "dash":
 		locked = false   # perdeu o alvo: segue reto (na tela) até a parede
 	elif state == "dash_warn" and committed:
@@ -279,7 +273,7 @@ func _pod() -> Vector2:
 
 
 func fighting() -> bool:
-	return state in ["idle", "aim", "homing", "dash_warn", "dash", "stun", "break", "stomp_prep", "stomp_up", "stomp_hang", "stomp_down", "stomp_land"]
+	return state in ["idle", "aim", "homing", "dash_warn", "dash", "stun", "break"]
 
 
 # ---------------------------------------------------------------- simulação
@@ -303,12 +297,9 @@ func step(r) -> void:
 	if room.state != "play":
 		return
 	t += 1
-	stomp_cd = maxi(stomp_cd - 1, 0)
 	_smoke()
 	_turn()
-	_update_waves()
-	if room.state != "play":
-		return
+	_update_contact()
 	match state:
 		"inert":
 			if t >= (INTRO_AGAIN if intro_seen else INTRO_FREE):
@@ -359,13 +350,7 @@ func step(r) -> void:
 			_body(true)
 			# na primeira fase, um ataque por vez: espera os teleguiados acabarem
 			var busy: bool = _phase() == 0 and not homers.is_empty()
-			var rc := _rabbit_c()
-			if stomp_cd == 0 and t > 15 and _on_floor() and float_t == 0 and absf(rc.x - pos.x) < STOMP_NEAR and absf(rc.y - pos.y) < 50.0:
-				# perto demais: sobe rápido e volta sentando no chão
-				state = "stomp_prep"
-				t = 0
-				room.sfx.emit("crusher_wake")
-			elif t >= IDLE[_phase()] and not busy:
+			if t >= IDLE[_phase()] and not busy:
 				_next_attack()
 		"aim":
 			_body(false)
@@ -403,37 +388,6 @@ func step(r) -> void:
 				room.sfx.emit("gatsby_dash")
 		"dash":
 			_dash()
-		"stomp_prep":
-			puppet.mood = "furious"
-			if t >= STOMP_PREP:
-				state = "stomp_up"
-				t = 0
-				stomp_y0 = pos.y
-				room.sfx.emit("gatsby_dash")
-		"stomp_up":
-			var k := clampf(float(t) / STOMP_UP, 0.0, 1.0)
-			pos.y = maxf(stomp_y0 - STOMP_RISE * (1.0 - (1.0 - k) * (1.0 - k)), _bounds().position.y)
-			if anim % 2 == 0:
-				_thrust_puff()
-			if t >= STOMP_UP:
-				state = "stomp_hang"
-				t = 0
-		"stomp_hang":
-			if t >= STOMP_HANG:
-				state = "stomp_down"
-				t = 0
-		"stomp_down":
-			pos.y += STOMP_FALL / 60.0
-			if room.invuln == 0 and room.overlaps(Rect2i(body_rect()), room.rabbit.rect):
-				room.kill()
-				if room.state != "play":
-					return
-			if pos.y >= _bounds().end.y:
-				pos.y = _bounds().end.y
-				_stomp_impact()
-		"stomp_land":
-			if t >= STOMP_LAND:
-				_go_idle()
 		"stun":
 			_body(false)
 			if t % 6 == 0:
@@ -478,50 +432,29 @@ func step(r) -> void:
 	_update_homers()
 
 
-## A sentada bate no chão: tremor, poeira e duas ondas de choque (só efeito). Fere só quem está
-## embaixo dela, na largura do corpo.
-func _stomp_impact() -> void:
-	var under := Rect2(pos.x - MW / 2.0, _floor_y() - MH, MW, MH)
-	if room.invuln == 0 and Rect2(room.rabbit.rect).intersects(under):
-		room.kill()
-	state = "stomp_land"
-	t = 0
-	stomp_cd = STOMP_CD
-	vel = Vector2.ZERO
-	last_floor = true
-	room.shake = maxf(room.shake, 5.0)
-	room.impact.emit(2.2)
-	room.sfx.emit("slam")
-	var fy := _floor_y()
-	for sd in [-1.0, 1.0]:
-		waves.append({"x": pos.x + sd * (MW / 2.0), "dir": sd, "life": WAVE_LIFE, "hit": false})
-		for i in 8:
-			room.particles.append({"pos": Vector2(pos.x + sd * randf_range(4.0, 20.0), fy - 1.0),
-				"vel": Vector2(sd * randf_range(20.0, 80.0), -randf_range(20.0, 70.0)),
-				"life": randi_range(10, 20), "col": C_RIVET if i % 2 else C_FIRE, "grav": 200.0})
-
-
-## A superfície do chão (px da sala atual).
-func _floor_y() -> float:
-	return room.ph - 8.0
-
-
-## Ondas de choque: correm pelo chão e somem; são só efeito (poeira e tremor), não ferem.
-func _update_waves() -> void:
-	if waves.is_empty():
+## O coelho encostado nela por um tempo (embaixo ou colado): ela dá um dash curto para o lado
+## oposto, sem dano, para ele sair. Só parada (andando, mirando, lançando mísseis).
+func _update_contact() -> void:
+	if shove_t > 0:
+		shove_t -= 1
 		return
-	var fy := _floor_y()
-	var keep: Array = []
-	for w in waves:
-		w["x"] += w["dir"] * WAVE_SPEED / 60.0
-		w["life"] -= 1
-		if w["life"] <= 0 or w["x"] < 8.0 or w["x"] > room.pw - 8.0:
-			continue
-		if anim % 3 == 0:
-			room.particles.append({"pos": Vector2(w["x"], fy - 1.0), "vel": Vector2(w["dir"] * 10.0, -randf_range(15.0, 40.0)),
-				"life": randi_range(8, 14), "col": C_FIRE, "grav": 160.0})
-		keep.append(w)   # só efeito: o dano da sentada é só embaixo da mecha (D91)
-	waves = keep
+	var calm: bool = state == "idle" or state == "aim" or state == "homing"
+	if calm and room.overlaps(Rect2i(body_rect().grow(2.0)), room.rabbit.rect):
+		contact_t += 1
+	else:
+		contact_t = 0
+	if contact_t >= SHOVE_AFTER:
+		contact_t = 0
+		var dx := _rabbit_c().x - pos.x
+		shove_dir = -signf(dx) if absf(dx) > 2.0 else (1.0 if pos.x < room.pw / 2.0 else -1.0)
+		var b := _bounds()
+		if (shove_dir < 0.0 and pos.x <= b.position.x + 2.0) or (shove_dir > 0.0 and pos.x >= b.end.x - 2.0):
+			shove_dir = -shove_dir   # encostada na parede: vai para o outro lado
+		shove_t = SHOVE_FRAMES
+		room.sfx.emit("gatsby_dash")
+		for i in 6:
+			room.particles.append({"pos": pos + Vector2(-shove_dir * 14.0, 12), "vel": Vector2(-shove_dir * randf_range(30.0, 80.0), -randf_range(5.0, 30.0)),
+				"life": randi_range(8, 14), "col": C_FLAME if i % 2 else C_RIVET, "grav": 60.0})
 
 
 func _go_idle() -> void:
@@ -587,6 +520,8 @@ func _body(walk: bool) -> void:
 				vel.x = 0.0
 		elif _on_floor():
 			vel.x = move_toward(vel.x, 0.0, 6.0)
+	if shove_t > 0:
+		vel.x = shove_dir * SHOVE_SPEED
 	var fall := vel.y
 	pos += vel / 60.0
 	pos.x = clampf(pos.x, b.position.x, b.end.x)
@@ -952,18 +887,6 @@ func _pose() -> Dictionary:
 			p["thrust"] = -vel.normalized() if vel.length() > 1.0 else Vector2.ZERO
 			p["swing"] = -5.0
 			p["dangle"] = 3.0
-		"stomp_prep":
-			p["slump"] = 6.0
-			p["swing"] = -3.0
-		"stomp_up", "stomp_hang":
-			p["dangle"] = 4.0
-			p["thrust"] = Vector2.DOWN
-			p["raise"] = 0.6
-		"stomp_down":
-			p["dangle"] = -1.0
-			p["raise"] = 1.0
-		"stomp_land":
-			p["slump"] = 7.0 * (1.0 - clampf(float(t) / STOMP_LAND, 0.0, 1.0))
 		"aim", "homing":
 			p["raise"] = 1.0
 			p["lid"] = 1.0
@@ -978,6 +901,9 @@ func _pose() -> Dictionary:
 		"wreck":
 			p["slump"] = 8.0
 			p["tilt"] = 0.24
+	if shove_t > 0:
+		p["tilt"] += shove_dir * 0.25
+		p["thrust"] = Vector2(-shove_dir, 0.3).normalized()
 	if float_t > 0 and state != "dash":
 		p["dangle"] = 3.0
 		p["thrust"] = Vector2.DOWN
@@ -995,11 +921,19 @@ func _pose() -> Dictionary:
 	return p
 
 
+## Durante a animação do giro, a mecha (e o laser) ficam parados na tela: o ponto `p` da sala nova é
+## desenhado onde ele vai estar quando a animação acabar.
+func _lock(p: Vector2) -> Vector2:
+	if room == null or not room.rotating or state == "inert" or state == "arrive":
+		return p
+	return room.cam + (p - room.cam).rotated(-room.view_angle)
+
+
 ## Um ponto do corpo (em relação a `pos`, em pé) para px da sala, com a inclinação e o giro da tela.
 func _body_point(local: Vector2, pz: Dictionary) -> Vector2:
 	var f := Vector2(0, FEET)
 	var q: Vector2 = (local - f).rotated(pz["tilt"]) + f + pz["off"]
-	return pos + q.rotated(-room.view_angle)
+	return _lock(pos) + q.rotated(-room.view_angle)
 
 
 ## A cápsula acompanha a mecha na tela (também durante a animação do giro, quando step não roda).
@@ -1050,33 +984,25 @@ func _draw() -> void:
 	draw_set_transform_matrix(base)
 	# o laser da investida: aparece uma vez, já na direção final, e não muda mais
 	if state == "dash_warn" and committed:
-		var a0 := pos
-		var b0 := a0 + dash_dir * _ray_len(a0, dash_dir)
+		var a0 := _lock(pos)
+		var b0 := _lock(pos + dash_dir * _ray_len(pos, dash_dir))
 		var fl := 0.75 + 0.25 * sin(anim * 0.9)
 		draw_line(a0, b0, Color(C_AIM, 0.18 * fl), 5.0)
 		draw_line(a0, b0, Color(C_AIM, 0.85 * fl), 1.0)
 		draw_circle(b0, 2.5 + sin(anim * 0.5), Color(C_AIM, 0.7))
 		draw_circle(b0, 1.0, Color(1, 0.9, 0.9, 0.9))
-	# ondas de choque da sentada
-	for w in waves:
-		var kf: float = float(w["life"]) / WAVE_LIFE
-		var fy := _floor_y()
-		var wx: float = w["x"]
-		var hgt := WAVE_H * (0.5 + 0.5 * kf)
-		draw_colored_polygon(PackedVector2Array([Vector2(wx - 6, fy), Vector2(wx - 1, fy - hgt), Vector2(wx + 2, fy - hgt * 0.6), Vector2(wx + 6, fy)]), Color(C_FIRE, 0.75 * kf + 0.2))
-		draw_line(Vector2(wx - 8 * w["dir"], fy - 1), Vector2(wx, fy - 1), Color(1, 0.95, 0.8, 0.6 * kf), 1.0)
 	# rastro
 	for i in trail.size():
 		var tp: Vector2 = trail[i]
 		draw_set_transform_matrix(base * Transform2D(-room.view_angle, tp.round()))
 		draw_rect(Rect2(-MW / 2.0 + 4, -MH / 2.0 + 10, MW - 8, MH - 10), Color(C_HULL_LIGHT, 0.10 + 0.07 * i), false, 1.0)
 	var pz := _pose()
-	var xf := base * Transform2D(-room.view_angle, pos.round()) * Transform2D(0.0, pz["off"].round()) \
+	var xf := base * Transform2D(-room.view_angle, _lock(pos).round()) * Transform2D(0.0, pz["off"].round()) \
 		* Transform2D(pz["tilt"], Vector2(0, FEET)) * Transform2D(0.0, Vector2(0, -FEET))
 	draw_set_transform_matrix(xf)
 	_draw_mecha(pz)
 	if fighting() or state == "dying":
-		draw_set_transform_matrix(base * Transform2D(-room.view_angle, pos.round()))
+		draw_set_transform_matrix(base * Transform2D(-room.view_angle, _lock(pos).round()))
 		_draw_gatsby_hearts()
 	draw_set_transform_matrix(base)
 	_draw_offscreen()

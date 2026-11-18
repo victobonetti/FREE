@@ -76,7 +76,7 @@ const WATER_CALM_Q := 0.004    # troca (px por subpasso) abaixo da qual a água 
 const WATER_CALM_FRAMES := 20
 const WATER_FILM := 0.4        # lâmina mais fina que isto (px) seca sozinha quando a água está quase parada
 const WATER_SETTLE := 1500     # máximo de quadros para assentar a água ao carregar a sala
-const DRAIN_RATE := 1.0        # px de altura por quadro que o ralo engole em cada coluna dele
+const DRAIN_RATE := 2.5        # px de altura por quadro que o ralo engole em cada coluna dele (D95: 2,5x)
 const ROPE_SEG := 4.0          # distância entre os pontos da corda (px)
 const ROPE_ITERS := 10         # iterações das restrições de distância por quadro
 const ROPE_AIR := 0.985        # perda de velocidade dos pontos por quadro
@@ -2258,13 +2258,14 @@ func _update_mechanisms(instant: bool) -> void:
 ## A corda presa no teto que passa por este retângulo, ou null. Vale a forma real da corda:
 ## logo depois de um giro ela ainda está balançando.
 func rope_at(r: Rect2i):
-	var box := Rect2(r)
+	# alcance generoso (D95): 3 px de folga em volta do coelho e os trechos entre os pontos da corda
+	var box := Rect2(r).grow(3.0)
 	for rp in ropes:
 		if rp["facing"] != 2:
 			continue
 		var pts: PackedVector2Array = rp["pts"]
 		for i in range(1, pts.size()):
-			if box.has_point(pts[i]):
+			if box.has_point(pts[i]) or box.has_point((pts[i] + pts[i - 1]) * 0.5):
 				return rp
 	return null
 
