@@ -129,7 +129,8 @@ const LEVER_PAN := 34           # quadros da câmera indo até a alavanca
 const LEVER_HIT := 20           # quadro (depois do PAN) em que a alavanca vira
 const LEVER_PULL := 40          # duração do gesto da alavanca
 const LEVER_WATCH := 52         # quadros da câmera acompanhando a caixa saindo da calha
-const ACID_TOUCH := 0.02        # fração do coelho dentro do ácido a partir da qual ele morre
+const ACID_TOUCH := 0.5         # fração do coelho dentro do ácido a partir da qual ele morre: metade do
+                                 # corpo. Cair dentro mata; encostar o pé, um respingo ou o giro, não.
 const C_DRAIN := Color("8d8d99")
 # Engenhocas do Gatsby (ato 2): aço em chapas remendadas, rebites, ferrugem e tinta de pichação.
 const C_STEEL := [Color("2b2d35"), Color("31343d"), Color("26282f")]
@@ -3234,6 +3235,7 @@ func _draw() -> void:
 		_draw_contact_shadow()
 		_draw_rabbit(base)
 		_draw_awaken()
+		_draw_limiter_beam()
 
 	_draw_crushers(base)
 	_draw_water()
@@ -4318,6 +4320,9 @@ func _find_anchors() -> void:
 	anchors.clear()
 	if not def.get("limiter", false):
 		return
+	for a in actors:
+		if a.has_method("limiter_source"):
+			return   # um ator faz o papel do amortecedor (o Gatsby na corrida)
 	var n := maxi(1, gw / 26)
 	for k in n:
 		var c := clampi(int((k + 0.5) * gw / n), 2, gw - 3)
@@ -4363,6 +4368,52 @@ func _draw_anchors() -> void:
 			var kf := 1.0 - float(anchor_fx) / 24.0
 			draw_arc(Vector2(0, 5), 6.0 + kf * 40.0, 0.0, TAU, 28, Color(C_ANCHOR, 0.6 * (1.0 - kf)), 1.0)
 	draw_set_transform_matrix(_base)
+
+
+## De onde vem o puxão do limitador: o ator que faz esse papel (o Gatsby na corrida) ou o
+## amortecedor mais perto do coelho (a ponta do cristal). Vector2 em px da sala, ou null.
+func _limiter_source() -> Variant:
+	for a in actors:
+		if a.has_method("limiter_source"):
+			return a.limiter_source()
+	var best: Variant = null
+	var rc := Vector2(rabbit.pos) + Vector2(6, 6)
+	for an in anchors:
+		var rr: Rect2i = an["rect"]
+		var dv: Vector2 = [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][an["facing"]]
+		var tip := Vector2(rr.position) + Vector2(4, 4) + dv * 13.0
+		if best == null or tip.distance_to(rc) < (best as Vector2).distance_to(rc):
+			best = tip
+	return best
+
+
+## O laser do limitador: enquanto o tempo corre, um fio vermelho fraco liga a fonte ao coelho (fica
+## mais forte no fim); quando desfaz o giro, um feixe forte. Mostra quem puxou a sala de volta.
+func _draw_limiter_beam() -> void:
+	if not def.get("limiter", false) or (limit_t <= 0 and anchor_fx <= 0):
+		return
+	var src: Variant = _limiter_source()
+	if src == null:
+		return
+	var a: Vector2 = src
+	var b := Vector2(rabbit.pos) + Vector2(6, 6)
+	draw_set_transform_matrix(_base)
+	if anchor_fx > 0:
+		var kf := float(anchor_fx) / 24.0
+		draw_line(a, b, Color(C_ANCHOR, 0.30 * kf), 6.0)
+		draw_line(a, b, Color(C_ANCHOR, 0.9 * kf), 2.0)
+		draw_line(a, b, Color(1, 0.85, 0.85, 0.8 * kf), 1.0)
+		draw_circle(b, 7.0 * kf + 2.0, Color(C_ANCHOR, 0.35 * kf))
+		draw_circle(a, 4.0, Color(C_ANCHOR, 0.6 * kf))
+	elif limit_t > 0:
+		var end := 1.0 - limiter_ratio()          # 0 no começo, 1 quando vai desfazer
+		var al := 0.10 + 0.35 * end * end + 0.05 * sin(frame * 0.4)
+		var n := int(a.distance_to(b) / 4.0)
+		for i in n:
+			# fio tracejado que corre da fonte para o coelho
+			if (i + frame / 3) % 3 != 0:
+				draw_line(a.lerp(b, float(i) / n), a.lerp(b, float(i + 1) / n), Color(C_ANCHOR, al), 1.0)
+		draw_circle(a, 2.0 + 2.0 * end, Color(C_ANCHOR, 0.25 + 0.4 * end))
 
 
 ## O despertar (fase 3): encurralado, o coelho se assusta ("!") antes de descobrir a batida; na

@@ -691,13 +691,8 @@ func _update_danger_audio() -> void:
 		rumble_player.play()
 	rumble_player.volume_db = lerpf(-34.0, -9.0, d)
 	rumble_player.pitch_scale = lerpf(0.8, 1.35, d)
-	if d > 0.5:
-		alarm_t -= 1
-		if alarm_t <= 0:
-			_play_sfx("alarm")
-			alarm_t = roundi(lerpf(46.0, 14.0, (d - 0.5) * 2.0))
-	else:
-		alarm_t = 0
+	# sem alarme: só o ronco da parede (o alarme repetido era poluição sonora demais)
+	alarm_t = 0
 
 
 func _update_rotation_hud() -> void:

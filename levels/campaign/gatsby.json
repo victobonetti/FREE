@@ -283,26 +283,12 @@
 				]
 			},
 			{
-				"lever": true,
 				"mood": "nervous",
-				"rotate": 1.0,
-				"wait": 0.2,
 				"when": [
 					100.0,
 					1.0,
 					3.0,
 					14.0
-				]
-			},
-			{
-				"lever": true,
-				"mood": "nervous",
-				"rotate": -1.0,
-				"when": [
-					131.0,
-					9.0,
-					5.0,
-					6.0
 				]
 			},
 			{
@@ -541,6 +527,6 @@
 	"start_rot": 0,
 	"theme": "industrial",
 	"verified": true,
-	"verified_hash": "cfed291dea1c70b8b3b26007bdd2a0450c0cae1f6ae546784e0c1b7b79bed2b7",
+	"verified_hash": "c6591da497cea68b93781263d673612ee9a260f24d5dd55f2fd459dce6873abd",
 	"version": 1
 }

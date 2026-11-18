@@ -661,3 +661,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Provas:** a fuga entra com a rota do robô (`tests/fixtures/gatsby-route.json`) como replay. A mecha entra sem replay, provada por bot como o Jeffrey (`test_mecha_bot`; está em `BOT_IDS`), porque o bot de teste repõe as vidas do coelho e não serve como replay honesto.
 - **Ferramenta:** `tools/canonize_levels.gd` aceita `bot:<id>` (entra sem replay) e acha a rota em `route-<id>.json` ou `<id>-route.json`.
 - A fuga ganhou o tema `industrial` (só aparência).
+
+### D88 — Ajustes de jogo: mecha, laser do limitador, Gatsby sem giros, ácido, alarme
+- **Mecha:** os compartimentos de mísseis saíram de cima do rosto do Gatsby (bem para os lados). **Investida irreversível:** a linha piscando que seguia o coelho saiu; o laser aparece uma vez, já na direção final, e a investida vai reta por ele, sem corrigir (antes ela ainda corrigia a rota e pegava quem tinha girado). **Sentada (ataque novo):** com o coelho a menos de 46 px, ela agacha, sobe rápido, volta sentando e solta duas ondas de choque pelo chão; quem está no chão leva dano, quem pula escapa.
+- **Laser do limitador:** jogadores achavam que a volta do giro era bug. Agora, enquanto o tempo corre, um fio vermelho tracejado liga a fonte ao coelho (mais forte no fim) e, ao desfazer, um feixe forte. A fonte é o amortecedor mais perto ou, na corrida, o próprio Gatsby (`limiter_source()` do ator).
+- **Corrida do Gatsby:** ele não gira mais a sala; o giro é só do coelho, e o Gatsby faz o papel do amortecedor. A rota antiga dependia dos giros dele: a fase está como **prova pendente** (`PENDING_PROOF` nos testes) até a rota ser refeita.
+- **Ácido:** mata com metade do corpo dentro (antes, 2%): cair dentro mata; um respingo, encostar o pé ou o giro, não.
+- **Alarme da parede de espinhos removido** (fases com a parede correndo): ficou só o ronco.
