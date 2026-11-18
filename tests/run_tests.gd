@@ -3038,7 +3038,7 @@ func test_mecha_stomp() -> void:
 	check(m.lives == 2, "a onda de choque (ou a sentada) pega o coelho parado no chão (vidas %d)" % m.lives)
 	m = _mecha()
 	m.homers.clear()
-	room.rabbit.pos = Vector2i(int(m.pos.x) - 60, room.rabbit.pos.y)
+	room.rabbit.pos = Vector2i(int(m.pos.x) - 38, room.rabbit.pos.y)
 	m.stomp_cd = 0
 	m.state = "stomp_down"
 	m.t = 0
@@ -3053,10 +3053,22 @@ func test_mecha_stomp() -> void:
 			held -= 1
 		if not m.waves.is_empty() and not jumped:
 			var w = m.waves[0]
-			if absf(w["x"] - (room.rabbit.pos.x + 6)) < 30.0 and room.rabbit.on_ground:
+			if absf(w["x"] - (room.rabbit.pos.x + 6)) < 14.0 and room.rabbit.on_ground:
 				inp = {"jump_pressed": true, "jump_held": true}
 				jumped = true
 				held = 14
 		tick(inp)
 		n += 1
 	check(jumped and m.lives == 3, "pulando, a onda passa por baixo (vidas %d)" % m.lives)
+	# longe (a mais de ~55 px da mecha), a onda some antes de chegar
+	m = _mecha()
+	m.homers.clear()
+	room.rabbit.pos = Vector2i(int(m.pos.x) - 90, room.rabbit.pos.y)
+	m.state = "stomp_down"
+	m.t = 0
+	m.pos.y -= 40.0
+	n = 0
+	while n < 90 and m.state != "idle":
+		tick()
+		n += 1
+	check(m.lives == 3, "a onda é curta: longe da mecha, o coelho parado não é atingido")

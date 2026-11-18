@@ -672,3 +672,6 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 ### D89 — Seletor de fase na build de teste
 - **Para os beta testers:** `scripts/build_info.gd` tem `BETA = true`. Com isso, a tela inicial mostra "< BETA · FASE N · NOME >": setas (teclado, controle) ou tocar nas setas (celular) escolhem; Enter (ou tocar fora das setas) começa direto na fase. "Do início" começa pela abertura, como sempre.
 - **Na build final:** trocar `BETA` para `false`; o seletor some e nada mais muda.
+
+### D90 — Onda de choque mais contida
+- **Victor:** a onda era legal, mas difícil demais. Agora ela anda menos (some a uns 50 px da mecha, antes varria a sala), é mais baixa (fácil de pular), acerta numa faixa mais estreita, uma sentada tira no máximo um coração (as duas ondas param de ferir depois do primeiro acerto) e a sentada espera mais entre uma e outra (320 quadros).

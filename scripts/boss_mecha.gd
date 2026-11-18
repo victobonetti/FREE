@@ -67,16 +67,16 @@ const DASH_SPEED := 260.0
 const KEEP := [72.0, 130.0]     # distância que ela mantém do coelho, andando (perto: recua)
 const DASH_LASER := [36, 32, 28] # quadros finais do aviso com o laser posto: a direção não muda mais
 const STOMP_NEAR := 46.0         # coelho mais perto que isto (na horizontal): a sentada
-const STOMP_CD := 200            # quadros entre duas sentadas
+const STOMP_CD := 320            # quadros entre duas sentadas
 const STOMP_PREP := 12           # agacha antes de subir
 const STOMP_UP := 14             # subida rápida
 const STOMP_RISE := 56.0         # altura da subida (px)
 const STOMP_HANG := 6
 const STOMP_FALL := 420.0        # px/s na descida
 const STOMP_LAND := 34           # se recompõe depois da sentada
-const WAVE_SPEED := 150.0        # onda de choque correndo pelo chão (px/s)
-const WAVE_LIFE := 60
-const WAVE_H := 7.0              # altura da onda: quem está no chão é atingido; pulando, não
+const WAVE_SPEED := 130.0        # onda de choque correndo pelo chão (px/s)
+const WAVE_LIFE := 24            # curta: some a uns 50 px da mecha (não varre a sala)
+const WAVE_H := 5.0              # baixa: quem está no chão é atingido; pulando, não
 const DASH_MAX := 120
 const STUN := [80, 70, 60]
 const BREAK_FRAMES := 100        # explosão de um terço: a mecha fica parada, faiscando
@@ -517,8 +517,10 @@ func _update_waves() -> void:
 			room.particles.append({"pos": Vector2(w["x"], fy - 1.0), "vel": Vector2(w["dir"] * 10.0, -randf_range(15.0, 40.0)),
 				"life": randi_range(8, 14), "col": C_FIRE, "grav": 160.0})
 		var rr: Rect2i = room.rabbit.rect
-		if not w["hit"] and float(rr.end.y) >= fy - 1.0 - WAVE_H * 0.4 and absf(float(rr.position.x) + 6.0 - w["x"]) < 7.0:
-			w["hit"] = true
+		if not w["hit"] and float(rr.end.y) >= fy - 1.0 - WAVE_H * 0.4 and absf(float(rr.position.x) + 6.0 - w["x"]) < 5.0:
+			# uma sentada tira no máximo um coração: as duas ondas param de ferir
+			for o in waves:
+				o["hit"] = true
 			room.kill()
 			if room.state != "play":
 				return
