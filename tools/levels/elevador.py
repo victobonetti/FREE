@@ -11,7 +11,7 @@ from levelkit import Level
 lv = Level("elevador", "Elevador", 14, 10, rotate=False, limiter=False,
            notes="Entre o ato 2 e o ato 3 (D107). A cabine sobe, trava perto do topo, o cabo estoura e ela cai. "
                  "No escuro, uma lâmpada roxa acende e a porta destrava. Sem giro (a cabine tem teto).",
-           extra={"actors": ["res://scripts/elevator.gd"], "music": "res://music/industrial-theme.mp3"})
+           extra={"actors": ["res://scripts/elevator.gd"], "elevator": "ride", "music": "res://music/industrial-theme.mp3"})
 lv.ascii([
     "##############",
     "#............#",

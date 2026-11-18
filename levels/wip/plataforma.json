@@ -1,0 +1,26 @@
+{
+	"name": "Plataforma",
+	"rotate": false,
+	"limiter": false,
+	"start_rot": 0,
+	"version": 1,
+	"theme": "industrial",
+	"rows": [
+		"##########################",
+		"#........................#",
+		"#........................#",
+		"#........................#",
+		"#...................DD...#",
+		"#...................DD...#",
+		"#.PP................DD...#",
+		"#.PP................DD...#",
+		"##########################",
+		"##########################"
+	],
+	"notes": "Fim da fábrica (D107): a plataforma de embarque. O elevador está aberto e aceso; entrar nele leva à cabine.",
+	"actors": [
+		"res://scripts/elevator.gd"
+	],
+	"elevator": "hall",
+	"music": "res://music/industrial-theme.mp3"
+}

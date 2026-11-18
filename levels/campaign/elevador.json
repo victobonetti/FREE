@@ -2,6 +2,7 @@
 	"actors": [
 		"res://scripts/elevator.gd"
 	],
+	"elevator": "ride",
 	"music": "res://music/industrial-theme.mp3",
 	"name": "Elevador",
 	"notes": "Entre o ato 2 e o ato 3 (D107). A cabine sobe, trava perto do topo, o cabo estoura e ela cai. No escuro, uma lâmpada roxa acende e a porta destrava. Sem giro (a cabine tem teto).",
@@ -21,6 +22,6 @@
 	"start_rot": 0,
 	"theme": "industrial",
 	"verified": true,
-	"verified_hash": "c9a1df386fd91135ca34d0298534e974d1bd04ee47843dda176caa2c8b12fc9b",
+	"verified_hash": "3b214934fe742e9d7483dbc68bd8f164917fb1790db60215bd4a34dd0bd7da7f",
 	"version": 1
 }

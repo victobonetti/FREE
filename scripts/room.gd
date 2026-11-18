@@ -3481,6 +3481,11 @@ func _draw() -> void:
 	draw_set_transform_matrix(base)
 	_draw_ambient_motion()
 	_draw_cast_shadows()
+	# um ator pode desenhar no fundo da sala (atrás das peças e do coelho): draw_back(sala)
+	for a in actors:
+		if a.has_method("draw_back"):
+			a.draw_back(self)
+			draw_set_transform_matrix(base)
 
 	# compartimentos (fundo)
 	for s in sockets:
