@@ -18,7 +18,7 @@ const MAX_TIME := 30.0
 const MIN_W := 6
 const MIN_H := 6
 const INVERSE_GATES := "¹²³⁴⁵⁶⁷⁸⁹"   # comporta inversa 1..9
-const GLYPHS := "#.PBSD123456789abcdefghi=}_{^>v<~%o|-+LH¹²³⁴⁵⁶⁷⁸⁹"
+const GLYPHS := "#.PBSD123456789abcdefghi=}_{↑→↓←^>v<~%o|-+LH¹²³⁴⁵⁶⁷⁸⁹"
 const BLOCK_GLYPHS := "PBSLHabcdefghi"   # peças de 2x2
 const GATE_SOCKETS := "abcdefghi"
 const MAX_BATTERIES := 3

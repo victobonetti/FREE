@@ -17,8 +17,10 @@ extends RefCounted
 ##   a..i  compartimento de comporta (bloco 2x2): "a" abre a comporta "1", "b" a "2"...
 ##   ¹²³⁴⁵⁶⁷⁸⁹  comporta inversa, com o mesmo número: abre e fecha ao contrário da comporta comum.
 ##        Usa o mesmo compartimento: com a caixa lá, a comporta "1" abre e a inversa fecha.
-##   = } _ {  plataforma por orientação, com a seta para cima, direita, baixo, esquerda;
-##            só é sólida quando a seta aponta para cima na tela
+##   = } _ {  barra sólida por orientação, com a seta para cima, direita, baixo, esquerda;
+##            só existe quando a seta aponta para cima na tela, e aí bloqueia de todos os lados
+##   ↑ → ↓ ←  barra de passagem: igual, mas de mão única (atravessa pulando por baixo ou de
+##            lado; só segura quem chega por cima)
 ##   ^ > v <  espinhos (a ponta aponta para a direção do símbolo)
 ##   | -  corda: uma sequência reta de "|" (ou de "-") é uma corda esticada; a ponta encostada
 ##        numa parede é a âncora. Só dá para agarrar a corda que pende do teto.

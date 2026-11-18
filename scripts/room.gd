@@ -21,6 +21,7 @@ const ROT_FRAMES := 16       # duração da animação do giro
 const SPIN_FRAMES := 9       # giro do bloco (sala de boss): mais curto que o da sala, sem pausar
 const FLIP_FRAMES := 24      # cambalhota do coelho ao girar (passa um pouco do giro, já caindo)
 const C_FLIP := Color("8fd0ff")       # faíscas azuis do giro
+const C_PASS := Color("9fe6c1")       # barra de passagem (verde-água: diferente da sólida)
 # Subsoil (ato 1): o subsolo embaixo do campo, em quatro trechos. Só aparência (D82).
 const SUBSOIL := ["raizes", "caverna", "aquifero", "despensa"]
 const C_SOIL := {
@@ -59,7 +60,8 @@ const WIN_FRAMES := 44
 const DEATH_FRAMES := 20
 const INVERSE_GATES := "¹²³⁴⁵⁶⁷⁸⁹"   # comporta inversa: fecha quando a comporta de mesmo número abre
 const GATE_SOCKETS := "abcdefghi"  # compartimento "a" abre a comporta "1", e assim por diante
-const PLATFORM_CHARS := "=}_{"     # seta para cima, direita, baixo, esquerda
+const PLATFORM_CHARS := "=}_{"     # barra sólida (bloqueia de todos os lados): seta para cima, direita, baixo, esquerda
+const PASS_CHARS := "↑→↓←"         # barra de passagem (mão única: atravessa por baixo, pousa por cima), D93
 const WATER_REACH := [1, 2, 4, 8, 16, 32, 64, 128]  # distâncias (px) em que duas colunas trocam água
 const WATER_NU := 0.5          # parcela do desnível que colunas vizinhas igualam por subpasso
 const WATER_NU_FAR := 0.3      # idem para as trocas a distância: dá a velocidade com que a água corre
@@ -263,6 +265,7 @@ var _metal_cells: Array = []   # tiles de aço na tela (para os enfeites da fáb
 const STEP_PX := 11.0          # um passo a cada tantos px andados no chão
 var bubbles: Array = []        # bolhas subindo no líquido (só desenho): {"k": vão, "y", "r", "vy", "ph"}
 var _step_idx := 0
+var query_up := false          # o coelho está testando um passo para cima (a barra de passagem deixa passar)
 var _vignette: Texture2D       # escurecimento nas bordas da tela (gerado uma vez)
 var cycle_t := 0         # quadros de simulação desde o início: os conectores em ciclo seguem este relógio
 var plate_on := {}       # canal -> true enquanto um botão de pressão dele está apertado
@@ -1235,7 +1238,7 @@ func _body_can_move(b, st: Vector2i, ignore_rect: Rect2i) -> bool:
 				if overlaps(nxt, gr):
 					return false
 	for p in platforms:
-		if p["solid"] and overlaps(nxt, p["rect"]):
+		if _plat_blocks(p, nxt, st.y < 0):
 			return false
 	for o in movers:
 		if overlaps(nxt, o["r"]) and o["r"] != ignore_rect and not overlaps(b.rect, o["r"]):
@@ -1469,7 +1472,9 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 					gate_cells[iid] = []
 				gate_cells[iid].append(cell)
 			elif PLATFORM_CHARS.contains(ch):
-				platforms.append({"rect": cell, "facing": PLATFORM_CHARS.find(ch), "solid": false, "fx": 0})
+				platforms.append({"rect": cell, "facing": PLATFORM_CHARS.find(ch), "solid": false, "fx": 0, "oneway": false})
+			elif PASS_CHARS.contains(ch):
+				platforms.append({"rect": cell, "facing": PASS_CHARS.find(ch), "solid": false, "fx": 0, "oneway": true})
 			elif (ch == "P" or ch == "B" or ch == "S" or ch == "L" or ch == "H" or GATE_SOCKETS.contains(ch)) and not visited.has(key):
 				for dy in 2:
 					for dx in 2:
@@ -1855,7 +1860,7 @@ func solid_static(r: Rect2i) -> bool:
 				if overlaps(r, gr):
 					return true
 	for p in platforms:
-		if p["solid"] and overlaps(r, p["rect"]):
+		if _plat_blocks(p, r):
 			return true
 	for m in movers:
 		if overlaps(r, m["r"]):
@@ -1874,6 +1879,19 @@ func box_at(r: Rect2i, ignore):
 
 
 ## Há coelho ou caixa ocupando este retângulo? (comportas e plataformas nunca esmagam)
+## A barra bloqueia este retângulo? A sólida, sempre que ativa. A de passagem só segura quem chega
+## por cima: o retângulo pode encostar só na primeira linha dela (os pés vindo de cima, 1 px por vez).
+## Subindo por baixo ou entrando de lado, o corpo já está dentro e passa.
+func _plat_blocks(p: Dictionary, r: Rect2i, up := false) -> bool:
+	if not p["solid"] or not overlaps(r, p["rect"]):
+		return false
+	if p["oneway"]:
+		if up or query_up:
+			return false   # subindo, sempre atravessa (inclusive o último pixel, o pé passando)
+		return r.position.y + r.size.y - 1 <= p["rect"].position.y
+	return true
+
+
 func _occupied(r: Rect2i) -> bool:
 	if rabbit != null and overlaps(r, rabbit.rect):
 		return true
@@ -4217,7 +4235,10 @@ func _draw_cast_shadows() -> void:
 			draw_rect(Rect2(Vector2(cr["rect"].position) + so, Vector2(cr["rect"].size)), C_SHADOW)
 	for pl in platforms:
 		if pl["solid"]:
-			draw_rect(Rect2(Vector2(pl["rect"].position) + so, Vector2(pl["rect"].size)), C_SHADOW)
+			var psz := Vector2(pl["rect"].size)
+			if pl["oneway"]:
+				psz.y = 3.0   # a barra de passagem é só o trilho: a sombra também
+			draw_rect(Rect2(Vector2(pl["rect"].position) + so, psz), C_SHADOW)
 	for g in gates:
 		if g["closed"]:
 			for gr in g["rects"]:
@@ -4518,10 +4539,16 @@ func _draw_platforms() -> void:
 	for p in platforms:
 		var r := Rect2(p["rect"])
 		var fx := float(p["fx"]) / float(SWITCH_FRAMES)
-		if p["solid"]:
+		if p["oneway"]:
+			_draw_pass_bar(p, r)
+		elif p["solid"]:
+			# barra sólida: placa cheia, borda nos quatro lados e rebites (bloqueia de todo lado)
 			draw_rect(r, C_PLAT_DARK)
-			draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_PLAT)
-			draw_colored_polygon(_tri_points(p["rect"], p["facing"], [Vector2(2.5, 6.5), Vector2(4, 4), Vector2(5.5, 6.5)]), Color(C_PLAT, 0.8))
+			draw_rect(r, C_PLAT, false, 1.0)
+			draw_rect(Rect2(r.position + Vector2(1, 1), Vector2(r.size.x - 2, 1)), Color(C_PLAT, 0.7))
+			for q in [Vector2(1, 1), Vector2(6, 1), Vector2(1, 6), Vector2(6, 6)]:
+				draw_rect(Rect2(r.position + q, Vector2(1, 1)), C_PLAT)
+			draw_colored_polygon(_tri_points(p["rect"], p["facing"], [Vector2(2.5, 6.0), Vector2(4, 3.5), Vector2(5.5, 6.0)]), Color(C_PLAT, 0.8))
 		else:
 			var col := Color(C_PLAT, 0.4)
 			for i in 4:
@@ -4533,6 +4560,31 @@ func _draw_platforms() -> void:
 			draw_colored_polygon(_tri_points(p["rect"], p["facing"], [Vector2(1.5, 6.5), Vector2(4, 2), Vector2(6.5, 6.5)]), Color(C_PLAT, 0.6))
 		if fx > 0.0:
 			draw_rect(r.grow(1.0 + 2.0 * (1.0 - fx)), Color(C_PLAT, 0.6 * fx), false, 1.0)
+
+
+## Barra de passagem: ativa (seta para cima), só um trilho fino em cima, vazado embaixo, com
+## setinhas subindo devagar por baixo dele: "dá para atravessar pulando". Inativa, o contorno
+## pontilhado e a seta, mais apagados que os da barra sólida.
+func _draw_pass_bar(p: Dictionary, r: Rect2) -> void:
+	var col := C_PASS
+	if p["solid"]:
+		draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), col)
+		draw_rect(Rect2(r.position + Vector2(0, 2), Vector2(r.size.x, 1)), Color(col, 0.35))
+		draw_rect(Rect2(r.position + Vector2(0, 0), Vector2(1, 4)), Color(col, 0.6))
+		draw_rect(Rect2(r.position + Vector2(r.size.x - 1, 0), Vector2(1, 4)), Color(col, 0.6))
+		# setinhas subindo, em loop, por baixo do trilho
+		var k := float((frame + int(r.position.x) * 3) % 40) / 40.0
+		var cy := r.position.y + 8.0 - k * 5.0
+		var ca := Color(col, 0.55 * sin(k * PI))
+		var cx := r.position.x + 4.0
+		draw_line(Vector2(cx - 2, cy + 2), Vector2(cx, cy), ca, 1.0)
+		draw_line(Vector2(cx, cy), Vector2(cx + 2, cy + 2), ca, 1.0)
+	else:
+		var c2 := Color(col, 0.3)
+		for i in 4:
+			draw_rect(Rect2(r.position + Vector2(i * 2, 0), Vector2(1, 1)), c2)
+			draw_rect(Rect2(r.position + Vector2(i * 2 + 1, 7), Vector2(1, 1)), c2)
+		draw_colored_polygon(_tri_points(p["rect"], p["facing"], [Vector2(2, 6), Vector2(4, 3), Vector2(6, 6)]), Color(col, 0.45))
 
 
 ## Ralo: grade redonda com raios; gira enquanto engole água.

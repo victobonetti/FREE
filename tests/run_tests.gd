@@ -72,6 +72,7 @@ func _init() -> void:
 	test_jeffrey_lives()
 	test_jeffrey_intro()
 	test_subsoil_and_anchors()
+	test_pass_bars()
 	test_mecha_intro()
 	test_mecha_dash()
 	test_mecha_homing()
@@ -3069,3 +3070,46 @@ func test_mecha_stomp() -> void:
 		tick()
 		n += 1
 	check(m.lives == 2, "embaixo dela, a sentada tira um coração (vidas %d)" % m.lives)
+
+
+## Barras: a sólida (= } _ {) bloqueia de todos os lados; a de passagem (↑ → ↓ ←) atravessa por
+## baixo e segura por cima (D93).
+func _bar_room(glyph: String) -> Dictionary:
+	return {"name": "barras", "rotate": true, "start_rot": 0, "door_open": true, "rows": [
+		"##################",
+		"#................#",
+		"#................#",
+		"#................#",
+		"#...............DD#",
+		"#....%s%s%s%s.......DD#" % [glyph, glyph, glyph, glyph],
+		"#....PP.........DD#",
+		"#....PP.........DD#",
+		"##################",
+	]}
+
+
+func test_pass_bars() -> void:
+	print("barras sólida e de passagem")
+	load_def(_bar_room("↑"))
+	idle(10)
+	var y0: int = room.rabbit.pos.y
+	tick({"jump_pressed": true, "jump_held": true})
+	var top := y0
+	var landed := false
+	for i in 80:
+		tick({"jump_held": i < 20})
+		top = mini(top, room.rabbit.pos.y)
+		if room.rabbit.on_ground and room.rabbit.pos.y < y0 - 8:
+			landed = true
+	check(top < 5 * 8, "a barra de passagem: o pulo atravessa por baixo (topo do coelho %d)" % top)
+	check(landed and room.rabbit.pos.y == 5 * 8 - 12, "e o coelho pousa em cima dela (y %d)" % room.rabbit.pos.y)
+	load_def(_bar_room("="))
+	idle(10)
+	y0 = room.rabbit.pos.y
+	tick({"jump_pressed": true, "jump_held": true})
+	top = y0
+	for i in 80:
+		tick({"jump_held": i < 20})
+		top = mini(top, room.rabbit.pos.y)
+	check(top >= 6 * 8, "a barra sólida bloqueia o pulo por baixo (topo do coelho %d)" % top)
+	check(room.rabbit.pos.y == y0, "e o coelho volta ao chão")

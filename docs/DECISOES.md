@@ -685,3 +685,10 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **A volta:** ao fim da contagem, a sala volta à orientação de antes do primeiro giro **num giro só** (90° ou 180°; o de 180° com animação um pouco mais longa), com o laser do amortecedor.
 - **Provas:** a recarga entra no hash; os hashes foram refeitos e os replays continuam vencendo (`tools/rehash_campaign.gd`). O aviso "o limitador dura mais que a recarga" saiu (virou a regra).
 - **Riscos:** quebra-cabeças do ato 1 podem ganhar atalhos (virar 180° rápido); a mecha fica mais fácil (girar cedo demais não é mais punido como antes). Ajustar jogando.
+
+### D93 — Barra sólida e barra de passagem
+- **Dois componentes** (pedido do Victor): a barra de sempre (`= } _ {`) continua sólida de todos os lados quando ativa (exemplo: a corrida do Gatsby, onde ela barra); a **barra de passagem** (`↑ → ↓ ←`) é de mão única: atravessa pulando por baixo ou de lado, só segura quem chega por cima. Ambas só existem quando a seta aponta para cima na tela.
+- **Visual:** a sólida é uma placa cheia, com borda nos quatro lados e rebites; a de passagem é só um trilho fino verde-água, vazado, com setinhas subindo devagar por baixo (e sombra só do trilho).
+- **Regra:** a de passagem bloqueia só o retângulo que encosta na primeira linha dela vindo de cima; subindo (coelho: `query_up`; caixas: passo para cima), atravessa sempre, inclusive o último pixel.
+- **Fuga (fase 16):** as 21 barras viraram de passagem; o bot da fase continua vencendo. A água continua apoiada nas duas.
+- **Editor:** os quatro símbolos novos na paleta, com giro e espelho.

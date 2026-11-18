@@ -364,7 +364,10 @@ func _move_y(room, amount: float) -> void:
 	var s := signi(steps)
 	while steps != 0:
 		var nxt := Rect2i(pos + Vector2i(0, s), Vector2i(SIZE, SIZE))
-		if not _free(room, nxt):
+		room.query_up = s < 0
+		var free := _free(room, nxt)
+		room.query_up = false
+		if not free:
 			if s < 0 and _corner_correct(room):
 				continue
 			if s > 0:

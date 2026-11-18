@@ -227,7 +227,7 @@ func _build_left(left: VBoxContainer) -> void:
 	pal.add_theme_constant_override("h_separation", 2)
 	pal.add_theme_constant_override("v_separation", 2)
 	left.add_child(pal)
-	var all := ["#", "~", "%", "o", "+", "L", "H", "^", ">", "v", "<", "=", "}", "_", "{", "|", "-", "D",
+	var all := ["#", "~", "%", "o", "+", "L", "H", "^", ">", "v", "<", "=", "}", "_", "{", "↑", "→", "↓", "←", "|", "-", "D",
 		"P", "B", "S", "1", "2", "3", "4", "5", "6", "7", "8", "9",
 		"¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹",
 		"a", "b", "c", "d", "e", "f", "g", "h", "i"]

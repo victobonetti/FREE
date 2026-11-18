@@ -10,6 +10,8 @@ const NAMES := {
 	"v": "Espinho para baixo", "<": "Espinho para a esquerda",
 	"=": "Plataforma: seta para cima", "}": "Plataforma: seta para a direita",
 	"_": "Plataforma: seta para baixo", "{": "Plataforma: seta para a esquerda",
+	"↑": "Barra de passagem (atravessa por baixo): seta para cima", "→": "Barra de passagem: seta para a direita",
+	"↓": "Barra de passagem: seta para baixo", "←": "Barra de passagem: seta para a esquerda",
 	"~": "Água", "%": "Ácido (mata ao toque)", "o": "Ralo", "|": "Corda vertical", "-": "Corda horizontal",
 	"P": "Coelho (2x2)", "B": "Caixa (2x2)", "S": "Compartimento da porta (2x2)", "D": "Porta",
 	"+": "Bateria (1 a 3 por fase)", "L": "Alavanca (2x2): puxa sozinha com todas as baterias",
@@ -71,6 +73,12 @@ static func draw(ci: CanvasItem, g: String, r: Rect2, ctx := {}) -> void:
 			ci.draw_rect(Rect2(r.position, Vector2(s, maxf(s * 0.15, 1))), Color(RoomScript.C_PLAT, a))
 			var ar := PackedVector2Array([Vector2(0.25, 0.75), Vector2(0.5, 0.3), Vector2(0.75, 0.75)])
 			ci.draw_colored_polygon(_xf(ar, f2, r), Color(RoomScript.C_PLAT, a * 0.9))
+		"↑", "→", "↓", "←":
+			var f3 := "↑→↓←".find(g)
+			var top := PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 0.22), Vector2(0, 0.22)])
+			ci.draw_colored_polygon(_xf(top, f3, r), Color(RoomScript.C_PASS, a))
+			var ch := PackedVector2Array([Vector2(0.3, 0.8), Vector2(0.5, 0.5), Vector2(0.7, 0.8)])
+			ci.draw_colored_polygon(_xf(ch, f3, r), Color(RoomScript.C_PASS, a * 0.7))
 		"+":
 			ci.draw_circle(r.get_center(), s * 0.46, Color(RoomScript.C_BAT, 0.14 * a))
 			ci.draw_rect(Rect2(r.position + r.size * Vector2(0.2, 0.14), r.size * Vector2(0.6, 0.76)), Color(RoomScript.C_SEAM, a))
