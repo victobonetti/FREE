@@ -34,6 +34,7 @@ extends SceneTree
 ##   ["air_to", x0, x1]                  no ar (caindo depois de um giro, p.ex.): dirige até pousar em [x0, x1]
 ##   ["wait_revert"]                     espera o limitador desfazer o giro (e a animação acabar)
 ##   ["wait_ground"]                     espera o coelho estar no chão
+##   ["steer", x0, x1, quadros]          dirige no ar para [x0, x1] por um tempo (quicando em molas)
 ##   ["mark", rótulo]
 
 const RoomScript := preload("res://scripts/room.gd")
@@ -256,6 +257,17 @@ func _run_step(s: Array) -> void:
 			air(float(s[1]), float(s[2]), 0, 400)
 		"wait_revert":
 			until(func(): return room.limit_t == 0 and not room.rotating, 400, "o limitador desfazer o giro")
+		"jump":
+			# pula já, segurando o botão `hold` quadros, andando para `dir` (sem esperar pousar)
+			tick(float(s[1]), true, true)
+			for i in int(s[2]):
+				tick(float(s[1]), false, true)
+		"steer":
+			# no ar, quicando: dirige para o meio de [x0, x1] por um número de quadros (sem esperar pousar)
+			var tg := (float(s[1]) + float(s[2])) / 2.0
+			for i in int(s[3]):
+				var d := tg - cx()
+				tick(0.0 if absf(d) < 2.0 else clampf(d / 10.0, -1.0, 1.0))
 		"wait_ground":
 			until(func(): return grounded(), 400, "o chão")
 		"mark":

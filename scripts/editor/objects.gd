@@ -86,6 +86,15 @@ const TYPES := {
 		],
 		"rects": ["rect"], "dirs": ["dir"],
 	},
+	"bouncers": {
+		"label": "Cogumelo-mola", "color": Color("c99be8"),
+		"fields": [
+			{"key": "rect", "label": "Área (sobre a face onde nasce)", "kind": "rect"},
+			{"key": "power", "label": "Força (px/s)", "kind": "float", "min": 100.0, "max": 700.0, "step": 10.0, "def": 300.0},
+			{"key": "dir", "label": "Lança", "kind": "choice", "opts": DIRS, "def": 0},
+		],
+		"rects": ["rect"], "dirs": ["dir"],
+	},
 	"sprouts": {
 		"label": "Broto (cogumelo que cresce)", "color": Color("b98ee0"),
 		"fields": [
@@ -112,7 +121,7 @@ const TYPES := {
 }
 
 ## A ordem em que os tipos aparecem na interface.
-const ORDER := ["crushers", "movers", "plates", "crumbles", "conveyors", "springs", "fans", "vents", "sprouts"]
+const ORDER := ["crushers", "movers", "plates", "crumbles", "conveyors", "springs", "fans", "vents", "sprouts", "bouncers"]
 
 
 static func label(kind: String) -> String:
@@ -144,6 +153,8 @@ static func make_default(kind: String, c: int, r: int) -> Variant:
 			rect = [c, r, 3, 8]
 		"sprouts":
 			rect = [c, r, 2, 2]
+		"bouncers":
+			rect = [c, r, 2, 1]
 		_:
 			rect = [c, r, 2, 6]
 	if t.get("scalar", false):

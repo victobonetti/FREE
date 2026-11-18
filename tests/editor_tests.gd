@@ -809,7 +809,7 @@ func test_objects() -> void:
 	var room: Node2D = RoomScript.new()
 	var def: Dictionary = m.data.to_def()
 	room.setup(def)
-	check(room.conveyors.size() == 1 and room.springs.size() == 1 and room.fans.size() == 1 and room.vents.size() == 1 and room.movers.size() == 2 and room.crumbles.size() == 1 and room.plates.size() == 1 and room.crushers.size() == 1, "o jogo lê todos os objetos criados pelo editor (o broto vira um conector por dentro)")
+	check(room.conveyors.size() == 1 and room.springs.size() == 2 and room.fans.size() == 1 and room.vents.size() == 1 and room.movers.size() == 2 and room.crumbles.size() == 1 and room.plates.size() == 1 and room.crushers.size() == 1, "o jogo lê todos os objetos criados pelo editor (o broto vira um conector por dentro; o cogumelo-mola, uma mola)")
 	room.free()
 	var n_undo: int = m.undo_stack.size()
 	m.set_object_field("springs", 0, "power", 350.0)

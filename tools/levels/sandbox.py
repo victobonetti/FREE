@@ -105,4 +105,7 @@ lv.add("crushers", {"rect": [81, 9, 20, 5], "dir": 1, "speed": 14.0, "delay": 6.
 # --- broto (ato 3): nasce na parede da direita, recolhido; girando para a direita, cresce
 lv.add("sprouts", {"rect": [101, F - 6, 2, 2], "dir": 3, "len": 6, "speed": 80.0, "back": 16.0})
 
+# --- cogumelo-mola (ato 3), no chão perto da caixa da porta
+lv.add("bouncers", {"rect": [90, F - 1, 2, 1], "power": 300.0, "dir": 0})
+
 lv.save()

@@ -842,6 +842,12 @@ func _init_dynamics() -> void:
 			"rect": _tile_rect(d["rect"]), "power": float(d.get("power", 280.0)), "dir": posmod(int(d.get("dir", 0)), 4),
 			"k": 0.0, "cd": 0,
 		})
+	# cogumelo-mola (campo "bouncers", ato 3, D111): uma mola orgânica, com o mesmo formato
+	for d in def.get("bouncers", []):
+		springs.append({
+			"rect": _tile_rect(d["rect"]), "power": float(d.get("power", 300.0)), "dir": posmod(int(d.get("dir", 0)), 4),
+			"k": 0.0, "cd": 0, "shroom": true,
+		})
 	for d in def.get("fans", []):
 		fans.append({
 			"rect": _tile_rect(d["rect"]), "dir": posmod(int(d.get("dir", 0)), 4),
@@ -917,6 +923,7 @@ func _update_springs() -> void:
 			sp["cd"] = SPRING_CD
 			sp["k"] = 1.0
 			rabbit.vel = rabbit.vel * (Vector2.ONE - dv.abs()) + dv * float(sp["power"])
+			rabbit.launched = true   # arremessado: o embalo sobrevive a um giro no ar
 			rabbit.var_jump = 0
 			rabbit.on_ground = false
 			rabbit.coyote = 0
@@ -1063,6 +1070,10 @@ func _draw_springs() -> void:
 		var k: float = sp["k"]
 		var half_w := lw / 2.0
 		var base_y := lh / 2.0
+		if sp.get("shroom", false):
+			_draw_bouncer(half_w, base_y, k, lw)
+			_local_end()
+			continue
 		var pad_y := -lh / 2.0 + 1.0 + 3.0 * k          # a mola comprime ao ser pisada
 		# base de aço, mola em zigue-zague, tampa âmbar
 		draw_rect(Rect2(-half_w, base_y - 2, lw, 2), C_SEAM)
@@ -1079,6 +1090,23 @@ func _draw_springs() -> void:
 		draw_rect(Rect2(-half_w, pad_y, lw, 2), C_BAT)
 		draw_rect(Rect2(-half_w, pad_y, lw, 1), Color(1, 1, 1, 0.5))
 		_local_end()
+
+
+## Cogumelo-mola: um chapéu largo e fofo, roxo com pintas, num talo curto; achata ao quicar.
+func _draw_bouncer(half_w: float, base_y: float, k: float, lw: float) -> void:
+	var col: Color = C_FUNGI[1]
+	var squash := 1.0 - 0.45 * k
+	var top := base_y - 8.0 * squash
+	draw_rect(Rect2(-1.5, top + 3, 3, base_y - top - 3), C_STALK)
+	draw_circle(Vector2(0, top + 3), half_w + 3.0, Color(col, 0.08 + 0.06 * k))
+	var pts := PackedVector2Array()
+	for i in 13:
+		var a := PI * float(i) / 12.0
+		pts.append(Vector2(-cos(a) * (half_w + 1.0 + 2.0 * k), top + 4.0 - sin(a) * 5.0 * squash))
+	draw_colored_polygon(pts, col)
+	draw_line(Vector2(-half_w - 1.0 - 2.0 * k, top + 4), Vector2(half_w + 1.0 + 2.0 * k, top + 4), col.darkened(0.35), 1.0)
+	for q in 3:
+		draw_rect(Rect2(-half_w * 0.6 + q * half_w * 0.55, top + 1.0 - (q % 2), 2, 1), C_FUNGI[3])
 
 
 func _draw_fans() -> void:

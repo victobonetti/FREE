@@ -1,0 +1,1 @@
+{"steps": [["wait", 5], ["run_to", 36], ["jump", 1, 10], ["steer", 75, 85, 30], ["mark", "chapéu 1"], ["steer", 115, 125, 40], ["mark", "chapéu 2"], ["steer", 155, 165, 40], ["mark", "chapéu 3"], ["steer", 195, 205, 40], ["mark", "chapéu forte"], ["steer", 195, 205, 15], ["rotate", 1], ["mark", "girou"], ["wait_ground"], ["mark", "do outro lado"], ["wait_revert"], ["to_door"]]}
