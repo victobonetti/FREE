@@ -73,6 +73,7 @@ const HOM_ARM := 36              # antes disto o míssil não acerta a própria 
 const HOM_RADIUS := 10.0
 const DASH_WARN := [64, 56, 48]    # D104: +10 quadros para reagir (era 54, 46, 38)
 const DASH_SPEED := 260.0
+const DASH_MIN_DIST := 64.0      # D108: mais perto que isto do coelho, ela não começa a investida (troca por mísseis)
 const KEEP := [72.0, 130.0]     # distância que ela mantém do coelho, andando (perto: recua)
 const DASH_LASER := [46, 42, 38] # D104: o laser aparece 10 quadros antes; quadros finais do aviso com o laser posto: a direção não muda mais
 const SHOVE_AFTER := 45          # quadros com o coelho encostado nela até ela dar o empurrão (D95)
@@ -490,6 +491,8 @@ func _next_attack() -> void:
 	var plan: Array = PLAN[_phase()]
 	var a: String = plan[plan_i % plan.size()]
 	plan_i += 1
+	if a == "dash" and pos.distance_to(_rabbit_c()) < DASH_MIN_DIST:
+		a = "homing"   # colada no coelho, a investida não daria tempo de desviar
 	t = 0
 	match a:
 		"aim":
@@ -646,11 +649,11 @@ func _dash() -> void:
 	var n := 4
 	for i in n:
 		pos += vel / 60.0 / n
-		if not dash_hit and room.invuln == 0 and room.overlaps(Rect2i(body_rect()), room.rabbit.rect):
-			dash_hit = true
-			room.kill()
-			if room.state != "play":
-				return
+		# D108: no trajeto não fere (numa esquiva, os dois podem se cruzar no ar). Só se o coelho
+		# está no chão no caminho: ela para em cima dele, e isso é o impacto.
+		if not dash_hit and room.invuln == 0 and room.rabbit.on_ground and room.overlaps(Rect2i(body_rect()), room.rabbit.rect):
+			_stop_on_rabbit()
+			return
 		# passou de um limite: de frente, é a batida; de raspão (rente ao chão), desliza
 		var nrm := Vector2.ZERO
 		if pos.x < b.position.x:
@@ -675,8 +678,30 @@ func _dash() -> void:
 		_go_idle()
 
 
-## Bateu na parede: impacto enorme. Sem ter pegado o coelho, leva dano e fica atordoada.
+## A investida parou em cima do coelho (no chão): o impacto o fere, e ela fica um instante parada.
+func _stop_on_rabbit() -> void:
+	dash_hit = true
+	vel = Vector2.ZERO
+	trail.clear()
+	room.shake = 4.0
+	room.impact.emit(1.8)
+	room.sfx.emit("slam")
+	room.kill()
+	if room.state != "play":
+		return
+	state = "stun"
+	t = 0
+	puppet.mood = "smug"
+
+
+## Bateu na parede: impacto enorme. Sem ter pegado o coelho, leva dano e fica atordoada. Se o coelho
+## ficou entre ela e a parede, o impacto o fere.
 func _slam() -> void:
+	if not dash_hit and room.invuln == 0 and room.overlaps(Rect2i(body_rect().grow(2.0)), room.rabbit.rect):
+		dash_hit = true
+		room.kill()
+		if room.state != "play":
+			return
 	var dir := vel.normalized()
 	vel = Vector2.ZERO
 	trail.clear()

@@ -774,3 +774,8 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Tema `fungos`** (Fungário no editor; entra na lista dos temas do subsolo): pedra cinza-arroxeada com manchas de mofo, tufos de cogumelos roxos no chão (alguns brilham), fios de micélio no teto, orelhas-de-pau nas paredes, esporos caindo devagar e, ao fundo, cogumelos gigantes e lâmpadas velhas, abafadas.
 - **Mecânica central: cogumelos condicionais** (como plantas vivas, no espírito de Rayman Legends): crescem contra a gravidade de agora; o giro muda o "para cima" deles. Peças planejadas: broto (coluna que cresce e vira plataforma), cogumelo-mola, bufa-esporos (nuvem que cai e fere), mofo (não deixa pular) e micélio (acorda os vizinhos em cadeia).
 - **Cinco fases planejadas:** 1 Broto, 2 Chapéus (molas), 3 Esporos, 4 Mofo, 5 Colônia. O chefe do ato: o Victor ainda vai decidir.
+
+### D108 — Mecha: investida mais justa
+- **Victor:** colada no coelho, a investida não dava tempo de desviar; e ferir no trajeto é frustrante (numa esquiva, os dois se cruzam no ar).
+- **Distância mínima:** a menos de 64 px do coelho, ela não começa a investida (troca por mísseis teleguiados).
+- **Dano só no impacto:** no trajeto, ela atravessa o coelho sem ferir. Se o coelho está no chão no caminho, ela para em cima dele, e isso é o impacto (fere; ela fica um instante parada). Se o coelho ficou entre ela e a parede na batida, o impacto também fere.
