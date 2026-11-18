@@ -668,3 +668,7 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Corrida do Gatsby:** ele não gira mais a sala; o giro é só do coelho, e o Gatsby faz o papel do amortecedor. A rota antiga dependia dos giros dele: a fase está como **prova pendente** (`PENDING_PROOF` nos testes) até a rota ser refeita.
 - **Ácido:** mata com metade do corpo dentro (antes, 2%): cair dentro mata; um respingo, encostar o pé ou o giro, não.
 - **Alarme da parede de espinhos removido** (fases com a parede correndo): ficou só o ronco.
+
+### D89 — Seletor de fase na build de teste
+- **Para os beta testers:** `scripts/build_info.gd` tem `BETA = true`. Com isso, a tela inicial mostra "< BETA · FASE N · NOME >": setas (teclado, controle) ou tocar nas setas (celular) escolhem; Enter (ou tocar fora das setas) começa direto na fase. "Do início" começa pela abertura, como sempre.
+- **Na build final:** trocar `BETA` para `false`; o seletor some e nada mais muda.

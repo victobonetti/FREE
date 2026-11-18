@@ -745,6 +745,9 @@ func _show_intro() -> void:
 	intro.sfx.connect(_play_sfx)
 	intro.impact.connect(_on_impact)
 	intro.finished.connect(_load_start_room)
+	intro.level_picked.connect(func(i):
+		_stop_music()
+		_load_room(i))
 
 
 ## A sala em que a abertura termina: o coelho anda até a porta para começar o nível 1.
@@ -854,6 +857,11 @@ func _tick() -> void:
 		if Input.is_action_just_pressed("my_levels"):
 			show_list()
 			return
+		# build de teste: as setas escolhem a fase no seletor da tela inicial
+		if Input.is_action_just_pressed("move_left"):
+			intro.change_sel(-1)
+		elif Input.is_action_just_pressed("move_right"):
+			intro.change_sel(1)
 	if finished:
 		if Input.is_action_just_pressed("jump") and not transitioning:
 			_show_intro()

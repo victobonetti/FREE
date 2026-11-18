@@ -1414,6 +1414,25 @@ func test_water() -> void:
 func test_intro() -> void:
 	print("abertura")
 	var IntroScript = load("res://scripts/intro.gd")
+	if load("res://scripts/build_info.gd").BETA:
+		# build de teste: o seletor escolhe a fase e Enter começa nela
+		IntroScript.beta_sel = 0
+		var bi = IntroScript.new()
+		bi._ready()
+		var picked: Array = []
+		bi.level_picked.connect(func(i): picked.append(i))
+		for i in 30:
+			bi.step(false)
+		bi.change_sel(1)
+		bi.change_sel(1)
+		bi.change_sel(-1)
+		bi.step(true)
+		check(picked == [0] and bi.phase == bi.TITLE, "beta: o seletor escolhe a fase 1 e Enter começa nela (%s)" % str(picked))
+		bi.change_sel(-1)
+		bi.step(true)
+		check(bi.phase != bi.TITLE, "beta: 'do início' começa pela abertura")
+		bi.free()
+		IntroScript.beta_sel = 0
 	var intro = IntroScript.new()
 	intro._ready()
 	var ev: Array = []

@@ -16,6 +16,13 @@ signal started            # o jogador apertou Enter: a cutscene começou
 signal finished           # fim: carregar a sala de início
 signal sfx(name: String)
 signal impact(strength: float)
+signal level_picked(index: int)   # build de teste: começar direto nesta fase (0 = a primeira)
+
+const BuildInfo := preload("res://scripts/build_info.gd")
+const Levels := preload("res://scripts/levels.gd")
+## A fase escolhida no seletor (build de teste): 0 = do início (abertura), n = fase n. Fica
+## guardada enquanto o jogo está aberto.
+static var beta_sel := 0
 
 const RoomScript := preload("res://scripts/room.gd")
 
@@ -61,6 +68,9 @@ var frame := 0      # quadros desde o início
 var art             # uma Room fora da árvore, só para gerar os quadros do coelho
 var press_label: Label
 var menu_label: Label
+var sel_label: Label          # o seletor de fase (só na build de teste)
+var _eat_start := 0           # quadros ignorando o "start" (o toque foi numa seta do seletor)
+const SEL_Y := 146.0
 var particles: Array = []
 var jolt := 0.0
 var jolt_phase := 0.0
@@ -89,6 +99,16 @@ func _ready() -> void:
 	menu_label.add_theme_color_override("font_color", C_WHITE)
 	menu_label.modulate.a = 0.55
 	add_child(menu_label)
+	if BuildInfo.BETA:
+		sel_label = Label.new()
+		sel_label.position = Vector2(0, SEL_Y)
+		sel_label.size = Vector2(320, 12)
+		sel_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sel_label.add_theme_font_size_override("font_size", 8)
+		sel_label.add_theme_color_override("font_color", Color("ffe08a"))
+		add_child(sel_label)
+		beta_sel = clampi(beta_sel, 0, Levels.count())
+		_update_sel()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	for i in 16:
@@ -115,6 +135,42 @@ func _process(_delta: float) -> void:
 	queue_redraw()
 
 
+## Seletor de fase (build de teste): `d` = -1 ou +1.
+func change_sel(d: int) -> void:
+	if sel_label == null or phase != TITLE:
+		return
+	beta_sel = posmod(beta_sel + d, Levels.count() + 1)
+	_update_sel()
+	sfx.emit("plate_on")
+
+
+func _update_sel() -> void:
+	if sel_label == null:
+		return
+	if beta_sel == 0:
+		sel_label.text = "<   BETA · DO INÍCIO   >"
+	else:
+		sel_label.text = "<   BETA · FASE %d · %s   >" % [beta_sel, str(Levels.def_at(beta_sel - 1).get("name", "")).to_upper()]
+
+
+## No celular (ou com o mouse): tocar nas setas do seletor troca a fase, sem começar o jogo.
+func _input(event: InputEvent) -> void:
+	if sel_label == null or phase != TITLE:
+		return
+	var pressed: bool = (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT)
+	if not pressed:
+		return
+	var p: Vector2 = make_input_local(event).position
+	if absf(p.y - (SEL_Y + 6.0)) > 14.0:
+		return
+	if p.x < 110.0:
+		change_sel(-1)
+		_eat_start = 8
+	elif p.x > 210.0:
+		change_sel(1)
+		_eat_start = 8
+
+
 ## Um quadro da cutscene. `pressed`: Enter/Start apertado neste quadro.
 func step(pressed: bool) -> void:
 	frame += 1
@@ -122,7 +178,13 @@ func step(pressed: bool) -> void:
 	_update_fx()
 	if phase == TITLE:
 		press_label.modulate.a = 1.0 if (frame / 30) % 2 == 0 else 0.25
+		if _eat_start > 0:
+			_eat_start -= 1
+			pressed = false
 		if pressed and frame > 20:
+			if sel_label != null and beta_sel > 0:
+				level_picked.emit(beta_sel - 1)
+				return
 			_go(SURPRISE)
 			started.emit()
 		return
@@ -153,6 +215,8 @@ func step(pressed: bool) -> void:
 
 
 func _go(p: int) -> void:
+	if sel_label != null and p != TITLE:
+		sel_label.visible = false
 	phase = p
 	t = 0
 	if p == DROP:
