@@ -748,6 +748,7 @@ func _show_intro() -> void:
 	intro.level_picked.connect(func(i):
 		_stop_music()
 		_load_room(i))
+	intro.sandbox_picked.connect(_play_sandbox)
 
 
 ## A sala em que a abertura termina: o coelho anda até a porta para começar o nível 1.
@@ -965,6 +966,9 @@ func _end_custom(won: bool) -> void:
 	_clear_scene()
 	hint.text = ""
 	title.text = ""
+	if from == "sandbox":
+		_show_intro()
+		return
 	if from == "editor":
 		ui_layer.visible = false
 		_set_window_for_editor(true)
@@ -972,6 +976,16 @@ func _end_custom(won: bool) -> void:
 		editor.play_finished(won, rec_runs, rec_state)
 	else:
 		show_list()
+
+
+## Build de teste: a sandbox (sala -1, todos os componentes). Esc ou a porta voltam ao início.
+func _play_sandbox() -> void:
+	_stop_music()
+	var lvl = LevelData.from_json(FileAccess.get_file_as_string(IntroScript.SANDBOX_PATH))
+	if lvl == null:
+		return
+	custom = "sandbox"
+	_spawn_room(lvl.to_def(), -1, "")
 
 
 func show_list() -> void:

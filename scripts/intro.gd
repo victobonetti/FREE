@@ -17,10 +17,12 @@ signal finished           # fim: carregar a sala de início
 signal sfx(name: String)
 signal impact(strength: float)
 signal level_picked(index: int)   # build de teste: começar direto nesta fase (0 = a primeira)
+signal sandbox_picked             # build de teste: a sala -1, com todos os componentes (D99)
+const SANDBOX_PATH := "res://levels/wip/sandbox.json"
 
 const BuildInfo := preload("res://scripts/build_info.gd")
 const Levels := preload("res://scripts/levels.gd")
-## A fase escolhida no seletor (build de teste): 0 = do início (abertura), n = fase n. Fica
+## A fase escolhida no seletor (build de teste): -1 = sandbox, 0 = do início (abertura), n = fase n. Fica
 ## guardada enquanto o jogo está aberto.
 static var beta_sel := 0
 
@@ -119,7 +121,7 @@ func _ready() -> void:
 		sel_label.add_theme_font_size_override("font_size", 8)
 		sel_label.add_theme_color_override("font_color", Color("ffe08a"))
 		add_child(sel_label)
-		beta_sel = clampi(beta_sel, 0, Levels.count())
+		beta_sel = clampi(beta_sel, -1, Levels.count())
 		_scroll = float(beta_sel)
 		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		# os textos de cima sobem um pouco: o cartão do carrossel não encosta neles
@@ -156,7 +158,7 @@ func _process(_delta: float) -> void:
 func change_sel(d: int) -> void:
 	if sel_label == null or phase != TITLE:
 		return
-	var nv := clampi(beta_sel + d, 0, Levels.count())
+	var nv := clampi(beta_sel + d, -1, Levels.count())
 	if nv == beta_sel:
 		return
 	beta_sel = nv
@@ -167,7 +169,9 @@ func change_sel(d: int) -> void:
 func _update_sel() -> void:
 	if sel_label == null:
 		return
-	if beta_sel == 0:
+	if beta_sel == -1:
+		sel_label.text = "BETA · SANDBOX (TODOS OS COMPONENTES)"
+	elif beta_sel == 0:
 		sel_label.text = "BETA · DO INÍCIO"
 	else:
 		sel_label.text = "BETA · FASE %d DE %d · %s" % [beta_sel, Levels.count(), str(Levels.def_at(beta_sel - 1).get("name", "")).to_upper()]
@@ -197,7 +201,7 @@ func _input(event: InputEvent) -> void:
 		elif _dragging:
 			_dragging = false
 			if _drag_moved:
-				var nv := clampi(roundi(_scroll), 0, Levels.count())
+				var nv := clampi(roundi(_scroll), -1, Levels.count())
 				if nv != beta_sel:
 					beta_sel = nv
 					_update_sel()
@@ -210,14 +214,14 @@ func _input(event: InputEvent) -> void:
 		if absf(dx) > 4.0:
 			_drag_moved = true
 		if _drag_moved:
-			_scroll = clampf(_drag_s0 - dx / CARD_GAP, 0.0, float(Levels.count()))
+			_scroll = clampf(_drag_s0 - dx / CARD_GAP, -1.0, float(Levels.count()))
 
 
 ## A miniatura de uma fase: um pixel por tile, nas cores do tema dela, já girada como começa.
 func _thumb(i: int) -> Texture2D:
 	if _thumbs.has(i):
 		return _thumbs[i]
-	var d: Dictionary = Levels.def_at(i)
+	var d: Dictionary = Levels.def_at(i) if i >= 0 else JSON.parse_string(FileAccess.get_file_as_string(SANDBOX_PATH))
 	var rows: Array = d.get("rows", [])
 	var w := 1
 	for r in rows:
@@ -310,6 +314,9 @@ func step(pressed: bool) -> void:
 		if pressed and frame > 20:
 			if sel_label != null and beta_sel > 0:
 				level_picked.emit(beta_sel - 1)
+				return
+			if sel_label != null and beta_sel == -1:
+				sandbox_picked.emit()
 				return
 			_go(SURPRISE)
 			started.emit()
@@ -423,7 +430,7 @@ func _draw_title_scene() -> void:
 func _draw_carousel() -> void:
 	var n := Levels.count() + 1
 	var order: Array = []
-	for i in range(maxi(0, int(floor(_scroll)) - 2), mini(n, int(floor(_scroll)) + 3)):
+	for i in range(maxi(-1, int(floor(_scroll)) - 2), mini(n, int(floor(_scroll)) + 3)):
 		order.append(i)
 	order.sort_custom(func(a, b): return absf(a - _scroll) > absf(b - _scroll))   # os de longe primeiro
 	for i in order:
@@ -441,7 +448,7 @@ func _draw_carousel() -> void:
 			draw_set_transform(Vector2.ZERO)
 		else:
 			draw_rect(rect, Color(0.04, 0.04, 0.06))
-			var tex := _thumb(i - 1)
+			var tex := _thumb(i - 1 if i > 0 else -1)
 			var ts := Vector2(tex.get_width(), tex.get_height())
 			var fit := minf((rect.size.x - 4.0) / ts.x, (rect.size.y - 4.0) / ts.y)
 			var tsz := ts * fit
@@ -452,7 +459,7 @@ func _draw_carousel() -> void:
 	# setas
 	for side in [-1, 1]:
 		var c: Vector2 = ARROW_L if side < 0 else ARROW_R
-		var live: bool = (side < 0 and beta_sel > 0) or (side > 0 and beta_sel < n - 1)
+		var live: bool = (side < 0 and beta_sel > -1) or (side > 0 and beta_sel < n - 1)
 		var a := 0.9 if live else 0.25
 		draw_circle(c, ARROW_R_PX, Color(0.05, 0.05, 0.08, 0.85))
 		draw_arc(c, ARROW_R_PX, 0.0, TAU, 24, Color(C_WHITE, a), 1.0)
@@ -460,10 +467,10 @@ func _draw_carousel() -> void:
 		draw_line(c + Vector2(-dx, -4), c + Vector2(dx, 0), Color(C_WHITE, a), 2.0)
 		draw_line(c + Vector2(dx, 0), c + Vector2(-dx, 4), Color(C_WHITE, a), 2.0)
 	# pontinhos: onde está no carrossel
-	var dots := mini(n, 27)
+	var dots := mini(n + 1, 28)
 	var x0 := 160.0 - (dots - 1) * 2.5
 	for i in dots:
-		var on := i == beta_sel
+		var on := i - 1 == beta_sel
 		draw_rect(Rect2(x0 + i * 5.0 - (1.0 if on else 0.5), 143.0 - (1.0 if on else 0.5), 2.0 if on else 1.0, 2.0 if on else 1.0), Color(C_WHITE, 0.9 if on else 0.3))
 
 

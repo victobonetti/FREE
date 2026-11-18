@@ -717,3 +717,8 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 ### D98 — Segurar o pulo repete o pulo
 - **Pedido do Victor:** com o botão de pulo apertado, o coelho fica pulando: a cada vez que toca o chão, pula de novo (não vale pendurado na corda). Soltar o botão para.
 - **Provas:** as rotas e replays da campanha continuam vencendo. Um bot do ato 1 (Represa) segurava o pulo o tempo todo; passou a segurar só nos primeiros quadros de cada pulo.
+
+### D99 — A sandbox (sala -1 da build de teste)
+- **Para os beta testers:** uma sala com todos os componentes (`levels/wip/sandbox.json`, gerada por `tools/levels/sandbox.py`). No carrossel da build de teste, é a primeira carta ("SANDBOX"), antes de "Do início". Esc ou a porta voltam à tela inicial. Giro liberado, sem limitador.
+- **Regra:** todo componente novo entra na sandbox. O teste `test_sandbox` falha se faltar algum símbolo do mapa ou tipo de objeto do editor; a regra também está em `CLAUDE.md`, que o Claude Code lê em toda sessão.
+- **Fora da sala, por limitação do motor:** o ácido (uma sala só aceita um fluido; a sandbox usa água), o limitador e o bloco que gira (são da sala inteira, não peças) e os chefes.

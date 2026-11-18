@@ -75,6 +75,7 @@ func _init() -> void:
 	test_subsoil_and_anchors()
 	test_pass_bars()
 	test_hold_jump()
+	test_sandbox()
 	test_mecha_intro()
 	test_mecha_dash()
 	test_mecha_homing()
@@ -3187,3 +3188,41 @@ func test_hold_jump() -> void:
 	var y: int = room.rabbit.pos.y
 	idle(60)
 	check(room.rabbit.on_ground and room.rabbit.pos.y == y, "soltando, ele para no chão")
+
+
+## A sandbox (sala -1 da build de teste) tem todos os componentes (D99). Se este teste falhar
+## depois de criar um componente, ponha o componente em tools/levels/sandbox.py e rode o script.
+func test_sandbox() -> void:
+	print("sandbox: todos os componentes")
+	var raw := FileAccess.get_file_as_string("res://levels/wip/sandbox.json")
+	var data: RefCounted = LevelData.from_json(raw)
+	check(data != null and _msgs(data, true) == "", "a sandbox valida sem erros (%s)" % _msgs(data, true))
+	var d: Dictionary = JSON.parse_string(raw)
+	var text := "".join(d["rows"])
+	# símbolos do mapa: cada um precisa aparecer; os numerados valem por grupo
+	var groups := {"123456789": "comporta", "abcdefghi": "compartimento de comporta", "¹²³⁴⁵⁶⁷⁸⁹": "comporta inversa"}
+	var missing: Array = []
+	for g in LevelData.GLYPHS:
+		if g == "." or g == "%":
+			continue   # vazio; ácido (uma sala só aceita um fluido: a sandbox usa água)
+		var grouped := false
+		for k in groups:
+			if k.contains(g):
+				grouped = true
+				var any := false
+				for ch in k:
+					any = any or text.contains(ch)
+				if not any and not missing.has(groups[k]):
+					missing.append(groups[k])
+		if not grouped and not text.contains(g):
+			missing.append(g)
+	check(missing.is_empty(), "todos os símbolos do mapa estão na sandbox (faltam: %s)" % str(missing))
+	var Objects = load("res://scripts/editor/objects.gd")
+	var no_obj: Array = []
+	for kind in Objects.ORDER:
+		if d.get(kind, []).is_empty():
+			no_obj.append(kind)
+	check(no_obj.is_empty(), "todos os tipos de objeto estão na sandbox (faltam: %s)" % str(no_obj))
+	load_def(d)
+	idle(120)
+	check(room.state == "play", "a sandbox começa e o coelho fica vivo parado")
