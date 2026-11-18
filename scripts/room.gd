@@ -504,6 +504,7 @@ func reset() -> void:
 	awaken_t = 0 if def.get("awaken", false) and not awakened else -1
 	_init_crushers()
 	_init_movers()
+	_init_sprouts()
 	_init_dynamics()
 	for pd in def.get("plates", []):
 		plates.append({"rect": _tile_rect(pd["rect"]),
@@ -641,6 +642,28 @@ func _init_movers() -> void:
 		})
 
 
+## Brotos (campo "sprouts", ato 3, D107): {"rect": [coluna, linha, largura, altura] (o chapéu recolhido,
+## rente à face onde o cogumelo nasce), "dir": para onde ele cresce (como a fase foi desenhada),
+## "len": altura máxima (tiles), "speed": px/s crescendo, "back": px/s recolhendo}. O cogumelo cresce
+## contra a gravidade de agora: com o "para onde cresce" apontando para cima na tela, o chapéu sobe
+## até o máximo; senão, recolhe devagar. O chapéu é sólido (uma plataforma que carrega o coelho e as
+## caixas); o talo, não. Por dentro, é um conector com gatilho próprio.
+func _init_sprouts() -> void:
+	for d in def.get("sprouts", []):
+		var o: Array = d["rect"]
+		var off := Rect2i(int(o[0]) * TILE, int(o[1]) * TILE, int(o[2]) * TILE, (int(o[3]) if o.size() > 3 else 1) * TILE)
+		var dv: Vector2i = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)][posmod(int(d.get("dir", 0)), 4)]
+		var on := Rect2i(off.position + dv * int(d.get("len", 5)) * TILE, off.size)
+		movers.append({
+			"off": off, "on": on, "r": off, "pf": Vector2(off.position),
+			"ch": -1, "speed": float(d.get("speed", 40.0)), "back": float(d.get("back", 16.0)),
+			"spikes": -1, "fx": 0, "launch": 0.0, "last": Vector2i.ZERO,
+			"cycle": 0, "phase": 0, "bat": 0, "delay": 0,
+			"raw": false, "eff": false, "trig_t": 0, "want": false, "warn": false,
+			"sprout": true, "seed": int(o[0]) * 31 + int(o[1]) * 17,
+		})
+
+
 ## Liga ou desliga um canal: os encaixes piscam por MOVER_WARN quadros (o aviso) e então as
 ## peças dele correm para o outro encaixe. `instant`: sem aviso.
 func mover_toggle(ch: int, instant := false) -> void:
@@ -675,6 +698,10 @@ func mover_wants_on(m: Dictionary) -> bool:
 
 ## O que o gatilho pede agora (antes do atraso).
 func _mover_raw(m: Dictionary) -> bool:
+	if m.get("sprout", false):
+		# o broto quer crescer quando o seu "para onde cresce" aponta para cima na tela
+		var gd: Vector2i = m["on"].position - m["off"].position
+		return gd.x == 0 and gd.y < 0
 	if m["bat"] > 0:
 		return bat_got >= m["bat"]
 	return mover_state.get(m["ch"], false) or plate_on.get(m["ch"], false)
@@ -729,7 +756,10 @@ func _update_movers() -> void:
 		if not was:
 			var delta: Vector2 = Vector2(tgt.position) - m["pf"]
 			var dist: float = delta.length()
-			var mv: float = minf(dist, float(m["speed"]) * DT)
+			var spd: float = float(m["speed"])
+			if m.get("sprout", false) and not mover_wants_on(m):
+				spd = float(m["back"])   # o broto recolhe devagar
+			var mv: float = minf(dist, spd * DT)
 			m["pf"] += delta / dist * mv
 			var d: Vector2i = Vector2i(m["pf"].round()) - m["r"].position
 			while d != Vector2i.ZERO:
@@ -741,7 +771,9 @@ func _update_movers() -> void:
 				d -= st
 				if state != "play":
 					return
-			if m["r"].position == tgt.position:
+			if m["r"].position == tgt.position and m.get("sprout", false):
+				m["pf"] = Vector2(tgt.position)
+			elif m["r"].position == tgt.position:
 				# encaixou: um estalo curto, com o brilho do encaixe
 				m["pf"] = Vector2(tgt.position)
 				m["fx"] = 0
@@ -3564,6 +3596,9 @@ func _draw_movers() -> void:
 	var reach := VIEW.length() / 2.0 + 40.0
 	for m in movers:
 		var r: Rect2i = m["r"]
+		if m.get("sprout", false):
+			_draw_sprout(m)
+			continue
 		if (Vector2(r.position) - cam).length() > reach and (Vector2(m["off"].position) - cam).length() > reach \
 				and (Vector2(m["on"].position) - cam).length() > reach:
 			continue
@@ -3597,6 +3632,46 @@ func _draw_movers() -> void:
 			for q in 2:
 				var cx := mr.position.x + mr.size.x * (0.3 + 0.4 * q)
 				draw_polyline(PackedVector2Array([Vector2(cx - 2, mr.position.y + mr.size.y - 2), Vector2(cx, mr.position.y + mr.size.y - 4), Vector2(cx + 2, mr.position.y + mr.size.y - 2)]), C_PAINT, 1.0)
+
+
+## O broto: talo claro da face onde nasce até o chapéu: uma cúpula roxa (com pintas claras e lamelas
+## no lado do talo) que ocupa a caixa do chapéu, virada para onde ele cresce.
+func _draw_sprout(m: Dictionary) -> void:
+	var r := Rect2(m["r"])
+	var off := Rect2(m["off"])
+	var on := Rect2(m["on"])
+	var dv := (on.get_center() - off.get_center()).normalized()
+	var half := (r.size.y if absf(dv.y) > 0.5 else r.size.x) / 2.0
+	var wide := (r.size.x if absf(dv.y) > 0.5 else r.size.y) / 2.0
+	var root := off.get_center() - dv * half
+	var c := r.get_center()
+	var side := dv.orthogonal()
+	var stem_len := root.distance_to(c - dv * half)
+	var sway := sin(frame * 0.05 + int(m["seed"]) % 7) * minf(stem_len / 40.0, 1.0)
+	# talo (3 px, com sombra de um lado), de leve curvo
+	var n := int(stem_len)
+	for i in n:
+		var k := float(i) / maxf(n, 1)
+		var p := root + dv * i + side * sin(k * PI) * sway
+		draw_rect(Rect2(p.round() - Vector2(1, 1), Vector2(3, 3)), C_STALK)
+		draw_rect(Rect2((p + side * 1.0).round(), Vector2(1, 1)), C_STALK.darkened(0.3))
+	# chapéu: cúpula (meio disco esticado) com a base virada para o talo
+	var col: Color = C_FUNGI[0]
+	draw_circle(c, wide * 1.6, Color(col, 0.07 + 0.04 * sin(frame * 0.05)))
+	var pts := PackedVector2Array()
+	for i in 13:
+		var a := PI * float(i) / 12.0
+		pts.append(c - dv * half + side * cos(a) * wide + dv * sin(a) * half * 2.0)
+	draw_colored_polygon(pts, col)
+	var pts2 := PackedVector2Array()
+	for i in 13:
+		var a2 := PI * float(i) / 12.0
+		pts2.append(c - dv * (half - 1.0) + side * cos(a2) * (wide - 2.0) + dv * sin(a2) * (half * 2.0 - 3.0))
+	draw_colored_polygon(pts2, col.lightened(0.12))
+	draw_line(c - dv * half + side * wide, c - dv * half - side * wide, col.darkened(0.35), 1.0)   # lamelas
+	for q in 3:
+		var sp := c + side * ((q - 1) * wide * 0.45) + dv * (half * 0.5 + (q % 2) * 2.0)
+		draw_rect(Rect2(sp.round(), Vector2(2, 1)), C_FUNGI[3])
 
 
 ## Chapas soltas: aço fino enferrujado, com uma trinca; tremem depois de pisadas.
@@ -4358,7 +4433,7 @@ func _surface() -> String:
 			return "plate"
 	for m in movers:
 		if overlaps(q, m["r"]):
-			return "metal"
+			return "dirt" if m.get("sprout", false) else "metal"
 	for o in conveyors:
 		if overlaps(q, o["rect"]):
 			return "metal"

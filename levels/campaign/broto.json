@@ -1,0 +1,67 @@
+{
+	"hint": "Cogumelos crescem para cima. Gire: depois eles murcham devagar",
+	"hint_touch": "Cogumelos crescem para cima. Gire: depois eles murcham devagar",
+	"limiter": true,
+	"name": "Broto",
+	"notes": "Ato 3, fase 1 (D107). Três brotos na parede da esquerda; girar para a esquerda os faz crescer; na volta da sala, viram uma escada de chapéus que murcha devagar até a parede. Sobe-se até a bateria no alto antes que murchem.",
+	"rotate": true,
+	"rows": [
+		"##############################",
+		"#........................HHLL#",
+		"#........................HHLL#",
+		"#....................+.......#",
+		"#..................#####.....#",
+		"#............................#",
+		"#............................#",
+		"#..........................DD#",
+		"#..........................DD#",
+		"#..PP......................DD#",
+		"#..PP......................DD#",
+		"#########################SS###",
+		"#########################SS###",
+		"##############################"
+	],
+	"sprouts": [
+		{
+			"back": 16.0,
+			"dir": 1.0,
+			"len": 6.0,
+			"rect": [
+				1.0,
+				8.0,
+				2.0,
+				2.0
+			],
+			"speed": 80.0
+		},
+		{
+			"back": 16.0,
+			"dir": 1.0,
+			"len": 11.0,
+			"rect": [
+				1.0,
+				6.0,
+				2.0,
+				2.0
+			],
+			"speed": 80.0
+		},
+		{
+			"back": 16.0,
+			"dir": 1.0,
+			"len": 16.0,
+			"rect": [
+				1.0,
+				4.0,
+				2.0,
+				2.0
+			],
+			"speed": 80.0
+		}
+	],
+	"start_rot": 0,
+	"theme": "fungos",
+	"verified": true,
+	"verified_hash": "9802cae9ce16259eef78726ba5a2d53024fb6eb05fb7af6cccc948ed8b125878",
+	"version": 1
+}

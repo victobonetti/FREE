@@ -9,7 +9,7 @@ fluido (a sandbox usa água).
 Da esquerda para a direita, no chão: o botão por tempo que chama o elevador; a comporta e a
 inversa (no alto, ligadas ao compartimento "a"); espinhos; barras sólidas e de passagem; a corda;
 o poço de água (com o ralo no alto); bateria, alavanca e calha; esteira, mola, ventilador e jato
-de vapor; a caixa da porta. Nas paredes, as saídas do modo mundo: a livre (esquerda) e a trancada (direita). No alto: plataforma em ciclo, estampador, catapulta, chapas soltas e a
+de vapor; a caixa da porta. Na parede da direita, um broto (ato 3). Nas paredes, as saídas do modo mundo: a livre (esquerda) e a trancada (direita). No alto: plataforma em ciclo, estampador, catapulta, chapas soltas e a
 placa de espinhos (num corredor fechado, começa depois de 6 s).
 """
 import sys, os
@@ -101,5 +101,8 @@ lv.solid(80, 8, 101, 8)
 lv.solid(80, 14, 101, 14)
 lv.solid(80, 9, 80, 13)
 lv.add("crushers", {"rect": [81, 9, 20, 5], "dir": 1, "speed": 14.0, "delay": 6.0, "face": "happy"})
+
+# --- broto (ato 3): nasce na parede da direita, recolhido; girando para a direita, cresce
+lv.add("sprouts", {"rect": [101, F - 6, 2, 2], "dir": 3, "len": 6, "speed": 80.0, "back": 16.0})
 
 lv.save()

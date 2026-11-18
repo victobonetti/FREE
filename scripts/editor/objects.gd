@@ -86,6 +86,17 @@ const TYPES := {
 		],
 		"rects": ["rect"], "dirs": ["dir"],
 	},
+	"sprouts": {
+		"label": "Broto (cogumelo que cresce)", "color": Color("b98ee0"),
+		"fields": [
+			{"key": "rect", "label": "Chapéu recolhido (2x2, rente à face onde nasce)", "kind": "rect"},
+			{"key": "dir", "label": "Cresce", "kind": "choice", "opts": DIRS, "def": 0},
+			{"key": "len", "label": "Altura máxima (tiles)", "kind": "int", "min": 1, "max": 30, "def": 5},
+			{"key": "speed", "label": "Crescendo (px/s)", "kind": "float", "min": 5.0, "max": 200.0, "step": 5.0, "def": 40.0},
+			{"key": "back", "label": "Recolhendo (px/s)", "kind": "float", "min": 5.0, "max": 200.0, "step": 5.0, "def": 16.0},
+		],
+		"rects": ["rect"], "dirs": ["dir"],
+	},
 	"vents": {
 		"label": "Jato de vapor", "color": Color("e9e4d6"),
 		"fields": [
@@ -100,7 +111,7 @@ const TYPES := {
 }
 
 ## A ordem em que os tipos aparecem na interface.
-const ORDER := ["crushers", "movers", "plates", "crumbles", "conveyors", "springs", "fans", "vents"]
+const ORDER := ["crushers", "movers", "plates", "crumbles", "conveyors", "springs", "fans", "vents", "sprouts"]
 
 
 static func label(kind: String) -> String:
@@ -130,6 +141,8 @@ static func make_default(kind: String, c: int, r: int) -> Variant:
 			rect = [c, r, 2, 1]
 		"fans":
 			rect = [c, r, 3, 8]
+		"sprouts":
+			rect = [c, r, 2, 2]
 		_:
 			rect = [c, r, 2, 6]
 	if t.get("scalar", false):
