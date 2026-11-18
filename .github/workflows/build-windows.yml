@@ -1,12 +1,10 @@
-# Exporta a versão Windows e publica na Release "beta" a cada push na main, para os testers
-# baixarem. O link fixo do download:
+# Exporta a versão Windows e publica na Release "beta", para os testers baixarem. Só roda à mão
+# (Actions → "Build Windows (beta)" → Run workflow): push na main publica só a web. O link fixo do download:
 #   https://github.com/victobonetti/FREE/releases/download/beta/FREE-windows.zip
 # A página da Release: https://github.com/victobonetti/FREE/releases/tag/beta
 name: Build Windows (beta)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
