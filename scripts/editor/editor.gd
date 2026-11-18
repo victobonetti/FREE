@@ -303,7 +303,7 @@ func _build_right(right: VBoxContainer) -> void:
 	_rot_spin.value_changed.connect(func(v): _prop("start_rot", int(v)))
 	rr.add_child(_rot_spin)
 	_reload_spin = _time_row(right, "Recarga do giro", func(v): _prop("reload_time", v))
-	_reload_spin.value = 0.4
+	_reload_spin.set_value_no_signal(0.4)
 	_limit_spin = _time_row(right, "Tempo do limitador", func(v): _prop("limiter_time", v))
 	_verified_label = Label.new()
 	_verified_label.add_theme_font_size_override("font_size", 12)

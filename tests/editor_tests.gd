@@ -748,7 +748,7 @@ func test_inverse_in_editor() -> void:
 func test_time_params() -> void:
 	print("recarga e tempo do limitador no editor")
 	var d: RefCounted = LevelData.blank(20, 12)
-	check(d.reload_time == 2.5 and d.limiter_time == 2.5, "o padrão é 2,5 s")
+	check(d.reload_time == 0.4 and d.limiter_time == 2.5, "o padrão é 0,4 s de recarga e 2,5 s de limitador")
 	check(not d.to_def().has("reload_time") and not d.to_def().has("limiter_time"), "no padrão, a fase não carrega os campos")
 	d.reload_time = 4.0
 	d.limiter_time = 1.5
@@ -770,7 +770,7 @@ func test_time_params() -> void:
 	for p in d.validate():
 		if not p["erro"] and String(p["msg"]).contains("dura mais"):
 			warned = true
-	check(warned and d.is_playable(), "limitador mais longo que a recarga é só aviso")
+	check(not warned and d.is_playable(), "limitador mais longo que a recarga é o normal (sem aviso)")
 	d.limiter = false
 	d.limiter_time = 99.0
 	check(d.is_playable(), "sem limitador, o tempo dele não conta")
