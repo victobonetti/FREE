@@ -121,6 +121,9 @@ var homers: Array = []      # teleguiados: {pos, vel, age}
 var blasts: Array = []      # {pos, t, r}
 var locked := false         # a investida ainda corrige a rota até o coelho
 var dash_dir := Vector2.LEFT  # mira travada no fim do aviso (direção de tela)
+const LAG_RATE := 16.0        # quão rápido o desenho da mecha alcança o giro do cenário (1/s)
+var _lag_ang := 0.0           # ângulo de tela em que a mecha é desenhada (persegue view_angle)
+var _lag_pending := false
 var committed := false
 var lost := false           # girou depois da mira travada: a investida sai sem alvo
 var dash_hit := false       # a investida pegou o coelho (então a batida na parede não a fere)
@@ -210,12 +213,12 @@ func absorb_kill(r) -> bool:
 
 
 func on_rotate(r, dir: int) -> void:
-	# a mecha fica onde está NA TELA (D95): não gira com a sala. A sala (e o coelho) giram em volta
-	# dela; a investida segue na mesma rota e o laser fica no mesmo lugar. (A câmera ainda não girou.)
-	if state != "inert" and state != "arrive":
-		pos = r._rot_point(r.cam, dir) + (pos - r.cam)
-	else:
-		pos = r._rot_point(pos, dir)
+	# a mecha gira com a sala: fica no mesmo lugar em relação a ela (D101). Na investida, o movimento
+	# em curso segue igual NA TELA (mesma direção e velocidade, o laser na mesma direção): só o
+	# ponto de partida acompanha a sala. No desenho, ela acompanha o giro um pouco atrás do
+	# cenário (`_lag_ang`).
+	pos = r._rot_point(pos, dir)
+	_lag_pending = true
 	cap_pos = r._rot_point(cap_pos, dir)
 	cap_from = r._rot_point(cap_from, dir)
 	for m in markers:
@@ -854,7 +857,16 @@ func _smoke() -> void:
 
 # ---------------------------------------------------------------- desenho
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# o ângulo em que a mecha é desenhada persegue o do cenário, um pouco atrás dele
+	if room != null:
+		if _lag_pending and room.rotating:
+			_lag_pending = false
+			_lag_ang = room.view_angle
+		elif not _lag_pending:
+			_lag_ang = lerpf(_lag_ang, room.view_angle, 1.0 - exp(-delta * LAG_RATE))
+			if absf(_lag_ang - room.view_angle) < 0.002:
+				_lag_ang = room.view_angle
 	anim_draw()
 	queue_redraw()
 
@@ -921,12 +933,12 @@ func _pose() -> Dictionary:
 	return p
 
 
-## Durante a animação do giro, a mecha (e o laser) ficam parados na tela: o ponto `p` da sala nova é
-## desenhado onde ele vai estar quando a animação acabar.
+## No giro, a mecha (e o laser) giram com a sala, um pouco atrás do cenário: o ponto `p` da sala é
+## desenhado no ângulo `_lag_ang` em vez do ângulo do cenário.
 func _lock(p: Vector2) -> Vector2:
-	if room == null or not room.rotating or state == "inert" or state == "arrive":
+	if room == null or absf(_lag_ang - room.view_angle) < 0.0005:
 		return p
-	return room.cam + (p - room.cam).rotated(-room.view_angle)
+	return room.cam + (p - room.cam).rotated(_lag_ang - room.view_angle)
 
 
 ## Um ponto do corpo (em relação a `pos`, em pé) para px da sala, com a inclinação e o giro da tela.

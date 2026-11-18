@@ -45,8 +45,8 @@ const NUT_SIZE := 10
 const NUT_DRAW := 1.45      # o desenho da noz (7 px) ampliado para o tamanho da colisão
 const NUT_FLIGHT := 1.5     # segundos do arremesso até onde o coelho estava
 # Dinamite (D97): com o coelho praticamente embaixo dele, ele corre para o canto oposto com uma
-# dinamite na mão, mira e joga em parábola. Ela voa devagar, com o lugar da explosão marcado no
-# chão, e o raio é enorme.
+# dinamite na mão, mira e joga em parábola. Ela voa devagar e o raio é enorme (o círculo vermelho
+# que marcava o raio saiu: poluía a tela).
 const DYN_NEAR := 14.0      # distância entre os centros que dispara a dinamite
 const DYN_CD := 420         # quadros entre duas dinamites
 const DYN_RUN := 150.0      # px/s, a corrida até o canto
@@ -797,13 +797,8 @@ func _draw() -> void:
 		draw_circle(p, br * minf(1.0, 0.4 + k * 1.5), Color(C_FIRE, 0.55 * (1.0 - k)))
 		draw_circle(p, br * 0.6 * (1.0 - k), Color(1, 1, 1, 0.9 * (1.0 - k)))
 		draw_arc(p, br, 0.0, TAU, 32, Color(C_FIRE, 1.0 - k), 1.0)
-	# dinamites no ar, e o lugar da explosão marcado (pulsa mais rápido perto de cair)
+	# dinamites no ar (sem marcar o raio no chão: poluía a tela)
 	for d in dyns:
-		var tg: Vector2 = d["target"]
-		var urg := clampf(float(d["t"]) / DYN_FLIGHT, 0.0, 1.0)
-		var pul := 0.5 + 0.5 * sin(anim * (0.2 + 0.5 * urg))
-		draw_arc(tg, DYN_RADIUS, 0.0, TAU, 40, Color(C_DYN, 0.25 + 0.35 * pul), 1.0)
-		draw_circle(tg, DYN_RADIUS, Color(C_DYN, 0.05 + 0.06 * pul))
 		draw_set_transform_matrix(base * Transform2D(d["ang"], d["pos"].round()))
 		draw_rect(Rect2(-1.5, -4, 3, 8), C_DYN)
 		draw_rect(Rect2(-1.5, -4, 3, 1), Color(1, 1, 1, 0.5))

@@ -733,3 +733,7 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Editor:** X e Z na paleta (só pintam na borda; apagar devolve a parede). Janela "Mundo…" (em desenvolvimento, como a de Campanha): o mapa em grade; abrir uma sala no editor (Salvar grava nela), sala nova numa casa vazia, pôr a fase aberta numa casa, mover (setas, troca de lugar se ocupada), início, tirar do mapa; embaixo, os problemas (saída sem vizinha, vizinha sem a saída de volta).
 - **Fora do mundo** (sandbox, teste do editor), sair por uma saída vale como chegar à porta.
 - **Pendente:** a sala da corda (Prumo) precisa de uma mudança de desenho para entrar no mundo (a corda e o giro brigam com a saída na parede); as salas com água funcionam (a água fecha a saída trancada).
+
+### D101 — Mecha gira com a sala; dinamite sem o círculo
+- **Mecha no giro (muda o D95):** ela não fica mais parada na tela; gira com a sala e continua no mesmo lugar em relação a ela. No desenho, acompanha o giro rápido, mas um pouco atrás do cenário. Na investida (e no aviso com a mira travada), o movimento em curso continua igual na tela: mesma direção, mesma velocidade e o laser na mesma direção; só o ponto de partida acompanha a sala. Por isso girar ainda tira o coelho da linha da investida.
+- **Dinamite do Jeffrey:** saiu o círculo vermelho que marcava o raio da explosão (poluía a tela). A dinamite continua visível no ar, com o pavio aceso.

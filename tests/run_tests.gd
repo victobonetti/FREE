@@ -3082,19 +3082,20 @@ func test_mecha_shove() -> void:
 	check(sign(m.pos.x - x0) == sign(x0 - (room.rabbit.pos.x + 6)) or absf(x0 - (room.rabbit.pos.x + 6)) < 3.0, "para o lado oposto ao do coelho")
 
 
-## No giro, a mecha fica no mesmo ponto da tela, e a investida mantém a rota e o laser (D95).
+## No giro, a mecha gira com a sala (fica no mesmo lugar em relação a ela), e a investida mantém
+## a direção na tela e o laser (D101).
 func test_mecha_screen_lock() -> void:
-	print("mecha: no giro, fica parada na tela")
+	print("mecha: no giro, gira com a sala; a investida mantém a direção")
 	var m = _mecha()
 	m.homers.clear()
 	_mecha_dash(m)
 	while not m.committed:
 		tick()
-	var off0: Vector2 = m.pos - room.cam
 	var dir0: Vector2 = m.dash_dir
 	wait_rot_ready()
+	var want: Vector2 = room._rot_point(m.pos, 1)
 	tick({"rotate": 1})
-	check((m.pos - room.cam).distance_to(off0) < 1.0, "a posição na tela não muda no giro (antes %s, depois %s)" % [off0, m.pos - room.cam])
+	check(m.pos.distance_to(want) < 2.0, "a posição em relação à sala é a mesma (esperado %s, ficou %s)" % [want, m.pos])
 	check(m.dash_dir == dir0, "a direção do laser não muda")
 
 ## Barras: a sólida (= } _ {) bloqueia de todos os lados; a de passagem (↑ → ↓ ←) atravessa por
