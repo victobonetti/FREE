@@ -703,3 +703,8 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
 - **Ralo:** engole 2,5 vezes mais rápido (2,5 px de altura por quadro em cada coluna).
 - **Mecha, sem a sentada:** no lugar, o empurrão: com o coelho encostado nela por 0,75 s (parada, mirando ou lançando mísseis), ela dá um dash curto para o lado oposto, sem dano.
 - **Mecha parada na tela no giro:** a mecha não gira mais com a sala; fica no mesmo ponto da tela (também durante a animação), e a investida mantém a rota e o laser. A sala e o coelho giram em volta dela: girar tira o coelho da linha. Girar antes do laser também tende a esquivar (o coelho cai pela gravidade nova enquanto o laser é posto); com a recarga de 0,4 s, é coerente.
+
+### D96 — Quinas mais justas
+- **Estudo (um beta tester achou as plataformas "quadradas"):** o encaixe no degrau só valia subindo; caindo ou no topo do pulo, o pé que batia até alguns px abaixo da borda escorregava pela lateral. Com a caixa quadrada do coelho e as quinas retas do desenho, parecia que a quina "prendia".
+- **Mudanças:** o encaixe vale no ar, subindo ou caindo (até 4 px, antes 3 e só subindo); a cabeça escorrega até 5 px numa quina (antes 4); as quinas expostas das paredes são desenhadas arredondadas (1 px, com a borda branca fazendo a curva). A regra de pousar (basta 1 px sobre a borda) ficou como estava.
+- **Provas:** três rotas do robô dependiam do comportamento antigo (Linha de montagem, Casa de força, Passagem); foram regravadas. Na Linha de montagem, a descida passou a esperar o elevador descer (senão o coelho encaixava em cima dele). Os replays da campanha foram refeitos por `tools/update_replay.gd`, que não mexe no arquivo da fase (preserva campos postos à mão, como "music").

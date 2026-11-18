@@ -74,7 +74,8 @@ lv.step("wait_cutscene")
 
 # --- a volta: cai pela esquerda até a plataforma do elevador e daí ao chão; vai à porta
 lv.drop(-1, 56, 60, 22)
-lv.drop(-1, 54, 55, F)
+lv.step("wait_mover", e0, "off", 60)          # o elevador embaixo: o coelho não encaixa nele ao cair
+lv.step("walk_off", -1, 440, 446, F)            # cai longe da quina do elevador
 lv.block(75, F, "S")
 lv.put(77, F - 3, "DD")
 lv.put(77, F - 2, "DD")

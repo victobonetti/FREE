@@ -21,8 +21,8 @@ const JUMP_SPEED := 110.0
 const VAR_JUMP_FRAMES := 12   # segurando o pulo, a velocidade de subida é mantida por este tempo
 const COYOTE_FRAMES := 6
 const BUFFER_FRAMES := 6
-const CORNER_CORRECT := 4
-const LEDGE_ASSIST := 3
+const CORNER_CORRECT := 5    # cabeça raspando numa quina ao subir: escorrega até 5 px (D96)
+const LEDGE_ASSIST := 4       # pé batendo na quina de uma plataforma: sobe até 4 px para encaixar (D96)
 
 # --- Corda (pêndulo) ---
 const ROPE_GRAVITY := 900.0
@@ -346,7 +346,8 @@ func _move_x(room, amount: float) -> void:
 			if b != null and not room.push_box(b, Vector2i(s, 0)):
 				blocked = true
 		if blocked:
-			if vel.y < 0.0 and _ledge_assist(room, s):
+			# no ar (subindo OU caindo): o pé que bate na quina, até 4 px abaixo da borda, sobe e encaixa
+			if not on_ground and _ledge_assist(room, s):
 				continue
 			vel.x = 0.0
 			rem.x = 0.0
@@ -395,7 +396,7 @@ func _corner_correct(room) -> bool:
 	return false
 
 
-## Subindo e batendo na quina de um degrau: sobe até 3 px para encaixar.
+## No ar, batendo com o pé na quina de uma plataforma: sobe até LEDGE_ASSIST px para encaixar.
 func _ledge_assist(room, s: int) -> bool:
 	for k in range(1, LEDGE_ASSIST + 1):
 		var r := Rect2i(pos + Vector2i(s, -k), Vector2i(SIZE, SIZE))

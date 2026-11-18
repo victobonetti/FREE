@@ -3652,6 +3652,7 @@ func _draw_walls() -> void:
 				draw_rect(Rect2(x, y, 1, TILE), C_EDGE)
 			if c < gw - 1 and tiles[r * gw + c + 1] == 0:
 				draw_rect(Rect2(x + TILE - 1, y, 1, TILE), C_EDGE)
+			_round_corners(c, r, x, y)
 			if soil != "" and (theme != "transicao" or _metal_frac(Vector2(x + 4, y + 4)) < 0.55):
 				_draw_soil_decor(c, r, x, y)
 	# enfeites da fábrica depois de todas as paredes (as lâmpadas ficam por cima delas)
@@ -4246,6 +4247,19 @@ func _draw_cast_shadows() -> void:
 				draw_rect(Rect2(Vector2(gr.position) + so, Vector2(gr.size)), C_SHADOW)
 	if rabbit != null and (state == "play" or state == "won"):
 		draw_rect(Rect2(Vector2(rabbit.pos) + so + Vector2(2, 3), Vector2(8, 9)), Color(C_SHADOW, 0.22))
+
+
+## Quinas expostas arredondadas (só desenho, D96): onde duas faces vizinhas dão para o ar, o pixel
+## da quina some e a borda branca faz a curva por dentro. Combina com a folga das quinas.
+func _round_corners(c: int, r: int, x: int, y: int) -> void:
+	var up := r > 0 and tiles[(r - 1) * gw + c] == 0
+	var dn := r < gh - 1 and tiles[(r + 1) * gw + c] == 0
+	var lf := c > 0 and tiles[r * gw + c - 1] == 0
+	var rt := c < gw - 1 and tiles[r * gw + c + 1] == 0
+	for q in [[up, lf, 0, 0, 1, 1], [up, rt, TILE - 1, 0, -1, 1], [dn, lf, 0, TILE - 1, 1, -1], [dn, rt, TILE - 1, TILE - 1, -1, -1]]:
+		if q[0] and q[1]:
+			draw_rect(Rect2(x + q[2], y + q[3], 1, 1), C_BG)
+			draw_rect(Rect2(x + q[2] + q[4], y + q[3] + q[5], 1, 1), C_EDGE)
 
 
 ## Volume da parede: o miolo (sem ar em volta) é mais escuro; as faces de baixo e da direita, que
