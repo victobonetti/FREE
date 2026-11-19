@@ -1,0 +1,37 @@
+{
+	"frame": [
+		80,
+		88
+	],
+	"ground": 85,
+	"anims": {
+		"run": {
+			"row": 0,
+			"frames": 8
+		},
+		"idle": {
+			"row": 1,
+			"frames": 4
+		},
+		"flex": {
+			"row": 2,
+			"frames": 6
+		},
+		"throw": {
+			"row": 3,
+			"frames": 4
+		},
+		"hurt": {
+			"row": 4,
+			"frames": 2
+		},
+		"tired": {
+			"row": 5,
+			"frames": 4
+		},
+		"fly": {
+			"row": 6,
+			"frames": 4
+		}
+	}
+}
