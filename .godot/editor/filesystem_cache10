@@ -1,5 +1,5 @@
 78098b89c88a74ebe8c20117b8754620
-::res://::1795051268
+::res://::1795053906
 bug-start-screen.png::CompressedTexture2D::3655811680952931293::1794828283::1794828656::1::::<><><>0<>0<>e037a8a5b8f903538db0fbc1984926f1<>res://.godot/imported/bug-start-screen.png-66b75a0148c3f2c61b33a0a2517632e5.ctex::
 CLAUDE.md::TextFile::-1::1795004314::0::1::::<><><>0<>0<><>::
 componente-corda.jpeg::CompressedTexture2D::4996354893232881215::1794828283::1794828657::1::::<><><>0<>0<>86b4ecb5c4c77cac9bcd31f58e60ba81<>res://.godot/imported/componente-corda.jpeg-9c4f3912909ae7352f75057841134170.ctex::
@@ -9,9 +9,9 @@ gatsby-concept.jpeg::CompressedTexture2D::3504872718098667438::1794924595::17949
 jeffrey-concept.jpeg::CompressedTexture2D::1792201421653823756::1794924595::1794924595::1::::<><><>0<>0<>237faec9f6af1754e05bc4c7f27a4ead<>res://.godot/imported/jeffrey-concept.jpeg-bcaf0bb977ba34c9f6f4d85fbc472a2f.ctex::
 start-screen.jpeg::CompressedTexture2D::4521643121277247311::1794828283::1794828657::1::::<><><>0<>0<>e2ba762d0dc23a81b965fb779ef813c8<>res://.godot/imported/start-screen.jpeg-95225a1d125ba2e99af16f07462141fd.ctex::
 water-mechanics.png::CompressedTexture2D::395061968140861977::1794828283::1794828656::1::::<><><>0<>0<>4a80129cc1c369cc8ca7b1e4d66361b7<>res://.godot/imported/water-mechanics.png-f28ff24641d9ee8027fff3bbb91a7bf3.ctex::
-::res://art/::1795051392
-senzi.json::JSON::-1::1795051715::0::1::::<><><>0<>0<><>::
-senzi.png::CompressedTexture2D::898875729162313722::1795051715::1795051731::1::::<><><>0<>0<>7daaae7a78f2849809820c0d9be2d4ac<>res://.godot/imported/senzi.png-757666c16a1fef28b5aac272efb16e68.ctex::
+::res://art/::1795054138
+senzi.json::JSON::-1::1795053933::0::1::::<><><>0<>0<><>::
+senzi.png::CompressedTexture2D::339636615636327152::1795053933::1795054138::1::::<><><>0<>0<>290ae83515f5f8f445fd143f8ea31559<>res://.godot/imported/senzi.png-757666c16a1fef28b5aac272efb16e68.ctex::
 ::res://build/::1794828665
 ::res://build/web/::1795051550
 index.apple-touch-icon.png::CompressedTexture2D::6296709092459863778::1795051550::1794828782::1::::<><><>0<>0<>36195adb806061299a75956f7599fbaf<>res://.godot/imported/index.apple-touch-icon.png-21031f526f7942c8019a62913b80e091.ctex::
@@ -20,7 +20,7 @@ index.png::CompressedTexture2D::3017241865779950327::1795051550::1794828782::1::
 ::res://docs/::1794968070
 ARQUITETURA.md::TextFile::-1::1794936858::0::1::::<><><>0<>0<><>::
 COMPARTILHAR.md::TextFile::-1::1794924595::0::1::::<><><>0<>0<><>::
-DECISOES.md::TextFile::-1::1795051589::0::1::::<><><>0<>0<><>::
+DECISOES.md::TextFile::-1::1795051763::0::1::::<><><>0<>0<><>::
 GDD.md::TextFile::-1::1795022228::0::1::::<><><>0<>0<><>::
 HISTORIA.md::TextFile::-1::1794936858::0::1::::<><><>0<>0<><>::
 HISTORICO.md::TextFile::-1::1794945646::0::1::::<><><>0<>0<><>::
@@ -113,7 +113,7 @@ main.tscn::PackedScene::-1::1794828283::0::1::::<><><>0<>0<><>::res://scripts/ma
 ::res://scripts/::1795050098
 boss_gatsby.gd::GDScript::7877045158204457122::1795021939::0::1::::<>Node2D<><>0<>0<><>::
 boss_mecha.gd::GDScript::504786924225798918::1795031323::0::1::::<>Node2D<><>0<>0<><>::
-boss_snail.gd::GDScript::8815739392878679612::1795051728::0::1::::<>Node2D<><>0<>0<><>::
+boss_snail.gd::GDScript::8815739392878679612::1795054176::0::1::::<>Node2D<><>0<>0<><>::
 boss_squirrel.gd::GDScript::2496448466064392728::1795008837::0::1::::<>Node2D<><>0<>0<><>::
 box.gd::GDScript::8732409881603628787::1794828283::0::1::::<>RefCounted<><>0<>0<><>::
 build_info.gd::GDScript::2315487878307753953::1794968203::0::1::::<>RefCounted<><>0<>0<><>::
@@ -147,7 +147,7 @@ world_panel.gd::GDScript::4741094809862287102::1795006903::0::1::::<>Window<><>0
 editor_tests.gd::GDScript::4441603503719539393::1795045514::0::1::::<>SceneTree<><>0<>0<><>::
 intro_shot.gd::GDScript::8778013218126339801::1794828283::0::1::::<>SceneTree<><>0<>0<><>::
 music_check.gd::GDScript::621454197003895022::1794828283::0::1::::<>SceneTree<><>0<>0<><>::
-run_tests.gd::GDScript::351537272602789950::1795050060::0::1::::<>SceneTree<><>0<>0<><>::
+run_tests.gd::GDScript::351537272602789950::1795054149::0::1::::<>SceneTree<><>0<>0<><>::
 shot.gd::GDScript::4657514312214163988::1794924595::0::1::::<>SceneTree<><>0<>0<><>::
 ::res://tests/fixtures/::1795045481
 gatsby-route.json::JSON::-1::1794924595::0::1::::<><><>0<>0<><>::
@@ -164,14 +164,14 @@ route-murchos.json::JSON::-1::1795045414::0::1::::<><><>0<>0<><>::
 route-passagem.json::JSON::-1::1795002541::0::1::::<><><>0<>0<><>::
 route-plataforma.json::JSON::-1::1795031557::0::1::::<><><>0<>0<><>::
 route-prensas.json::JSON::-1::1795023779::0::1::::<><><>0<>0<><>::
-::res://tools/::1795051266
+::res://tools/::1795053903
 canonize_levels.gd::GDScript::2306059511321191200::1794945646::0::1::::<>SceneTree<><>0<>0<><>::
 gatsby_robot.gd::GDScript::1251682617259800372::1794924595::0::1::::<>SceneTree<><>0<>0<><>::
 rehash_campaign.gd::GDScript::3916132115811552354::1794936858::0::1::::<>SceneTree<><>0<>0<><>::
 robot.gd::GDScript::1333994838924423978::1795045377::0::1::::<>SceneTree<><>0<>0<><>::
 update_replay.gd::GDScript::4563405723432327399::1795002539::0::1::::<>SceneTree<><>0<>0<><>::
 ::res://tools/__pycache__/::1795021155
-::res://tools/art/::1795051266
+::res://tools/art/::1795053904
 ::res://tools/levels/::1795049995
 ::res://tools/plans/::1795049995
 broto.json::JSON::-1::1795044922::0::1::::<><><>0<>0<><>::

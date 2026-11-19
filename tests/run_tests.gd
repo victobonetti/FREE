@@ -3374,7 +3374,7 @@ func _senzi(skip_intro := true) -> Variant:
 
 
 func test_senzi() -> void:
-	print("Senzi: revelação, fúria grudada, muros, cansaço")
+	print("Senzi: revelação, corrida grudada, muros, energia")
 	var m = _senzi(false)
 	check(m.state == "lurk", "começa como um caramujo comum")
 	var n := 0
@@ -3407,42 +3407,35 @@ func test_senzi() -> void:
 	var w := Rect2i(100, 100, 12, 20)
 	m.walls.append({"rect": w, "n": Vector2(0, -1), "age": 0})
 	check(room.solid_static(Rect2i(104, 104, 4, 4)), "o muro de cogumelo é sólido para o coelho")
-	# cansado: solto; cogumelos vermelhos e espinhos aparecem
 	m.walls.clear()
+	# a cada terço da barra: mais rápido (com uma pausa de raiva)
+	m.energy = m.ENERGY * 0.66
+	tick()
+	check(m.state == "rage" and m.phase == 1, "passando de um terço da barra, ele para com raiva")
+	idle(m.RAGE_FRAMES + 2)
+	check(m.state == "berserk" and m._phase() == 1, "e volta a correr, mais rápido")
+	# sem energia: desaba e morre; a porta destrava
 	m.energy = 0.01
 	idle(3)
-	check(m.state == "tired" and m.reds.size() == 3 and m.spikes_band != null, "sem energia: cansado, com cogumelos vermelhos e espinhos")
-	var ok := 0
-	for rd in m.reds:
-		if rd["ok"]:
-			ok += 1
-	check(ok == 1, "um cogumelo vermelho certo, alinhado com ele")
-	# tempo cansado acaba: ele se recupera
-	idle(m.TIRED + 5)
-	check(m.state == "berserk" and m.reds.is_empty() and m.spikes_band == null, "se demorar, ele se recupera")
+	check(m.state == "dying", "sem energia, ele desaba")
+	idle(m.DIE_FRAMES + 5)
+	check(m.state == "dead" and room.door_unlocked, "e morre: a porta destrava")
 
 
-## Um bot que gira para o lado do cogumelo vermelho certo sempre que o Senzi cansa (as vidas do
-## coelho são repostas: só interessa o giro).
+## Um bot que só foge: gira a sala quando ele chega perto, e pula os muros. As vidas do coelho são
+## repostas: o que se prova é que a energia dele acaba sozinha (tempo + muros) e a porta abre.
 func test_senzi_bot() -> void:
-	print("Senzi: girar na hora certa vence")
+	print("Senzi: fugir até ele cansar vence")
 	var m = _senzi()
 	var i := 0
-	var turned := false
-	while m.hearts > 0 and i < 40000:
+	while m.state != "dead" and i < 40000:
 		var r := 0
-		if m.state == "tired" and not turned and m.t > 20 and not room.rotating and room.rot_lock == 0:
-			for rd in m.reds:
-				if rd["ok"]:
-					var nn: Vector2 = rd["n"]
-					r = -1 if nn.x > 0.5 else (1 if nn.x < -0.5 else 0)
-			turned = r != 0
-		if m.state != "tired":
-			turned = false
+		if m.fighting() and not room.rotating and room.rot_lock == 0 and m.pos.distance_to(m._rabbit_c()) < 70.0:
+			r = 1
+		var away := signf(m._rabbit_c().x - m.pos.x)
 		m.lives = m.LIVES
-		tick({"rotate": r})
+		tick({"rotate": r, "move": away, "jump": i % 30 < 10})
 		i += 1
 	print("  %d quadros (%.0f s)" % [i, i / 60.0])
-	check(m.hearts == 0, "o bot tira os 3 corações do Senzi")
-	idle(m.DIE_FRAMES + 60)
+	check(m.state == "dead", "a energia do Senzi acaba")
 	check(room.door_unlocked, "a porta destrava")

@@ -3,41 +3,35 @@ extends Node2D
 ## cada quadro, on_reset(room) quando reinicia e on_rotate(room, dir) quando gira.
 ##
 ## Parece só um caramujo um pouco maior, andando devagar. Chegando perto, ele se revela: incha em três
-## trancos e vira um caramujo enorme e marombado, em fúria.
+## trancos e vira o Senzi: alto, atlético, um velocista sem rosto com a concha minúscula de chapéu.
 ##
-## A regra da luta: com raiva, ele fica GRUDADO na superfície (anda pelo chão, sobe as paredes, anda
-## no teto; girar a sala não o derruba). Cansado, ele se SOLTA e cai com a gravidade.
-##   - Fúria: persegue o coelho pelo contorno da sala; encostar nele tira um coração do coelho. Muros
-##     de cogumelo brotam no caminho do coelho (o coelho pula; ele atravessa na força bruta). A energia
-##     dele cai com o tempo (devagar) e a cada muro quebrado (bem mais).
-##   - Cansado (energia zero): desaba, ofegante, solto. Aparecem cogumelos vermelhos nas paredes e uma
-##     faixa de espinhos. Girando a sala, ele cai; num cogumelo vermelho, é arremessado para longe da
-##     parede dele, e o certo o joga nos espinhos: ele perde um coração. Se demorar, ele se recupera.
-##   - A cada coração perdido ele fica mais rápido. Com 2: às vezes pula para a frente do coelho ou
-##     vira de repente (pisca e grunhe antes). Com 1: também arremessa halteres.
-## O dano no coelho vem só do corpo dele (na fúria), dos halteres e dos espinhos. 3 corações do coelho
-## nesta sala, como na mecha.
+## A regra da luta (D112, refeita): ele CORRE grudado na superfície (chão, paredes, teto; girar a sala
+## não o derruba), atrás do coelho; encostar nele tira um coração do coelho. Muros de cogumelo brotam
+## no caminho do coelho (o coelho pula; ele atravessa na força bruta). A energia dele, uma barra
+## grande no alto, cai com o tempo e muito mais a cada muro quebrado. Sem energia, ele desaba e morre.
+##   - A cada terço da barra gasto ele fica mais rápido (e para um instante, flexionando, com raiva).
+##   - No segundo terço: às vezes pula para a frente do coelho (pisca e grunhe antes) ou vira de repente.
+##   - No último: também arremessa halteres.
+## 3 corações do coelho nesta sala, como na mecha.
 
 const LIVES := 3
-const HEARTS := 3
 const INVULN := 60
-const BODY := Vector2(28, 40)        # ao longo da superfície × para fora dela (bípede, grandão: o coelho não pula por cima)
+const BODY := Vector2(30, 46)        # ao longo da superfície × para fora dela (alto: o coelho não pula por cima)
 # A arte (D112): folha de sprites desenhada quadro a quadro por tools/art/senzi_sprites.py.
 const SHEET := preload("res://art/senzi.png")
-const FRAME := Vector2(80, 88)
-const FEET := 85.0                   # a linha dos pés no quadro
-const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "hurt": [4, 2], "tired": [5, 4], "fly": [6, 4]}
-const SPEED := [40.0, 56.0, 70.0]    # px/s na fúria, por coração perdido
+const FRAME := Vector2(96, 96)
+const FEET := 94.0                   # a linha dos pés no quadro
+const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4]}
+const STRIDE := 5.0                  # px corridos por quadro da corrida
+const SPEED := [62.0, 76.0, 90.0]    # px/s, por terço da barra gasto
 const TURN_DELAY := [34, 22, 14]     # quadros para dar meia-volta quando o coelho passa por ele
-const ENERGY := 100.0
-const DRAIN := [3.2, 3.6, 4.0]       # energia por segundo, só de correr
-const WALL_COST := 20.0              # energia por muro quebrado
+const ENERGY := 300.0
+const DRAIN := [3.0, 3.5, 4.0]       # energia por segundo, só de correr
+const WALL_COST := 30.0              # energia por muro quebrado
 const WALL_EVERY := [105, 92, 80]    # quadros entre dois muros
 const WALL_MAX := 3
 const WALL_LIFE := 600
 const WALL_SIZE := Vector2(12, 20)   # largura × altura, de pé no chão
-const TIRED := 300                   # quadros cansado (a janela)
-const FLING := 560.0                 # px/s, o arremesso do cogumelo vermelho
 const GRAV := 700.0
 const REVEAL := 200                  # a revelação: parado, encara; então incha em três estouros e ruge
 const R_STARE := 70
@@ -47,22 +41,18 @@ const LEAP_EVERY := 170
 const LEAP_WARN := 30
 const LEAP_FRAMES := 26
 const BELL_EVERY := 140
-const HURT_FRAMES := 70
+const RAGE_FRAMES := 45              # a pausa de raiva ao passar de um terço da barra
 const DIE_FRAMES := 150
 
-const C_SKIN := Color("d9bfa3")
-const C_SKIN_DARK := Color("a98c74")
-const C_MUSCLE := Color("eed6bd")
+const C_SKIN := Color("ccbeac")
+const C_MUSCLE := Color("e2d6c6")
 const C_SHELL := Color("8a5f9e")
 const C_SHELL_DARK := Color("5e3f70")
 const C_SHELL_LINE := Color("c9a6dd")
 const C_BAND := Color("e0384e")
-const C_RED_CAP := Color("d9384a")
 const C_HEART := Color("e0657c")
 const C_HEART_EMPTY := Color(1, 1, 1, 0.18)
 const C_ENERGY := Color("b98ee0")
-const C_SPIKE := Color("ff6f8e")
-const C_INK := Color("2a1d1a")       # o contorno grosso, de nanquim (como no desenho)
 
 static var intro_seen := false
 
@@ -72,15 +62,12 @@ var state := "lurk"
 var t := 0
 var anim := 0
 var pos := Vector2.ZERO        # centro do corpo, px da sala atual
-var vel := Vector2.ZERO        # cansado / arremessado
+var vel := Vector2.ZERO        # morrendo (solto, cai)
 var dir := 1.0                 # sentido no contorno (+1 / -1)
 var turn_t := 0
-var hearts := HEARTS
 var lives := LIVES
 var energy := ENERGY
 var walls: Array = []          # {"rect": Rect2i, "n": Vector2 (normal da face onde nasceu), "age"}
-var reds: Array = []           # {"rect": Rect2i, "n": Vector2, "ok": bool}
-var spikes_band = null         # {"rect": Rect2i, "n": Vector2} ou null
 var bells: Array = []          # {"pos", "vel", "age", "bounced"}
 var wall_t := 0
 var leap_t := 0
@@ -90,9 +77,8 @@ var leap_to := Vector2.ZERO
 var flash := 0
 var hud_hit := 0
 var bar_hit := 0
-var flung_n := Vector2.ZERO    # para onde o arremesso vai (a normal da face do cogumelo)
 var pop_flash := 0             # clarão branco da revelação
-var spin := 0.0                # giro do corpo no arremesso
+var phase := 0
 var run_dist := 0.0            # px corridos (o quadro da corrida segue a distância, não o tempo)
 var throw_t := 0               # quadros da animação de arremesso do haltere
 
@@ -110,17 +96,15 @@ func on_reset(r) -> void:
 	r.input_lock = false
 	rng.seed = 20261119
 	walls.clear()
-	reds.clear()
 	bells.clear()
-	spikes_band = null
 	vel = Vector2.ZERO
 	flash = 0
 	hud_hit = 0
-	if hearts <= 0 and state == "dead":
+	if state == "dead":
 		r.door_unlocked = true
 		pos = Vector2(r.pw * 0.5, _inner().end.y - 3.0)
 		return
-	hearts = HEARTS
+	phase = 0
 	lives = LIVES
 	energy = ENERGY
 	wall_t = 0
@@ -140,16 +124,9 @@ func on_rotate(r, d: int) -> void:
 	vel = _rv(vel, d)
 	leap_from = r._rot_point(leap_from, d)
 	leap_to = r._rot_point(leap_to, d)
-	flung_n = _rv(flung_n, d)
 	for w in walls:
 		w["rect"] = r._rot_rect(w["rect"], d)
 		w["n"] = _rv(w["n"], d)
-	for rd in reds:
-		rd["rect"] = r._rot_rect(rd["rect"], d)
-		rd["n"] = _rv(rd["n"], d)
-	if spikes_band != null:
-		spikes_band["rect"] = r._rot_rect(spikes_band["rect"], d)
-		spikes_band["n"] = _rv(spikes_band["n"], d)
 	for b in bells:
 		b["pos"] = r._rot_point(b["pos"], d)
 		b["vel"] = _rv(b["vel"], d)
@@ -263,15 +240,15 @@ func _surf_n() -> Vector2:
 func body_rect() -> Rect2:
 	var n := _surf_n() if _stuck() else Vector2(0, -1)
 	var sz := BODY if absf(n.y) > 0.5 else Vector2(BODY.y, BODY.x)
-	if state == "tired" or state == "flung" or state == "hurt":
-		sz = Vector2(BODY.y, BODY.x)   # deitado
+	if state == "dying" or state == "dead":
+		sz = Vector2(BODY.y, BODY.x * 0.6)   # caído
 	if state == "lurk":
 		sz = Vector2(6, 4)
 	return Rect2(pos - sz / 2.0, sz)
 
 
 func _stuck() -> bool:
-	return state == "berserk" or state == "leap_warn" or state == "lurk" or state == "reveal"
+	return state in ["berserk", "rage", "leap_warn", "lurk", "reveal"]
 
 
 func _rabbit_c() -> Vector2:
@@ -279,11 +256,12 @@ func _rabbit_c() -> Vector2:
 
 
 func fighting() -> bool:
-	return state in ["berserk", "leap_warn", "leap", "tired", "flung", "hurt"]
+	return state in ["berserk", "rage", "leap_warn", "leap"]
 
 
+## O terço da barra em que ele está: 0 (cheia), 1, 2 (o fim).
 func _phase() -> int:
-	return clampi(HEARTS - hearts, 0, 2)
+	return clampi(int((1.0 - energy / ENERGY) * 3.0), 0, 2)
 
 
 # ---------------------------------------------------------------- simulação
@@ -294,17 +272,12 @@ func step(r) -> void:
 	flash = maxi(flash - 1, 0)
 	pop_flash = maxi(pop_flash - 1, 0)
 	throw_t = maxi(throw_t - 1, 0)
-	if state == "flung":
-		spin += 0.45
-	else:
-		spin = 0.0
 	hud_hit = maxi(hud_hit - 1, 0)
 	bar_hit = maxi(bar_hit - 1, 0)
 	if r.state != "play":
 		return
 	t += 1
 	_update_bells()
-	_update_spikes_touch()
 	match state:
 		"lurk":
 			# um caramujo um pouco maior, passeando devagar
@@ -362,36 +335,17 @@ func step(r) -> void:
 				t = 0
 				r.shake = maxf(r.shake, 3.0)
 				r.sfx.emit("slam")
-		"tired":
-			_fall()
-			_touch_reds()
-			if t >= TIRED:
-				_recover()
-		"flung":
-			pos += vel / 60.0
-			vel.y += GRAV * 0.3 / 60.0
-			var inn := _inner()
-			var br := body_rect()
-			# só conta a parede para onde ele vai (não a de onde o cogumelo o jogou)
-			var hit_wall := (br.position.x <= inn.position.x and vel.x < -1.0) or (br.end.x >= inn.end.x and vel.x > 1.0) \
-				or (br.position.y <= inn.position.y and vel.y < -1.0) or (br.end.y >= inn.end.y and vel.y > 1.0)
-			if hit_wall:
-				pos.x = clampf(pos.x, inn.position.x + br.size.x / 2.0, inn.end.x - br.size.x / 2.0)
-				pos.y = clampf(pos.y, inn.position.y + br.size.y / 2.0, inn.end.y - br.size.y / 2.0)
-				if spikes_band != null and body_rect().grow(2.0).intersects(Rect2(spikes_band["rect"])):
-					_hurt()
-				else:
-					vel = Vector2.ZERO
-					state = "tired"   # errou: continua cansado, onde caiu
-					r.shake = maxf(r.shake, 3.0)
-					r.sfx.emit("slam")
-		"hurt":
-			if t >= HURT_FRAMES:
+		"rage":
+			# passou de um terço da barra: para, flexiona e ruge; volta mais rápido
+			_hit_rabbit()
+			if t == 10:
+				r.sfx.emit("gatsby_dash")
+				r.shake = maxf(r.shake, 3.0)
+			if t >= RAGE_FRAMES:
 				state = "berserk"
 				t = 0
-				energy = ENERGY
-				pos = _pt_of(_u_of(pos))
 		"dying":
+			_fall()
 			if t % 10 == 0:
 				r.particles.append({"pos": pos, "vel": Vector2(rng.randf_range(-40, 40), -rng.randf_range(20, 60)), "life": 20, "col": C_MUSCLE, "grav": 60.0})
 			if t >= DIE_FRAMES:
@@ -453,7 +407,14 @@ func _berserk() -> void:
 			bell_t = 0
 			_throw_bell()
 	if energy <= 0.0:
-		_tire()
+		_die()
+	elif _phase() > phase:
+		phase = _phase()
+		state = "rage"
+		t = 0
+		flash = 24
+		walls.clear()
+		room.sfx.emit("lock_on")
 
 
 func _hit_rabbit() -> void:
@@ -503,60 +464,24 @@ func _spawn_wall() -> void:
 	room.sfx.emit("plate_on")
 
 
-func _tire() -> void:
+func _die() -> void:
 	energy = 0.0
-	state = "tired"
+	state = "dying"
 	t = 0
 	vel = Vector2.ZERO
-	room.sfx.emit("steam_burst")
-	room.shake = maxf(room.shake, 2.0)
-	_spawn_reds()
+	walls.clear()
+	bells.clear()
+	flash = 30
+	bar_hit = 30
+	room.shake = 6.0
+	room.impact.emit(2.5)
+	room.sfx.emit("blast")
+	for i in 16:
+		room.particles.append({"pos": pos, "vel": Vector2(rng.randf_range(-120, 120), rng.randf_range(-120, 60)),
+			"life": rng.randi_range(14, 26), "col": C_SKIN if i % 2 else C_SHELL, "grav": 200.0})
 
 
-## Os cogumelos vermelhos e os espinhos: um cogumelo certo numa das paredes de lado, alinhado com
-## ele (girando para aquele lado, ele cai em cima), que o arremessa para a parede oposta, onde estão
-## os espinhos; e dois de enfeite, desalinhados, nas outras faces.
-func _spawn_reds() -> void:
-	reds.clear()
-	var inn := _inner()
-	var side := 1.0 if rng.randf() < 0.5 else -1.0
-	var y := clampf(pos.y, inn.position.y + 16.0, inn.end.y - 16.0)
-	var ok_n := Vector2(side, 0)          # (1, 0): parede da esquerda; (-1, 0): da direita
-	reds.append({"rect": _face_rect(ok_n, y, 36.0), "n": ok_n, "ok": true})
-	var other_n := Vector2(-side, 0)
-	var y2 := y - 48.0 if y - 48.0 > inn.position.y + 16.0 else y + 48.0
-	reds.append({"rect": _face_rect(other_n, y2, 24.0), "n": other_n, "ok": false})
-	var cx := inn.position.x + inn.size.x * (0.25 if pos.x > inn.get_center().x else 0.75)
-	reds.append({"rect": _face_rect(Vector2(0, 1), cx, 24.0), "n": Vector2(0, 1), "ok": false})
-	spikes_band = {"rect": _band_rect(other_n), "n": other_n}
-	room.sfx.emit("lock_on")
-
-
-## Um cogumelo vermelho colado na face de normal `n`, centrado em `along` (y numa parede, x no teto).
-func _face_rect(n: Vector2, along: float, length: float) -> Rect2i:
-	var inn := _inner()
-	if n.x > 0.5:
-		return Rect2i(int(inn.position.x), int(along - length / 2.0), 8, int(length))
-	if n.x < -0.5:
-		return Rect2i(int(inn.end.x - 8), int(along - length / 2.0), 8, int(length))
-	if n.y > 0.5:
-		return Rect2i(int(along - length / 2.0), int(inn.position.y), int(length), 8)
-	return Rect2i(int(along - length / 2.0), int(inn.end.y - 8), int(length), 8)
-
-
-## A faixa de espinhos ao longo da face toda.
-func _band_rect(n: Vector2) -> Rect2i:
-	var inn := _inner()
-	if n.x > 0.5:
-		return Rect2i(int(inn.position.x), int(inn.position.y), 8, int(inn.size.y))
-	if n.x < -0.5:
-		return Rect2i(int(inn.end.x - 8), int(inn.position.y), 8, int(inn.size.y))
-	if n.y > 0.5:
-		return Rect2i(int(inn.position.x), int(inn.position.y), int(inn.size.x), 8)
-	return Rect2i(int(inn.position.x), int(inn.end.y - 8), int(inn.size.x), 8)
-
-
-## Cansado: solto, cai com a gravidade de agora.
+## Morrendo: solto, cai com a gravidade de agora.
 func _fall() -> void:
 	vel.y = minf(vel.y + GRAV / 60.0, 360.0)
 	vel.x = move_toward(vel.x, 0.0, 6.0)
@@ -571,61 +496,6 @@ func _fall() -> void:
 		vel.y = 0.0
 	pos.x = clampf(pos.x, inn.position.x + br.size.x / 2.0, inn.end.x - br.size.x / 2.0)
 	pos.y = maxf(pos.y, inn.position.y + br.size.y / 2.0)
-
-
-func _touch_reds() -> void:
-	var br := body_rect().grow(1.0)
-	for rd in reds:
-		if br.intersects(Rect2(rd["rect"])):
-			# o cogumelo vermelho arremessa para longe da face dele
-			state = "flung"
-			t = 0
-			flung_n = rd["n"]
-			vel = rd["n"] * FLING
-			pos += rd["n"] * 4.0
-			room.sfx.emit("launch")
-			room.shake = maxf(room.shake, 2.0)
-			reds.erase(rd)
-			return
-
-
-func _hurt() -> void:
-	hearts -= 1
-	vel = Vector2.ZERO
-	flash = 40
-	bar_hit = 30
-	room.shake = 6.0
-	room.impact.emit(2.5)
-	room.sfx.emit("blast")
-	for i in 16:
-		room.particles.append({"pos": pos, "vel": Vector2(rng.randf_range(-120, 120), rng.randf_range(-120, 60)),
-			"life": rng.randi_range(14, 26), "col": C_SKIN if i % 2 else C_SHELL, "grav": 200.0})
-	reds.clear()
-	spikes_band = null
-	walls.clear()
-	bells.clear()
-	t = 0
-	if hearts <= 0:
-		state = "dying"
-		return
-	state = "hurt"
-
-
-func _recover() -> void:
-	reds.clear()
-	spikes_band = null
-	energy = ENERGY
-	state = "berserk"
-	t = 0
-	pos = _pt_of(_u_of(pos))
-	room.sfx.emit("gatsby_dash")
-
-
-func _update_spikes_touch() -> void:
-	if spikes_band == null:
-		return
-	if room.invuln == 0 and Rect2(room.rabbit.rect).intersects(Rect2(spikes_band["rect"]).grow(-2.0)):
-		room.kill()
 
 
 func _throw_bell() -> void:
@@ -677,8 +547,6 @@ func _draw() -> void:
 	var base := Transform2D(room.view_angle, Vector2.ZERO) * Transform2D(0.0, -room.cam.round())
 	draw_set_transform_matrix(base)
 	_draw_walls()
-	_draw_reds()
-	_draw_band()
 	for b in bells:
 		draw_set_transform_matrix(base * Transform2D(b["age"] * 0.3, (b["pos"] as Vector2).round()))
 		draw_rect(Rect2(-5, -1, 10, 2), Color("6a6d75"))
@@ -714,42 +582,6 @@ func _draw_walls() -> void:
 			draw_rect(r, Color(0, 0, 0, 0.25))
 
 
-func _draw_reds() -> void:
-	for rd in reds:
-		var r := Rect2(rd["rect"])
-		var pulse := 0.5 + 0.5 * sin(anim * 0.2)
-		draw_rect(r.grow(2.0), Color(C_RED_CAP, 0.12 + 0.1 * pulse))
-		draw_rect(r, C_RED_CAP)
-		draw_rect(r.grow(-1.0), C_RED_CAP.lightened(0.15))
-		var n: Vector2 = rd["n"]
-		var long := maxf(r.size.x, r.size.y)
-		for i in int(long / 7.0):
-			var off := 3.0 + i * 7.0
-			var q := r.position + (Vector2(off, 3) if absf(n.y) > 0.5 else Vector2(3, off))
-			draw_rect(Rect2(q, Vector2(2, 2)), Color(1, 1, 1, 0.9))   # pintas brancas (amanita)
-
-
-func _draw_band() -> void:
-	if spikes_band == null:
-		return
-	var r := Rect2(spikes_band["rect"])
-	var n: Vector2 = spikes_band["n"]
-	var grow := clampf(float(t) / 12.0, 0.0, 1.0) if state == "tired" else 1.0
-	var long := maxf(r.size.x, r.size.y)
-	var side := n.orthogonal()
-	var basep := r.get_center() - n * 4.0 - side * long / 2.0 * (1.0 if absf(n.x) > 0.5 else -1.0)
-	if absf(n.y) > 0.5:
-		basep = Vector2(r.position.x, r.get_center().y - n.y * 4.0)
-	else:
-		basep = Vector2(r.get_center().x - n.x * 4.0, r.position.y)
-	var step := Vector2(1, 0) if absf(n.y) > 0.5 else Vector2(0, 1)
-	for i in int(long / 8.0):
-		var a := basep + step * (i * 8.0)
-		var b2 := a + step * 8.0
-		var tip := (a + b2) / 2.0 + n * 7.0 * grow
-		draw_colored_polygon(PackedVector2Array([a, b2, tip]), C_SPIKE)
-
-
 ## Quanto do corpo marombado aparece (0 = o caramujinho; 1 = o Senzi), na revelação e na morte.
 func _bulk() -> float:
 	match state:
@@ -764,7 +596,8 @@ func _bulk() -> float:
 				return 0.75
 			return 1.0
 		"dying":
-			return clampf(1.0 - float(t) / float(DIE_FRAMES), 0.0, 1.0)
+			# desaba inteiro; só no fim murcha de volta ao caramujinho
+			return clampf((float(DIE_FRAMES) - t) / 40.0, 0.0, 1.0)
 		"dead":
 			return 0.0
 	return 1.0
@@ -772,7 +605,7 @@ func _bulk() -> float:
 
 func _draw_snail(base: Transform2D) -> void:
 	var n := _surf_n() if _stuck() else Vector2(0, -1)
-	var ang := Vector2(0, -1).angle_to(n) + spin
+	var ang := Vector2(0, -1).angle_to(n)
 	var flip := -1.0 if dir < 0 else 1.0
 	if state == "reveal" and t < R_STARE:
 		flip = signf(_rabbit_c().x - pos.x) if t > 25 else flip   # para e vira para o coelho
@@ -806,32 +639,23 @@ func _draw_snail(base: Transform2D) -> void:
 				fr = clampi((16 - throw_t) / 4, 0, 3)
 			else:
 				anim_name = "run"
-				fr = int(run_dist / 3.0) % 8
-		"leap_warn":
+				fr = int(run_dist / STRIDE) % 8
+		"leap_warn", "rage":
 			anim_name = "flex"
 			fr = mini(t / 4, 2) if t < 8 else 2 + (t / 5) % 4
 		"reveal":
 			anim_name = "flex"
 			fr = 0 if t < R_ROAR else (mini((t - R_ROAR) / 4, 2) if t < R_ROAR + 8 else 2 + (t / 5) % 4)
-		"tired", "dying":
-			anim_name = "tired"
-			fr = (anim / 12) % 4
-		"hurt":
-			anim_name = "hurt"
-			fr = (anim / 6) % 2
-		"flung":
-			anim_name = "fly"
-			fr = (anim / 4) % 4
+		"dying", "dead":
+			anim_name = "die"
+			fr = clampi(t / 10, 0, 3) if state == "dying" else 3
 	var row: int = ANIM[anim_name][0]
 	var white := (flash > 0 and (flash / 3) % 2 == 0)
 	var mod := Color(1.0, 0.55, 0.55) if white else Color(1, 1, 1)
 	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO))
 	var src := Rect2(Vector2(fr, row) * FRAME, FRAME)
-	var hd := body_rect().size.y / 2.0 if (state == "tired" or state == "dying") else h
+	var hd := body_rect().size.y / 2.0 if (state == "dying" or state == "dead") else h
 	draw_texture_rect_region(SHEET, Rect2(Vector2(-FRAME.x / 2.0, hd - FEET), FRAME), src, mod)
-	if state == "flung":
-		for q in 3:
-			draw_line(Vector2(-30 - q * 4, -8 + q * 7), Vector2(-40 - q * 4, -8 + q * 7), Color(1, 1, 1, 0.35), 1.0)
 	draw_set_transform_matrix(base)
 
 
@@ -861,15 +685,18 @@ func _draw_hud() -> void:
 	draw_texture(tex, rb.position + Vector2(2, 1))
 	for i in LIVES:
 		_draw_heart(Vector2(-52 + i * 10, y + 6), i < lives)
-	# energia do Senzi e os corações dele
-	var bar := Rect2(-8, y + 5, 70, 6)
+	# a energia do Senzi: a barra grande, em três terços
+	var bar := Rect2(-18, y + 4, 168, 10)
 	draw_rect(bar.grow(1.0), Color(0.05, 0.05, 0.08, 0.85))
 	var k := clampf(energy / ENERGY, 0.0, 1.0)
 	var col := Color(1, 1, 1) if bar_hit > 0 and (bar_hit / 3) % 2 == 0 else C_ENERGY
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * k, bar.size.y)), col)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * k, 2)), col.lightened(0.35))
+	for q in [1.0 / 3.0, 2.0 / 3.0]:
+		draw_rect(Rect2(bar.position + Vector2(bar.size.x * q, 0), Vector2(1, bar.size.y)), Color(0.05, 0.05, 0.08, 0.9))
 	draw_rect(bar.grow(1.0), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
-	for i in HEARTS:
-		_draw_heart(Vector2(66 + i * 9, y + 5), i < hearts)
+	var font := ThemeDB.fallback_font
+	draw_string(font, bar.position + Vector2(3, 8), "SENZI", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.1, 0.06, 0.14, 0.8) if k > 0.15 else Color(1, 1, 1, 0.7))
 
 
 func _draw_heart(q: Vector2, full: bool) -> void:

@@ -1,9 +1,9 @@
 {
 	"frame": [
-		80,
-		88
+		96,
+		96
 	],
-	"ground": 85,
+	"ground": 93,
 	"anims": {
 		"run": {
 			"row": 0,
@@ -21,16 +21,8 @@
 			"row": 3,
 			"frames": 4
 		},
-		"hurt": {
+		"die": {
 			"row": 4,
-			"frames": 2
-		},
-		"tired": {
-			"row": 5,
-			"frames": 4
-		},
-		"fly": {
-			"row": 6,
 			"frames": 4
 		}
 	}
