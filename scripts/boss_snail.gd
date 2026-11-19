@@ -27,7 +27,7 @@ const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "
 # O plot twist (D113): sem energia, ele para, ergue a seringa verde e se injeta (a energia volta toda).
 # O coelho pode pegá-la enquanto ela flutua acima da mão aberta.
 const TIRED_FRAMES := 50             # para, ofegando
-const HOLD_FRAMES := 180             # 3 s com a seringa no alto (a janela do coelho)
+const HOLD_FRAMES := 360             # 6 s com a seringa no alto (a janela do coelho)
 const INJ_FAST := 3                  # quadros do jogo por quadro da injeção (0 a 7: rápida)
 const INJ_PUMP := 5                  # e do PUMP (8 a 11)
 const INJECT_FRAMES := 8 * INJ_FAST + 4 * INJ_PUMP

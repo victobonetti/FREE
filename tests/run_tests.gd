@@ -3535,7 +3535,7 @@ func test_senzi() -> void:
 	check(sp.y < m.pos.y - 40.0, "a seringa flutua no alto, acima da mão (%.0f px acima do centro dele)" % (m.pos.y - sp.y))
 	room.rabbit.pos = Vector2i(int(m._inner().position.x) + 4, int(m._inner().end.y) - 12)
 	idle(m.HOLD_FRAMES + 2)
-	check(m.state == "inject", "3 s sem pegarem: ele se injeta")
+	check(m.state == "inject", "6 s sem pegarem: ele se injeta")
 	idle(m.INJECT_FRAMES + 2)
 	check(m.state == "berserk" and m.energy >= m.ENERGY - 1.0 and m.doses == 1, "a energia volta toda e ele volta a correr")
 	check(m._speed(0) > m.SPEED[0], "e mais rápido (%.0f px/s)" % m._speed(0))
