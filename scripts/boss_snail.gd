@@ -21,7 +21,7 @@ extends Node2D
 const LIVES := 3
 const HEARTS := 3
 const INVULN := 60
-const BODY := Vector2(28, 22)        # ao longo da superfície × para fora dela (o corpo de verdade)
+const BODY := Vector2(22, 24)        # ao longo da superfície × para fora dela (bípede: estreito e alto)
 const SPEED := [40.0, 56.0, 70.0]    # px/s na fúria, por coração perdido
 const TURN_DELAY := [34, 22, 14]     # quadros para dar meia-volta quando o coelho passa por ele
 const ENERGY := 100.0
@@ -782,23 +782,24 @@ func _draw_snail(base: Transform2D) -> void:
 	var flying := state == "flung"
 	var white := (flash > 0 and (flash / 3) % 2 == 0) or pop_flash > 0
 	var sc := lerpf(0.55, 1.0, bulk)
-	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO))
+	var lie := Transform2D.IDENTITY
+	if tired:
+		# deitado de costas, em cima da concha, as pernas para o ar
+		lie = Transform2D(-PI / 2.0 * flip, Vector2(0, BODY.y / 2.0 - 7.0))
+	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO) * lie)
 	var skin := Color(1, 1, 1) if white else C_SKIN
 	var light := Color(1, 1, 1) if white else C_MUSCLE
 	var dark := Color(0.85, 0.85, 0.9) if white else C_SKIN_DARK
 	var line := Color(0.55, 0.42, 0.36) if not white else Color(0.8, 0.8, 0.85)
-	var speed := 0.0 if tired else (0.55 if state == "berserk" else 0.25)
-	var ph := anim * speed
-	var breath := sin(anim * (0.22 if tired else 0.09))
-	var slump := 6.0 if tired else 0.0
-	# --- a sola: ondas correndo de trás para a frente
-	for i in 8:
-		var x := -14.0 + i * 3.6
-		var bump := maxf(0.0, sin(ph * 1.6 - i * 0.9)) * (1.2 if speed > 0.0 else 0.2)
-		draw_rect(Rect2(x, h - 4 - bump, 4, 4 + bump), dark)
-		draw_rect(Rect2(x, h - 4 - bump, 4, 1), skin)
-	# --- a concha nas costas (espiral fina, brilho)
-	var shell_c := Vector2(-6, h - 12 + slump * 0.5 + sin(ph) * 0.6)
+	var running := state == "berserk" and not tired
+	var ph := anim * (0.42 if running else 0.0)
+	var breath := sin(anim * (0.25 if tired else 0.09))
+	var flex := state == "leap_warn" or (state == "reveal" and t >= R_ROAR)
+	var feet_y := h
+	var hip := Vector2(0, feet_y - 11.0 + absf(sin(ph)) * -1.5)
+	var lean := 2.5 if running else 0.0
+	# --- a concha nas costas (atrás de tudo)
+	var shell_c := hip + Vector2(-6.0 - lean * 0.3, -9.0)
 	draw_circle(shell_c, 9.5, C_SHELL_DARK if not white else Color(0.9, 0.9, 0.95))
 	draw_circle(shell_c, 8.5, C_SHELL if not white else Color(1, 1, 1))
 	var spiral := PackedVector2Array()
@@ -807,87 +808,108 @@ func _draw_snail(base: Transform2D) -> void:
 		spiral.append(shell_c + Vector2(cos(a), sin(a)) * (7.5 - i * 0.24))
 	draw_polyline(spiral, C_SHELL_LINE, 1.0)
 	draw_arc(shell_c, 8.0, PI * 1.1, PI * 1.6, 6, Color(1, 1, 1, 0.45), 1.0)
-	# --- o tronco em V, saindo do pé na frente (ombros largos, cintura fina)
-	var lean := 0.35 if tired else (0.12 if speed > 0.4 else 0.0)
-	var waist := Vector2(7, h - 5)
-	var chest_y := h - 19 - breath * 0.8 + slump
-	var top_l := Vector2(1 + lean * 10.0, chest_y - 2)
-	var top_r := Vector2(15 + lean * 10.0, chest_y - 2)
+	# --- pernas: coxa e panturrilha, com o ciclo da corrida (ou abertas, firmes)
+	for k in 2:
+		var side := -1.0 if k == 0 else 1.0
+		var hp := hip + Vector2(side * 2.5, 0)
+		var a := sin(ph + k * PI)
+		var knee: Vector2
+		var foot: Vector2
+		if running:
+			knee = hp + Vector2(a * 4.5 + 1.0, 5.5 - maxf(0.0, -a) * 1.5)
+			foot = knee + Vector2(a * 2.0 - 1.0, 5.0 + minf(0.0, a) * 1.5)
+			foot.y = minf(foot.y, feet_y)
+		else:
+			knee = hp + Vector2(side * 3.0, 5.5)
+			foot = knee + Vector2(side * 1.0, 5.5)
+		draw_line(hp, knee, dark, 5.0)
+		draw_line(hp, knee, skin, 4.0)
+		draw_circle(hp + (knee - hp) * 0.45 + Vector2(-0.5, 0), 2.6, light)    # o quadríceps
+		draw_line(knee, foot, dark, 3.6)
+		draw_line(knee, foot, skin, 2.6)
+		draw_circle(knee + (foot - knee) * 0.35 + Vector2(-0.8, 0), 1.7, light)  # a panturrilha
+		draw_rect(Rect2(foot + Vector2(-1.5, -1), Vector2(4.5, 2)), dark)        # o pé (a sola de caramujo)
+	# --- o tronco em V: cintura fina, ombros largos
+	var waist := hip + Vector2(lean * 0.3, -1.0)
+	var chest_y := hip.y - 14.0 - breath * 0.8
+	var top_l := Vector2(-6.5 + lean, chest_y)
+	var top_r := Vector2(6.5 + lean, chest_y)
 	var torso := PackedVector2Array([waist + Vector2(-3.5, 0), top_l, top_r, waist + Vector2(3.5, 0)])
 	draw_colored_polygon(torso, skin)
-	draw_polyline(PackedVector2Array([waist + Vector2(-3.5, 0), top_l, top_r, waist + Vector2(3.5, 0)]), line, 1.0)
-	# peitoral (duas placas com a divisão no meio) e o abdômen (seis gomos)
-	var mid_x := 8.0 + lean * 9.0
+	draw_polyline(PackedVector2Array([waist + Vector2(-3.5, 0), top_l, top_r, waist + Vector2(3.5, 0), waist + Vector2(-3.5, 0)]), line, 1.0)
+	var mid_x := lean * 0.6
 	var pec_y := chest_y + 2.5
-	draw_rect(Rect2(mid_x - 5.5, pec_y - 1, 5, 3.5 + breath * 0.3), light)
-	draw_rect(Rect2(mid_x + 0.5, pec_y - 1, 5, 3.5 + breath * 0.3), light)
-	draw_line(Vector2(mid_x, pec_y - 1.5), Vector2(mid_x, h - 6), line, 1.0)
-	draw_line(Vector2(mid_x - 5.5, pec_y + 2.5), Vector2(mid_x + 5.5, pec_y + 2.5), line, 1.0)
+	draw_rect(Rect2(mid_x - 5.0, pec_y - 1, 4.6, 3.5 + breath * 0.3), light)
+	draw_rect(Rect2(mid_x + 0.4, pec_y - 1, 4.6, 3.5 + breath * 0.3), light)
+	draw_line(Vector2(mid_x, pec_y - 1.5), Vector2(mid_x, waist.y), line, 1.0)
+	draw_line(Vector2(mid_x - 5.0, pec_y + 2.5), Vector2(mid_x + 5.0, pec_y + 2.5), line, 1.0)
 	for row in 3:
-		var yy := pec_y + 5.0 + row * 2.6
-		draw_rect(Rect2(mid_x - 3, yy, 2.5, 1.8), light)
-		draw_rect(Rect2(mid_x + 0.5, yy, 2.5, 1.8), light)
-	# ombros (deltoides) com luz em cima
+		var yy := pec_y + 4.5 + row * 2.4
+		draw_rect(Rect2(mid_x - 2.8, yy, 2.4, 1.7), light)
+		draw_rect(Rect2(mid_x + 0.4, yy, 2.4, 1.7), light)
+	# shorts de academia (faixa na cintura)
+	draw_rect(Rect2(hip + Vector2(-4.5, -2), Vector2(9, 3)), C_BAND.darkened(0.25) if not white else Color(1, 1, 1))
 	for sx in [top_l, top_r]:
-		draw_circle(sx + Vector2(0, 1), 3.6, skin)
-		draw_arc(sx + Vector2(0, 1), 3.6, PI * 1.1, PI * 1.9, 5, light, 1.0)
-	# --- braços: na corrida bombeiam alternados; na fúria parada, flexionam; cansado, pendem
+		draw_circle(sx + Vector2(0, 1), 3.4, skin)
+		draw_arc(sx + Vector2(0, 1), 3.4, PI * 1.1, PI * 1.9, 5, light, 1.0)
+	# --- braços: bombeando na corrida (oposto às pernas), pose de bíceps no aviso, largados cansado
 	for k in 2:
 		var side := -1.0 if k == 0 else 1.0
 		var sh: Vector2 = top_l if k == 0 else top_r
-		var swing := sin(ph + k * PI) * 0.9 if speed > 0.0 else 0.0
-		var upper := Vector2.from_angle(PI * 0.5 + side * 0.25 + swing * 0.6) * 6.0
-		var fore := Vector2.from_angle(-PI * 0.5 + swing * 0.9 + side * 0.4) * 5.5
-		if state == "leap_warn" or (state == "reveal" and t >= R_ROAR):
-			# a pose de bíceps: braços para cima, punhos perto da cabeça
-			upper = Vector2(side * 6.0, -1.5)
-			fore = Vector2(-side * 1.0, -6.0 - 1.5 * sin(anim * 0.6))
+		var a2 := sin(ph + k * PI + PI)
+		var upper := Vector2(side * 1.5 + a2 * 3.5, 5.5)
+		var fore := Vector2(a2 * 3.0 + 1.5, -3.5 + absf(a2))
+		if flex:
+			upper = Vector2(side * 6.0, -1.0)
+			fore = Vector2(-side * 0.8, -6.0 - 1.2 * sin(anim * 0.6))
+		elif not running and not tired:
+			upper = Vector2(side * 3.0, 5.5)
+			fore = Vector2(side * 0.5, 4.5)
 		if tired:
-			upper = Vector2(side * 1.5 + 2.0, 6.0)
-			fore = Vector2(2.0, 5.0)
+			upper = Vector2(side * 5.0, 2.0)
+			fore = Vector2(side * 4.0, 1.0)
 		var el := sh + upper
 		var fist := el + fore
 		draw_line(sh, el, dark, 4.0)
 		draw_line(sh, el, skin, 3.0)
 		draw_line(el, fist, dark, 3.4)
 		draw_line(el, fist, skin, 2.4)
-		var bic := sh + upper * 0.55 - Vector2(0, 0.5)
-		var bulge := 2.6 + (0.8 if state == "leap_warn" or (state == "reveal" and t >= R_ROAR) else 0.3 * sin(ph + k * PI))
+		var bic := sh + upper * 0.55
+		var bulge := 2.6 + (0.9 if flex else 0.3 * absf(a2))
 		draw_circle(bic, bulge, light)
 		draw_arc(bic, bulge, PI * 1.1, PI * 1.8, 5, Color(1, 1, 1, 0.6), 1.0)
 		if not tired:
 			draw_line(bic + Vector2(-1, 1), bic + Vector2(1, -1), Color(line, 0.7), 1.0)   # veia
 		draw_circle(fist, 2.2, skin)
 		draw_arc(fist, 2.2, 0.0, TAU, 8, line, 1.0)
-	# --- pescoço e cabeça pequena, com a faixa vermelha e os olhos nas antenas
-	var head := Vector2(mid_x + 1.0, chest_y - 6.5 + slump * 0.5)
+	# --- pescoço grosso e a cabeça pequena, com a faixa e os olhos nas antenas
+	var head := Vector2(mid_x + 0.5, chest_y - 5.0)
 	draw_rect(Rect2(head + Vector2(-2.5, 2), Vector2(5, 3)), skin)
-	draw_circle(head, 4.0, skin)
-	draw_arc(head, 4.0, 0.0, TAU, 12, line, 1.0)
-	draw_rect(Rect2(head + Vector2(-4, -1.5), Vector2(8, 1.5)), C_BAND)
-	draw_rect(Rect2(head + Vector2(-5.5, -1.5), Vector2(2, 3)), C_BAND)   # as pontas da faixa, atrás
+	draw_circle(head, 3.8, skin)
+	draw_arc(head, 3.8, 0.0, TAU, 12, line, 1.0)
+	draw_rect(Rect2(head + Vector2(-3.8, -1.5), Vector2(7.6, 1.5)), C_BAND)
+	draw_rect(Rect2(head + Vector2(-5.5, -1.5), Vector2(2, 3)), C_BAND)
 	var bob := sin(ph * 2.0) * 1.0
 	for e in [-1.6, 1.8]:
-		var stalk_tip := head + Vector2(e + (0.5 if tired else 0.0), -8.0 + bob * (0.5 if e > 0 else -0.5) + (4.0 if tired else 0.0))
+		var stalk_tip: Vector2 = head + Vector2(e, -8.0 + bob * (0.5 if e > 0 else -0.5))
 		draw_line(head + Vector2(e * 0.6, -3), stalk_tip, skin, 1.0)
 		draw_circle(stalk_tip, 1.6, Color(1, 1, 1))
 		if tired:
 			draw_arc(stalk_tip, 1.0, 0.0, TAU * 0.8, 5, Color("1a1820"), 1.0)
 		else:
 			draw_rect(Rect2(stalk_tip + Vector2(0.2, -0.4), Vector2(1, 1)), Color("ff3b4e"))
-	# boca: rugindo (revelação, aviso do pulo), cerrada (fúria), aberta ofegante (cansado)
-	if state == "leap_warn" or (state == "reveal" and t >= R_ROAR):
+	if flex:
 		draw_rect(Rect2(head + Vector2(0.5, 0.8), Vector2(3, 2.5)), Color("3a1520"))
 		draw_rect(Rect2(head + Vector2(0.5, 0.8), Vector2(3, 0.8)), Color(1, 1, 1))
 	elif tired:
 		draw_rect(Rect2(head + Vector2(1, 1), Vector2(2, 2)), Color("3a1520"))
 		draw_rect(Rect2(head + Vector2(2, 2.5), Vector2(1.5, 1.5)), Color("e0657c"))
 		if (anim / 10) % 2 == 0:
-			draw_rect(Rect2(head + Vector2(-5, -5), Vector2(1, 2)), Color(0.6, 0.8, 1.0, 0.9))   # suor
+			draw_rect(Rect2(head + Vector2(-5, -5), Vector2(1, 2)), Color(0.6, 0.8, 1.0, 0.9))
 			draw_rect(Rect2(head + Vector2(5, -3), Vector2(1, 2)), Color(0.6, 0.8, 1.0, 0.9))
 	else:
 		draw_line(head + Vector2(0.5, 1.8), head + Vector2(3.5, 1.4), line, 1.0)
-		draw_line(head + Vector2(-0.5, -0.2), head + Vector2(3.0, 0.6), Color("1a1820"), 1.0)   # sobrancelha brava
+		draw_line(head + Vector2(-0.5, -0.2), head + Vector2(3.0, 0.6), Color("1a1820"), 1.0)
 	if flying:
 		for q in 3:
 			draw_line(Vector2(-14 - q * 3, -4 + q * 4), Vector2(-20 - q * 3, -4 + q * 4), Color(1, 1, 1, 0.35), 1.0)
