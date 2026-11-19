@@ -21,7 +21,7 @@ extends Node2D
 const LIVES := 3
 const HEARTS := 3
 const INVULN := 60
-const BODY := Vector2(26, 20)        # ao longo da superfície × para fora dela
+const BODY := Vector2(28, 22)        # ao longo da superfície × para fora dela (o corpo de verdade)
 const SPEED := [40.0, 56.0, 70.0]    # px/s na fúria, por coração perdido
 const TURN_DELAY := [34, 22, 14]     # quadros para dar meia-volta quando o coelho passa por ele
 const ENERGY := 100.0
@@ -34,7 +34,10 @@ const WALL_SIZE := Vector2(12, 20)   # largura × altura, de pé no chão
 const TIRED := 300                   # quadros cansado (a janela)
 const FLING := 560.0                 # px/s, o arremesso do cogumelo vermelho
 const GRAV := 700.0
-const REVEAL := 110
+const REVEAL := 200                  # a revelação: parado, encara; então incha em três estouros e ruge
+const R_STARE := 70
+const R_POPS := [70, 92, 114]
+const R_ROAR := 114
 const LEAP_EVERY := 170
 const LEAP_WARN := 30
 const LEAP_FRAMES := 26
@@ -82,6 +85,8 @@ var flash := 0
 var hud_hit := 0
 var bar_hit := 0
 var flung_n := Vector2.ZERO    # para onde o arremesso vai (a normal da face do cogumelo)
+var pop_flash := 0             # clarão branco da revelação
+var spin := 0.0                # giro do corpo no arremesso
 
 
 static func replay_state() -> Dictionary:
@@ -251,7 +256,7 @@ func body_rect() -> Rect2:
 	var n := _surf_n() if _stuck() else Vector2(0, -1)
 	var sz := BODY if absf(n.y) > 0.5 else Vector2(BODY.y, BODY.x)
 	if state == "lurk":
-		sz = Vector2(10, 6)
+		sz = Vector2(6, 4)
 	return Rect2(pos - sz / 2.0, sz)
 
 
@@ -277,6 +282,11 @@ func step(r) -> void:
 	room = r
 	anim += 1
 	flash = maxi(flash - 1, 0)
+	pop_flash = maxi(pop_flash - 1, 0)
+	if state == "flung":
+		spin += 0.45
+	else:
+		spin = 0.0
 	hud_hit = maxi(hud_hit - 1, 0)
 	bar_hit = maxi(bar_hit - 1, 0)
 	if r.state != "play":
@@ -292,16 +302,25 @@ func step(r) -> void:
 			if u < 10.0 or u > p.size.x - 10.0:
 				dir = -dir
 			pos = _pt_of(u)
-			if pos.distance_to(_rabbit_c()) < 64.0:
+			if pos.distance_to(_rabbit_c()) < 40.0:
 				state = "reveal"
 				t = 0
 				r.input_lock = true
 				r.allow_rotate = false
 		"reveal":
-			if t in [20, 45, 70]:
-				r.shake = maxf(r.shake, 2.0 + t / 30.0)
-				r.impact.emit(1.0 + t / 60.0)
-				r.sfx.emit("crunch")
+			if t in R_POPS:
+				# cada estouro: clarão, tremor forte, poeira do teto
+				var k := R_POPS.find(t)
+				pop_flash = 8
+				r.shake = maxf(r.shake, 4.0 + 2.5 * k)
+				r.impact.emit(1.5 + 0.8 * k)
+				r.sfx.emit("blast" if k == 2 else "slam")
+				for i in 12 + k * 8:
+					var a := rng.randf() * TAU
+					r.particles.append({"pos": pos, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(40.0, 160.0),
+						"life": rng.randi_range(12, 26), "col": C_MUSCLE if i % 2 else C_SHELL, "grav": 120.0})
+			if t == R_ROAR + 10:
+				r.sfx.emit("gatsby_dash")
 			if t >= REVEAL:
 				intro_seen = true
 				r.input_lock = false
@@ -713,77 +732,184 @@ func _draw_band() -> void:
 		draw_colored_polygon(PackedVector2Array([a, b2, tip]), C_SPIKE)
 
 
+## Quanto do corpo marombado aparece (0 = o caramujinho; 1 = o Senzi), na revelação e na morte.
+func _bulk() -> float:
+	match state:
+		"lurk":
+			return 0.0
+		"reveal":
+			if t < R_POPS[0]:
+				return 0.0
+			if t < R_POPS[1]:
+				return 0.45
+			if t < R_POPS[2]:
+				return 0.75
+			return 1.0
+		"dying":
+			return clampf(1.0 - float(t) / float(DIE_FRAMES), 0.0, 1.0)
+		"dead":
+			return 0.0
+	return 1.0
+
+
 func _draw_snail(base: Transform2D) -> void:
 	var n := _surf_n() if _stuck() else Vector2(0, -1)
-	var ang := Vector2(0, -1).angle_to(n)
-	var scale_k := 1.0
-	if state == "lurk":
-		scale_k = 0.35
-	elif state == "reveal":
-		scale_k = lerpf(0.35, 1.0, clampf(float(t) / REVEAL, 0.0, 1.0))
-		scale_k += 0.06 * sin(t * 0.8) if t % 25 < 10 else 0.0
-	elif state == "dying":
-		scale_k = lerpf(1.0, 0.35, clampf(float(t) / DIE_FRAMES, 0.0, 1.0))
-	elif state == "dead":
-		scale_k = 0.35
+	var ang := Vector2(0, -1).angle_to(n) + spin
 	var flip := -1.0 if dir < 0 else 1.0
-	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(scale_k * flip, scale_k), 0.0, Vector2.ZERO))
-	var tired := state == "tired" or state == "flung" or state == "hurt"
-	var white := flash > 0 and (flash / 3) % 2 == 0
-	var skin := C_MUSCLE if white else C_SKIN
-	var squash := 0.6 if tired else 1.0
+	if state == "reveal" and t < R_STARE:
+		flip = signf(_rabbit_c().x - pos.x) if t > 25 else flip   # para e vira para o coelho
+	var bulk := _bulk()
 	var h := BODY.y / 2.0
-	# pé (a sola), com uma sombra
-	draw_rect(Rect2(-13, h - 4, 26, 4), C_SKIN_DARK)
-	# corpo: o pescoço grosso e a cabeça erguida na frente
-	draw_rect(Rect2(-12, h - 9 * squash, 24, 6 * squash), skin)
-	var head := Vector2(10, h - 13 * squash)
-	draw_circle(head, 5.5 * squash + 0.5, skin)
-	# concha
-	var sc := Vector2(-4, h - 12 * squash)
-	draw_circle(sc, 9.0 * squash, C_SHELL_DARK)
-	draw_circle(sc, 8.0 * squash, C_SHELL)
-	draw_arc(sc, 5.0 * squash, 0.0, PI * 1.6, 10, C_SHELL_LINE, 1.0)
-	draw_arc(sc + Vector2(1, 1), 2.5 * squash, PI, TAU + PI * 0.6, 8, C_SHELL_LINE, 1.0)
-	if state == "lurk" or (state == "reveal" and t < 40) or state == "dead":
-		# ainda (ou de novo) um caramujo comum: antenas e olhinhos
-		draw_line(head, head + Vector2(2, -6), skin, 1.0)
-		draw_line(head + Vector2(-2, 0), head + Vector2(-1, -6), skin, 1.0)
-		draw_rect(Rect2(head + Vector2(1.5, -7), Vector2(1, 1)), Color("1a1820"))
-		draw_rect(Rect2(head + Vector2(-1.5, -7), Vector2(1, 1)), Color("1a1820"))
+	if bulk <= 0.0:
+		# o caramujinho: minúsculo (como os de enfeite)
+		draw_set_transform_matrix(base * Transform2D(ang, (pos - n * (h - 3.0) * (1.0 if _stuck() else 0.0)).round()) * Transform2D(0.0, Vector2(flip, 1), 0.0, Vector2.ZERO))
+		var crawl := 0.5 + 0.5 * sin(anim * 0.08)
+		draw_rect(Rect2(-3, 1, 6 + crawl, 2), C_SKIN)
+		draw_circle(Vector2(-0.5, 0), 2.5, C_SHELL)
+		draw_circle(Vector2(-0.5, 0), 1.3, C_SHELL_DARK)
+		draw_line(Vector2(3 + crawl, 1), Vector2(4 + crawl, -2), C_SKIN, 1.0)
+		draw_rect(Rect2(4 + crawl, -3, 1, 1), Color("1a1820"))
+		draw_rect(Rect2(2 + crawl, -1, 1, 1), C_BAND)   # a faixinha: só quem repara
+		if state == "reveal" and t > 30 and t < R_POPS[0]:
+			# encara... e treme
+			draw_rect(Rect2(4 + crawl, -3, 1, 1), Color("ff3b4e"))
+			if (anim / 2) % 2 == 0:
+				draw_rect(Rect2(-1, -6, 1, 2), Color(1, 1, 1, 0.9))
+				draw_rect(Rect2(-1, -3, 1, 1), Color(1, 1, 1, 0.9))
 		draw_set_transform_matrix(base)
 		return
-	# braços marombados: bíceps fletindo (na fúria), caídos (cansado)
-	var flex := sin(anim * 0.25) * 2.0 if not tired else 0.0
-	for side in [-1.0, 1.0]:
-		var sh := Vector2(4 + side * 2.0, h - 10 * squash)
-		var el := sh + (Vector2(5, -6 + flex) if not tired else Vector2(6, 2))
-		var fist := el + (Vector2(-1, -6) if not tired else Vector2(4, 1))
-		draw_line(sh, el, C_SKIN_DARK, 6.0)
-		draw_line(sh, el, skin, 5.0)
-		draw_line(el, fist, skin, 4.0)
-		draw_circle(el + Vector2(-1.5, -1.5), 4.5 if not tired else 3.0, C_MUSCLE)   # o bíceps
-		draw_circle(el + Vector2(-2.5, -2.5), 1.5, Color(1, 1, 1, 0.5))
-		draw_circle(fist, 3.0, skin)
-	# peitoral estufado, entre a cabeça e a concha
-	if not tired:
-		draw_circle(Vector2(5, h - 10), 4.0, C_MUSCLE)
-		draw_line(Vector2(5, h - 13), Vector2(5, h - 7), C_SKIN_DARK, 1.0)
-	# faixa na testa e os olhos (raivosos; em espiral, cansado)
-	draw_rect(Rect2(head + Vector2(-5, -4 * squash), Vector2(10, 2)), C_BAND)
-	if tired:
-		draw_arc(head + Vector2(2, -1), 1.6, 0.0, TAU * 0.9, 6, Color("1a1820"), 1.0)
-		draw_rect(Rect2(head + Vector2(3, 2), Vector2(2, 2)), Color("e0657c"))   # a língua de fora
-		if (anim / 8) % 3 == 0:
-			draw_rect(Rect2(head + Vector2(-6, -8), Vector2(1, 2)), Color(0.6, 0.8, 1.0, 0.9))   # suor
+	var tired := state == "tired" or state == "hurt" or state == "dying"
+	var flying := state == "flung"
+	var white := (flash > 0 and (flash / 3) % 2 == 0) or pop_flash > 0
+	var sc := lerpf(0.55, 1.0, bulk)
+	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO))
+	var skin := Color(1, 1, 1) if white else C_SKIN
+	var light := Color(1, 1, 1) if white else C_MUSCLE
+	var dark := Color(0.85, 0.85, 0.9) if white else C_SKIN_DARK
+	var line := Color(0.55, 0.42, 0.36) if not white else Color(0.8, 0.8, 0.85)
+	var speed := 0.0 if tired else (0.55 if state == "berserk" else 0.25)
+	var ph := anim * speed
+	var breath := sin(anim * (0.22 if tired else 0.09))
+	var slump := 6.0 if tired else 0.0
+	# --- a sola: ondas correndo de trás para a frente
+	for i in 8:
+		var x := -14.0 + i * 3.6
+		var bump := maxf(0.0, sin(ph * 1.6 - i * 0.9)) * (1.2 if speed > 0.0 else 0.2)
+		draw_rect(Rect2(x, h - 4 - bump, 4, 4 + bump), dark)
+		draw_rect(Rect2(x, h - 4 - bump, 4, 1), skin)
+	# --- a concha nas costas (espiral fina, brilho)
+	var shell_c := Vector2(-6, h - 12 + slump * 0.5 + sin(ph) * 0.6)
+	draw_circle(shell_c, 9.5, C_SHELL_DARK if not white else Color(0.9, 0.9, 0.95))
+	draw_circle(shell_c, 8.5, C_SHELL if not white else Color(1, 1, 1))
+	var spiral := PackedVector2Array()
+	for i in 28:
+		var a := float(i) * 0.42
+		spiral.append(shell_c + Vector2(cos(a), sin(a)) * (7.5 - i * 0.24))
+	draw_polyline(spiral, C_SHELL_LINE, 1.0)
+	draw_arc(shell_c, 8.0, PI * 1.1, PI * 1.6, 6, Color(1, 1, 1, 0.45), 1.0)
+	# --- o tronco em V, saindo do pé na frente (ombros largos, cintura fina)
+	var lean := 0.35 if tired else (0.12 if speed > 0.4 else 0.0)
+	var waist := Vector2(7, h - 5)
+	var chest_y := h - 19 - breath * 0.8 + slump
+	var top_l := Vector2(1 + lean * 10.0, chest_y - 2)
+	var top_r := Vector2(15 + lean * 10.0, chest_y - 2)
+	var torso := PackedVector2Array([waist + Vector2(-3.5, 0), top_l, top_r, waist + Vector2(3.5, 0)])
+	draw_colored_polygon(torso, skin)
+	draw_polyline(PackedVector2Array([waist + Vector2(-3.5, 0), top_l, top_r, waist + Vector2(3.5, 0)]), line, 1.0)
+	# peitoral (duas placas com a divisão no meio) e o abdômen (seis gomos)
+	var mid_x := 8.0 + lean * 9.0
+	var pec_y := chest_y + 2.5
+	draw_rect(Rect2(mid_x - 5.5, pec_y - 1, 5, 3.5 + breath * 0.3), light)
+	draw_rect(Rect2(mid_x + 0.5, pec_y - 1, 5, 3.5 + breath * 0.3), light)
+	draw_line(Vector2(mid_x, pec_y - 1.5), Vector2(mid_x, h - 6), line, 1.0)
+	draw_line(Vector2(mid_x - 5.5, pec_y + 2.5), Vector2(mid_x + 5.5, pec_y + 2.5), line, 1.0)
+	for row in 3:
+		var yy := pec_y + 5.0 + row * 2.6
+		draw_rect(Rect2(mid_x - 3, yy, 2.5, 1.8), light)
+		draw_rect(Rect2(mid_x + 0.5, yy, 2.5, 1.8), light)
+	# ombros (deltoides) com luz em cima
+	for sx in [top_l, top_r]:
+		draw_circle(sx + Vector2(0, 1), 3.6, skin)
+		draw_arc(sx + Vector2(0, 1), 3.6, PI * 1.1, PI * 1.9, 5, light, 1.0)
+	# --- braços: na corrida bombeiam alternados; na fúria parada, flexionam; cansado, pendem
+	for k in 2:
+		var side := -1.0 if k == 0 else 1.0
+		var sh: Vector2 = top_l if k == 0 else top_r
+		var swing := sin(ph + k * PI) * 0.9 if speed > 0.0 else 0.0
+		var upper := Vector2.from_angle(PI * 0.5 + side * 0.25 + swing * 0.6) * 6.0
+		var fore := Vector2.from_angle(-PI * 0.5 + swing * 0.9 + side * 0.4) * 5.5
+		if state == "leap_warn" or (state == "reveal" and t >= R_ROAR):
+			# a pose de bíceps: braços para cima, punhos perto da cabeça
+			upper = Vector2(side * 6.0, -1.5)
+			fore = Vector2(-side * 1.0, -6.0 - 1.5 * sin(anim * 0.6))
+		if tired:
+			upper = Vector2(side * 1.5 + 2.0, 6.0)
+			fore = Vector2(2.0, 5.0)
+		var el := sh + upper
+		var fist := el + fore
+		draw_line(sh, el, dark, 4.0)
+		draw_line(sh, el, skin, 3.0)
+		draw_line(el, fist, dark, 3.4)
+		draw_line(el, fist, skin, 2.4)
+		var bic := sh + upper * 0.55 - Vector2(0, 0.5)
+		var bulge := 2.6 + (0.8 if state == "leap_warn" or (state == "reveal" and t >= R_ROAR) else 0.3 * sin(ph + k * PI))
+		draw_circle(bic, bulge, light)
+		draw_arc(bic, bulge, PI * 1.1, PI * 1.8, 5, Color(1, 1, 1, 0.6), 1.0)
+		if not tired:
+			draw_line(bic + Vector2(-1, 1), bic + Vector2(1, -1), Color(line, 0.7), 1.0)   # veia
+		draw_circle(fist, 2.2, skin)
+		draw_arc(fist, 2.2, 0.0, TAU, 8, line, 1.0)
+	# --- pescoço e cabeça pequena, com a faixa vermelha e os olhos nas antenas
+	var head := Vector2(mid_x + 1.0, chest_y - 6.5 + slump * 0.5)
+	draw_rect(Rect2(head + Vector2(-2.5, 2), Vector2(5, 3)), skin)
+	draw_circle(head, 4.0, skin)
+	draw_arc(head, 4.0, 0.0, TAU, 12, line, 1.0)
+	draw_rect(Rect2(head + Vector2(-4, -1.5), Vector2(8, 1.5)), C_BAND)
+	draw_rect(Rect2(head + Vector2(-5.5, -1.5), Vector2(2, 3)), C_BAND)   # as pontas da faixa, atrás
+	var bob := sin(ph * 2.0) * 1.0
+	for e in [-1.6, 1.8]:
+		var stalk_tip := head + Vector2(e + (0.5 if tired else 0.0), -8.0 + bob * (0.5 if e > 0 else -0.5) + (4.0 if tired else 0.0))
+		draw_line(head + Vector2(e * 0.6, -3), stalk_tip, skin, 1.0)
+		draw_circle(stalk_tip, 1.6, Color(1, 1, 1))
+		if tired:
+			draw_arc(stalk_tip, 1.0, 0.0, TAU * 0.8, 5, Color("1a1820"), 1.0)
+		else:
+			draw_rect(Rect2(stalk_tip + Vector2(0.2, -0.4), Vector2(1, 1)), Color("ff3b4e"))
+	# boca: rugindo (revelação, aviso do pulo), cerrada (fúria), aberta ofegante (cansado)
+	if state == "leap_warn" or (state == "reveal" and t >= R_ROAR):
+		draw_rect(Rect2(head + Vector2(0.5, 0.8), Vector2(3, 2.5)), Color("3a1520"))
+		draw_rect(Rect2(head + Vector2(0.5, 0.8), Vector2(3, 0.8)), Color(1, 1, 1))
+	elif tired:
+		draw_rect(Rect2(head + Vector2(1, 1), Vector2(2, 2)), Color("3a1520"))
+		draw_rect(Rect2(head + Vector2(2, 2.5), Vector2(1.5, 1.5)), Color("e0657c"))
+		if (anim / 10) % 2 == 0:
+			draw_rect(Rect2(head + Vector2(-5, -5), Vector2(1, 2)), Color(0.6, 0.8, 1.0, 0.9))   # suor
+			draw_rect(Rect2(head + Vector2(5, -3), Vector2(1, 2)), Color(0.6, 0.8, 1.0, 0.9))
 	else:
-		draw_line(head + Vector2(0, -3), head + Vector2(4, -1), Color("1a1820"), 1.0)   # sobrancelha brava
-		draw_rect(Rect2(head + Vector2(2, -1), Vector2(2, 2)), Color("ff3b4e"))
-		draw_line(head + Vector2(2, 3), head + Vector2(5, 3), Color("1a1820"), 1.0)     # boca cerrada
+		draw_line(head + Vector2(0.5, 1.8), head + Vector2(3.5, 1.4), line, 1.0)
+		draw_line(head + Vector2(-0.5, -0.2), head + Vector2(3.0, 0.6), Color("1a1820"), 1.0)   # sobrancelha brava
+	if flying:
+		for q in 3:
+			draw_line(Vector2(-14 - q * 3, -4 + q * 4), Vector2(-20 - q * 3, -4 + q * 4), Color(1, 1, 1, 0.35), 1.0)
 	draw_set_transform_matrix(base)
 
 
 func _draw_hud() -> void:
+	if pop_flash > 0:
+		draw_rect(Rect2(-200, -120, 400, 240), Color(1, 1, 1, 0.12 * pop_flash))
+	if state == "reveal" and t >= R_ROAR:
+		# o nome, batendo na tela
+		var k := clampf(float(t - R_ROAR) / 8.0, 0.0, 1.0)
+		var font := ThemeDB.fallback_font
+		var size := int(lerpf(40.0, 22.0, k))
+		var txt := "SENZI"
+		var w := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+		var p := Vector2(-w / 2.0, -40) + Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * (1.0 - k) * 3.0
+		draw_string(font, p + Vector2(2, 2), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0, 0, 0, 0.7))
+		draw_string(font, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, size, C_BAND)
+		var sub := "o caramujo"
+		var w2 := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+		draw_string(font, Vector2(-w2 / 2.0, -30), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1, 1, 1, 0.8 * k))
 	if state == "lurk" or state == "reveal" or state == "dead":
 		return
 	var y := -89.0
