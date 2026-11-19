@@ -3403,7 +3403,7 @@ func test_senzi() -> void:
 	var e1: float = m.energy
 	tick()
 	check(m.walls.is_empty() and m.energy < e1 - 10.0, "quebrar um muro gasta bem mais (%.1f -> %.1f)" % [e1, m.energy])
-	check(m.debris.size() >= 10 and m.splats.size() >= 1, "o cogumelo quebrado explode em pedaços (%d), e algum voa para a tela" % m.debris.size())
+	check(m.debris.size() >= 10 and m.splats.size() <= 1, "o cogumelo quebrado explode em pedaços (%d); para a tela, no máximo um, e raro" % m.debris.size())
 	for i in m.SPLAT_FLY + m.SPLAT_STAY + 130:
 		m.walls.clear()   # sem cogumelos novos
 		tick()

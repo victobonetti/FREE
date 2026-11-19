@@ -1914,7 +1914,7 @@ func _draw_ring_hud() -> void:
 
 ## Quebrou um cogumelo: ele explode em pedaços (do chapéu, do talo, as pintas, o pé de micélio), que voam
 ## para todo lado, para a frente de quem quebrou, girando, quicando no chão; e uns voam para a tela e
-## batem no vidro. O tremor e o baque vêm junto.
+## raramente, um voa para a tela e bate no vidro. O tremor e o baque vêm junto.
 func _shatter(w: Dictionary, push: Vector2) -> void:
 	var r := Rect2(w["rect"])
 	var n: Vector2 = w["n"]
@@ -1933,7 +1933,7 @@ func _shatter(w: Dictionary, push: Vector2) -> void:
 			"col": col, "dark": Color(cols[2]), "life": rng.randi_range(70, 120), "age": 0, "bounces": 0})
 	# os que vêm para a tela: saem do lugar do cogumelo, crescendo (cada vez mais perto), e batem no vidro
 	var scr: Vector2 = Transform2D(room.view_angle, Vector2.ZERO) * (r.get_center() - room.cam)
-	for i in (2 if area > 120.0 else 1):
+	for i in (1 if rng.randf() < SPLAT_CHANCE else 0):
 		var to := Vector2(rng.randf_range(-130.0, 130.0), rng.randf_range(-70.0, 60.0))
 		splats.append({"from": scr, "to": to, "t": 0, "rot": rng.randf() * TAU, "spin": rng.randf_range(-0.3, 0.3),
 			"col": Color(cols[0]), "spot": Color(cols[3]), "dark": Color(cols[2]), "seed": rng.randi(), "slide": 0.0})
@@ -1998,6 +1998,7 @@ func _draw_debris(base: Transform2D) -> void:
 	draw_set_transform_matrix(base)
 
 
+const SPLAT_CHANCE := 0.08  # a chance de um pedaço voar para a tela (raro, para surpreender)
 const SPLAT_FLY := 22        # quadros voando para a tela
 const SPLAT_STAY := 70       # grudado no vidro, escorrendo
 
