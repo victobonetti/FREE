@@ -3678,7 +3678,7 @@ func test_senzi() -> void:
 	tick({"climb": 1.0, "rotate": -1})
 	for i in 9:
 		tick({"climb": 1.0})
-		m.hx = m.pos.x - 30.0
+		m.hx = m.pos.x - 46.0   # o gancho agachado alcança longe (50 px)
 	check(m.s_hp < up0 and m.s_vy < 0.0, "agachado, o gancho de baixo para cima joga o Senzi para o alto (vy %.0f)" % m.s_vy)
 	idle(80)
 	# a rasteira do coelho (agachado + giro direito) passa pela defesa dele
@@ -3697,7 +3697,7 @@ func test_senzi() -> void:
 	idle(3 + m.DEFLATE_FRAMES + 2)
 	check(not m.hero_on and not room.rabbit_hidden and room.allow_rotate and m.energy >= m.ENERGY - 1.0,
 		"acabou o tempo: o coelho desincha e a perseguição recomeça, com a energia dele cheia")
-	check(m.s_hp == ceilf(shp / m.S_HP_HEART - 0.001) * m.S_HP_HEART, "a vida dele volta ao topo do coração em que está (%.0f -> %.0f)" % [shp, m.s_hp])
+	check(m.s_hp == shp, "a vida que ele perdeu no ringue fica perdida (%.0f)" % m.s_hp)
 	# nocaute no Senzi
 	while m.state != "berserk":
 		tick()
@@ -3731,7 +3731,7 @@ func test_senzi() -> void:
 	m.s_hp = m.S_HP_MAX * 0.4
 	m.ring_t = 2
 	idle(3 + m.DEFLATE_FRAMES + 2)
-	check(absf(m.s_hp - m.S_HP_MAX * 2.0 / 3.0) < 0.5, "tirou 60%% da vida: ele volta com 2/3 (%.0f)" % m.s_hp)
+	check(absf(m.s_hp - m.S_HP_MAX * 0.4) < 0.5 and m._phase() == 1, "tirou 60% da vida: ele volta com 40% (na fase de 2 corações)")
 	while m.state != "berserk":
 		tick()
 	m.energy = 0.01

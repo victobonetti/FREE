@@ -65,17 +65,17 @@ const HKICK_DMG := 5.0
 # (giro direito). Agachado (para baixo): o gancho de baixo para cima, estilo Mortal Kombat (giro
 # esquerdo: joga o Senzi para o alto) e a rasteira (giro direito: baixa, a defesa em pé dele não segura).
 const HMOVES := {"jab": [HJAB_HIT, HJAB_TOTAL, HJAB_REACH, HJAB_DMG], "kick": [HKICK_HIT, HKICK_TOTAL, HKICK_REACH, HKICK_DMG],
-	"upper": [7, 30, 36.0, 7.0], "low": [6, 18, 50.0, 3.5]}
+	"upper": [7, 30, 50.0, 7.0], "low": [6, 18, 50.0, 3.5]}
 const S_STUN := 12                   # quadros sem agir depois de apanhar
 const H_STUN := 16
 const S_WALK := 46.0
 const S_RANGE := 38.0
 const SJAB_WIND := 12                # o jab do Senzi: o aviso (dá para defender)
 const SJAB_REACH := 40.0
-const SJAB_DMG := 10.0
+const SJAB_DMG := 6.0
 const SCHARGE_WIND := 32             # o soco carregado: pisca e grunhe; não dá para defender (recue ou pule)
-const SCHARGE_DMG := 20.0
-const SLEAP_DMG := 15.0
+const SCHARGE_DMG := 13.0
+const SLEAP_DMG := 10.0
 # Os golpes novos (D114): gancho (rápido, de perto, joga para o alto; dá para defender), rasteira (baixa,
 # longa; não dá para defender: pule), cuspe (de longe, a gosma deixa o coelho lento; dá para defender) e
 # agarrão (pune quem só defende; não dá para defender: pule ou saia de perto). Defendendo, ele
@@ -86,16 +86,16 @@ const RING_PATTERNS := [
 	["approach", "jab", "jab", "upper", "leap", "sweep", "grab", "charge", "spit", "guard"],            # 1
 ]
 const UPPER_WIND := 8
-const UPPER_DMG := 12.0
+const UPPER_DMG := 8.0
 const SWEEP_WIND := 16
 const SWEEP_REACH := 54.0
-const SWEEP_DMG := 10.0
+const SWEEP_DMG := 7.0
 const SPIT_WIND := 12
-const SPIT_DMG := 6.0
+const SPIT_DMG := 4.0
 const SLOW_FRAMES := 100             # lento na gosma
 const GRAB_WIND := 6
 const GRAB_HOLD := 20
-const GRAB_DMG := 14.0
+const GRAB_DMG := 9.0
 const TUCK := Vector2(8, -33)        # o centro da bola encolhida, a partir dos pés (o eixo da cambalhota)
 const STRIDE := 5.0                  # px corridos por quadro da corrida
 const SPEED := [62.0, 76.0, 90.0]    # px/s, por terço da barra gasto
@@ -1647,7 +1647,7 @@ func _ring() -> void:
 		h_jab += 1
 		var mvd: Array = HMOVES[h_move]
 		var hit_at: int = mvd[0]
-		if h_jab >= hit_at and h_jab < hit_at + 3 and not h_jab_hit:
+		if h_jab >= hit_at and h_jab < hit_at + (5 if h_move == "upper" else 3) and not h_jab_hit:
 			if absf(sx - hx) < float(mvd[2]) and s_air() < (12.0 if h_move == "low" else 40.0):
 				h_jab_hit = true
 				_hit_senzi(float(mvd[3]), h_move)
@@ -1950,8 +1950,7 @@ func _deflate() -> void:
 		syringe_taken = false
 		pos = _pt_of(_u_floor(pos.x))
 		energy = ENERGY
-		# a fase alcançada fica guardada: a vida volta ao topo do coração em que ele está
-		s_hp = _s_hearts() * S_HP_HEART
+		# a vida que ele perdeu fica perdida (a fase segue os corações)
 		phase = _phase()
 		wave_i = 0
 		wall_t = 0
