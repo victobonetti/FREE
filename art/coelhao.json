@@ -36,6 +36,10 @@
 		"die": {
 			"row": 7,
 			"frames": 4
+		},
+		"kick": {
+			"row": 8,
+			"frames": 4
 		}
 	}
 }

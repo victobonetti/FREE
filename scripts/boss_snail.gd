@@ -37,7 +37,7 @@ const DOSE_SPEED := 0.1              # cada dose: 10% mais rápido
 # O ringue (D114): o coelho pega a seringa e vira o coelhão por 12 s.
 const HERO_SHEET := "res://art/coelhao.png"
 const HERO_ANIM := {"guard": [0, 4], "walk": [1, 6], "jab": [2, 4], "block": [3, 2], "hit": [4, 2], "jump": [5, 2],
-	"flex": [6, 6], "die": [7, 4]}
+	"flex": [6, 6], "die": [7, 4], "kick": [8, 4]}
 const G_UNROT := 20                  # a transformação: quando a sala volta ao normal
 const G_BOLT := 100                  # o raio
 const G_POPS := [112, 128, 144]      # os três estouros do coelhão crescendo
@@ -55,6 +55,10 @@ const HJAB_HIT := 4                  # o jab do coelho: quadro em que acerta, to
 const HJAB_TOTAL := 13
 const HJAB_REACH := 40.0
 const HJAB_DMG := 5.0
+const HKICK_HIT := 9                 # o chute (giro direito): mais lento, mais longe, mais forte, e quebra a defesa
+const HKICK_TOTAL := 24
+const HKICK_REACH := 54.0
+const HKICK_DMG := 9.0
 const S_STUN := 12                   # quadros sem agir depois de apanhar
 const H_STUN := 16
 const S_WALK := 46.0
@@ -185,7 +189,8 @@ var hy := 0.0
 var h_vx := 0.0
 var h_vy := 0.0
 var h_face := 1.0
-var h_jab := -1                # quadro do jab (-1: sem jab)
+var h_jab := -1                # quadro do golpe (-1: sem golpe)
+var h_kick := false            # o golpe é o chute (senão, o jab)
 var h_jab_hit := false
 var h_cd := 0
 var h_stun := 0
@@ -402,9 +407,9 @@ func fighting() -> bool:
 	return state in ["berserk", "rage", "leap_warn", "leap", "punch", "glued", "tired", "hold", "inject"]
 
 
-## O terço da barra em que ele está: 0 (cheia), 1, 2 (o fim).
+## A fase da perseguição: segue a vida dele (que só cai no ringue): 0 com 3 corações, 1 com 2, 2 com 1.
 func _phase() -> int:
-	return clampi(int((1.0 - energy / ENERGY) * 3.0), 0, 2)
+	return clampi(3 - _s_hearts(), 0, 2)
 
 
 # ---------------------------------------------------------------- simulação
@@ -564,7 +569,7 @@ func step(r) -> void:
 			if t >= INJECT_FRAMES:
 				state = "berserk"
 				t = 0
-				phase = 0
+				phase = _phase()
 				wave_i = 0
 				wall_t = 0
 				r.sfx.emit("gatsby_dash")
@@ -641,15 +646,6 @@ func _berserk() -> void:
 			_throw_bell()
 	if energy <= 0.0:
 		_tire()
-	elif _phase() > phase:
-		phase = _phase()
-		state = "rage"
-		t = 0
-		flash = 24
-		walls.clear()
-		wave_i = 0
-		wall_t = WAVE_EVERY[phase] - RAGE_FRAMES - 20   # a primeira onda do terço novo vem logo
-		room.sfx.emit("lock_on")
 
 
 ## O vetor ao longo da superfície, no sentido em que ele corre.
@@ -899,6 +895,36 @@ func _age_shrooms() -> void:
 		if w["age"] == 0:
 			room.sfx.emit("crunch")
 	walls = walls.filter(func(w): return w["age"] < WALL_LIFE)
+	_unstick_rabbit()
+
+
+## Um cogumelo que brotou (ou girou) em cima do coelho não o prende: o coelho sai pela ponta dele,
+## num pulinho para fora (para cima, no do chão; para baixo, no do teto).
+func _unstick_rabbit() -> void:
+	var rb = room.rabbit
+	if hero_on:
+		return
+	for w in walls:
+		if w["age"] < 0:
+			continue
+		var r: Rect2i = w["rect"]
+		var rr: Rect2i = rb.rect
+		if not rr.intersects(r):
+			continue
+		var n: Vector2 = w["n"]
+		var p: Vector2i = rb.pos
+		if n.y < -0.5:
+			p.y = r.position.y - rr.size.y
+		elif n.y > 0.5:
+			p.y = r.end.y
+		elif n.x > 0.5:
+			p.x = r.end.x
+		else:
+			p.x = r.position.x - rr.size.x
+		rb.pos = p
+		rb.vel = n * 120.0 if absf(n.y) > 0.5 else Vector2(n.x * 80.0, -80.0)
+		rb.on_ground = false
+		rb.launched = false
 
 
 func _speed(ph: int) -> float:
@@ -1387,20 +1413,20 @@ func _draw_hud() -> void:
 	if syringe_taken:
 		_draw_syringe(Transform2D(0.0, Vector2(-26, y + 9)), 1.0)
 		draw_set_transform_matrix(Transform2D.IDENTITY)
-	# a energia do Senzi: a barra grande, em três terços
-	var bar := Rect2(-18, y + 4, 168, 10)
+	# a energia do Senzi (sem divisões) e, ao lado, os corações dele (a vida, que só cai no ringue)
+	var bar := Rect2(-18, y + 5, 67, 8)
 	draw_rect(bar.grow(1.0), Color(0.05, 0.05, 0.08, 0.85))
 	var k := clampf(energy / ENERGY, 0.0, 1.0)
 	var col := Color(1, 1, 1) if bar_hit > 0 and (bar_hit / 3) % 2 == 0 else C_ENERGY
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * k, bar.size.y)), col)
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * k, 2)), col.lightened(0.35))
-	for q in [1.0 / 3.0, 2.0 / 3.0]:
-		draw_rect(Rect2(bar.position + Vector2(bar.size.x * q, 0), Vector2(1, bar.size.y)), Color(0.05, 0.05, 0.08, 0.9))
 	draw_rect(bar.grow(1.0), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
+	for i in 3:
+		_draw_heart(Vector2(bar.end.x + 5 + i * 9, y + 6), i < _s_hearts(), C_ENERGY)
 
 
-func _draw_heart(q: Vector2, full: bool) -> void:
-	var c := C_HEART if full else C_HEART_EMPTY
+func _draw_heart(q: Vector2, full: bool, col := C_HEART) -> void:
+	var c := col if full else C_HEART_EMPTY
 	draw_rect(Rect2(q + Vector2(1, 0), Vector2(2, 1)), c)
 	draw_rect(Rect2(q + Vector2(4, 0), Vector2(2, 1)), c)
 	draw_rect(Rect2(q + Vector2(0, 1), Vector2(7, 2)), c)
@@ -1531,10 +1557,13 @@ func _ring() -> void:
 		h_vx = move_toward(h_vx, 0.0, 12.0)
 		h_jab = -1
 	else:
-		if int(inp.get("rotate", 0)) != 0 and h_jab < 0 and h_cd == 0:
+		var rq := int(inp.get("rotate", 0))
+		if rq != 0 and h_jab < 0 and h_cd == 0:
+			# giro esquerdo: jab; giro direito: chute
+			h_kick = rq > 0
 			h_jab = 0
-			h_cd = HJAB_TOTAL + 2
-			r.sfx.emit("thump")
+			h_cd = (HKICK_TOTAL if h_kick else HJAB_TOTAL) + 2
+			r.sfx.emit("jump" if h_kick else "thump")
 		var ground := hy >= fl - 0.5
 		var back := absf(mv) > 0.2 and signf(mv) == -h_face
 		h_block = back and ground and h_jab < 0
@@ -1551,11 +1580,12 @@ func _ring() -> void:
 		h_vy = 0.0
 	if h_jab >= 0:
 		h_jab += 1
-		if h_jab >= HJAB_HIT and h_jab < HJAB_HIT + 3 and not h_jab_hit:
-			if absf(sx - hx) < HJAB_REACH and s_air() < 20.0:
+		var hit_at := HKICK_HIT if h_kick else HJAB_HIT
+		if h_jab >= hit_at and h_jab < hit_at + 3 and not h_jab_hit:
+			if absf(sx - hx) < (HKICK_REACH if h_kick else HJAB_REACH) and s_air() < 20.0:
 				h_jab_hit = true
-				_hit_senzi(HJAB_DMG)
-		if h_jab >= HJAB_TOTAL:
+				_hit_senzi(HKICK_DMG if h_kick else HJAB_DMG, h_kick)
+		if h_jab >= (HKICK_TOTAL if h_kick else HJAB_TOTAL):
 			h_jab = -1
 			h_jab_hit = false
 	# ---- o Senzi
@@ -1653,9 +1683,13 @@ func _s_act() -> void:
 				act = ""
 
 
-func _hit_senzi(dmg: float) -> void:
+func _hit_senzi(dmg: float, kick := false) -> void:
 	var sd := signf(pos.x - hx) if pos.x != hx else 1.0
-	if s_block or (act in ["jab", "charge"] and act_t <= 2 and false):
+	if kick and s_block:
+		# o chute quebra a defesa: ele cambaleia
+		_spark(Vector2(pos.x - sd * 12.0, pos.y - 10.0), Color("ffd27a"))
+		room.sfx.emit("blast")
+	if s_block and not kick:
 		s_hp -= dmg * 0.2
 		room.sfx.emit("plate_on")
 		hitstop = 2
@@ -1665,8 +1699,8 @@ func _hit_senzi(dmg: float) -> void:
 		return
 	var hearts0 := _s_hearts()
 	s_hp -= dmg
-	s_stun = S_STUN
-	s_push = sd * 90.0
+	s_stun = S_STUN + (8 if kick else 0)
+	s_push = sd * (170.0 if kick else 90.0)
 	act = ""
 	s_hit_done = false
 	hitstop = 4
@@ -1745,7 +1779,9 @@ func _deflate() -> void:
 		syringe_taken = false
 		pos = _pt_of(_u_floor(pos.x))
 		energy = ENERGY
-		phase = 0
+		# a fase alcançada fica guardada: a vida volta ao topo do coração em que ele está
+		s_hp = _s_hearts() * S_HP_HEART
+		phase = _phase()
 		wave_i = 0
 		wall_t = 0
 		state = "rage"   # ruge e volta a correr
@@ -1790,8 +1826,9 @@ func _draw_hero(base: Transform2D) -> void:
 				anim_name = "hit"
 				fr = 0 if h_stun > H_STUN / 2 else 1
 			elif h_jab >= 0:
-				anim_name = "jab"
-				fr = 0 if h_jab < HJAB_HIT else (1 if h_jab < HJAB_HIT + 3 else (2 if h_jab < HJAB_HIT + 6 else 3))
+				anim_name = "kick" if h_kick else "jab"
+				var at := HKICK_HIT if h_kick else HJAB_HIT
+				fr = 0 if h_jab < at else (1 if h_jab < at + 3 else (2 if h_jab < at + (10 if h_kick else 6) else 3))
 			elif hy < _inner().end.y - 0.5:
 				anim_name = "jump"
 				fr = 0 if h_vy < 0.0 else 1
@@ -1864,7 +1901,7 @@ func _draw_ring_hud() -> void:
 		draw_rect((b as Rect2).grow(1.0), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
 	for i in 3:
 		_draw_heart(Vector2(-150 + i * 10, y + 11), i < _h_hearts())
-		_draw_heart(Vector2(143 - i * 10, y + 11), i < _s_hearts())
+		_draw_heart(Vector2(143 - i * 10, y + 11), i < _s_hearts(), C_ENERGY)
 	# o tempo
 	var tk := clampf(float(ring_t) / RING_FRAMES, 0.0, 1.0) if state == "ring" else (1.0 if state == "grabbed" else 0.0)
 	var tw := 52.0

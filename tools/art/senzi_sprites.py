@@ -519,6 +519,16 @@ def jump_pose(i):
             "arm_f": (0.95, 2.75), "arm_b": (0.7, 2.9), "neck": 0.0, "ears": -0.25}
 
 
+def kick_pose(i):
+    """O chute: dobra o joelho no alto, estica a perna da frente reta, segura, volta. O corpo vai para trás."""
+    lf = [(1.35, -0.3, 0.6), (1.58, 1.58, 1.6), (1.52, 1.52, 1.5), (0.8, 0.1, 0.2)][i]
+    lb = (-0.15, -0.05)
+    hip = stand_hip([lb], 0.0, x=40.0)
+    return {"hip": hip, "tilt": [-0.15, -0.35, -0.32, -0.1][i], "leg_f": lf, "leg_b": lb,
+            "arm_f": (0.9, 2.6), "arm_b": (-0.6, 0.6), "neck": -0.15 if i in (1, 2) else 0.0, "ears": 0.3 if i in (1, 2) else 0.1,
+            "tent": 0.0}
+
+
 def rabbit(fn):
     """A mesma pose, no coelhão."""
     def f(i):
@@ -530,7 +540,7 @@ def rabbit(fn):
 
 RABBIT_ANIMS = [("guard", 4, rabbit(guard_pose)), ("walk", 6, rabbit(walk_pose)), ("jab", 4, rabbit(jab_pose)),
                 ("block", 2, rabbit(block_pose)), ("hit", 2, rabbit(hit_pose)), ("jump", 2, rabbit(jump_pose)),
-                ("flex", 6, rabbit(flex_pose)), ("die", 4, rabbit(die_pose))]
+                ("flex", 6, rabbit(flex_pose)), ("die", 4, rabbit(die_pose)), ("kick", 4, rabbit(kick_pose))]
 
 
 ANIMS = [("run", 8, run_pose), ("idle", 4, idle_pose), ("flex", 6, flex_pose), ("throw", 4, throw_pose), ("die", 4, die_pose),

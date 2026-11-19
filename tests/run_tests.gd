@@ -3466,7 +3466,7 @@ func test_senzi() -> void:
 		m.wave_i = 0
 		for i in 8:
 			m.walls.clear()
-			m.energy = m.ENERGY * (0.9 - 0.33 * ph)
+			m.s_hp = [180.0, 100.0, 40.0][ph]   # a fase segue a vida dele
 			m._spawn_wave()
 			var ks := []
 			for sw in m.walls:
@@ -3477,7 +3477,7 @@ func test_senzi() -> void:
 		check(seq.slice(0, 4) == seq.slice(4, 8), "terço %d: as ondas se repetem na mesma ordem e lugar" % (ph + 1))
 	check(kinds.size() == 6, "brotam os 6 tipos (%s)" % ", ".join(kinds.keys()))
 	m.walls.clear()
-	m.energy = m.ENERGY * 0.5
+	m.s_hp = 100.0
 	m.wave_i = 0
 	m._spawn_wave()   # a fenda
 	var gaps: Array = []
@@ -3493,7 +3493,18 @@ func test_senzi() -> void:
 	for i in m.SPROUT_WARN + 2:
 		m._age_shrooms()
 	check(room.solid_static(Rect2i(m.walls[0]["rect"]).grow(-1)), "depois de brotar, é")
-	m.energy = m.ENERGY
+	# brotou em cima do coelho: ele sai por cima, num pulinho (não fica preso dentro)
+	m.walls.clear()
+	var under := Rect2i(int(m._inner().get_center().x) - 6, fl - 20, 14, 20)
+	room.rabbit.pos = Vector2i(under.position.x + 1, fl - 12)
+	room.rabbit.vel = Vector2.ZERO
+	m.pos = m._pt_of(m._u_floor(m._inner().position.x + 20.0))
+	m.walls.append({"rect": under, "n": Vector2(0, -1), "age": -1, "kind": "wall", "gid": 9, "k": 0.0, "seed": 1})
+	idle(2)
+	check(not Rect2i(room.rabbit.rect).intersects(under) and room.rabbit.pos.y + 12 <= under.position.y + 1,
+		"brotou em cima do coelho: ele sai por cima, sem ficar preso")
+	m.walls.clear()
+	m.s_hp = m.S_HP_MAX
 	# a mola joga o coelho e vira a gravidade
 	m.walls.clear()
 	var spot := Rect2i(int(m._inner().position.x) + 60, fl - 7, 14, 7)
@@ -3519,12 +3530,13 @@ func test_senzi() -> void:
 	m = _senzi()
 	while m.state != "berserk":
 		tick()
-	# a cada terço da barra: mais rápido (com uma pausa de raiva)
-	m.energy = m.ENERGY * 0.66
-	tick()
-	check(m.state == "rage" and m.phase == 1, "passando de um terço da barra, ele para com raiva")
-	idle(m.RAGE_FRAMES + 2)
-	check(m.state == "berserk" and m._phase() == 1, "e volta a correr, mais rápido")
+	# as fases da perseguição seguem a vida dele (não a energia)
+	m.energy = m.ENERGY * 0.2
+	check(m._phase() == 0, "gastar energia não muda a fase")
+	m.s_hp = 100.0
+	check(m._phase() == 1 and m._speed(m._phase()) > m._speed(0), "com 2 corações, a fase 2: mais rápido")
+	m.s_hp = m.S_HP_MAX
+	m.energy = m.ENERGY
 	# sem energia: para cansado, ergue a seringa e, se ninguém pega, se injeta e volta com tudo (D113)
 	m.energy = 0.01
 	idle(3)
@@ -3592,7 +3604,7 @@ func test_senzi() -> void:
 	idle(3 + m.DEFLATE_FRAMES + 2)
 	check(not m.hero_on and not room.rabbit_hidden and room.allow_rotate and m.energy >= m.ENERGY - 1.0,
 		"acabou o tempo: o coelho desincha e a perseguição recomeça, com a energia dele cheia")
-	check(m.s_hp == shp and m.s_hp < m.S_HP_MAX, "e a vida que o Senzi perdeu no ringue continua perdida")
+	check(m.s_hp == ceilf(shp / m.S_HP_HEART - 0.001) * m.S_HP_HEART, "a vida dele volta ao topo do coração em que está (%.0f -> %.0f)" % [shp, m.s_hp])
 	# nocaute no Senzi
 	while m.state != "berserk":
 		tick()
@@ -3605,15 +3617,39 @@ func test_senzi() -> void:
 	tick()
 	idle(m.G_END + 2)
 	check(m.state == "ring", "de novo o ringue (%s)" % m.state)
-	m.s_hp = 3.0
+	# o chute: mais longe e quebra a defesa
 	m.act = "guard"
-	m.act_t = 999
+	m.act_t = 0
 	m.s_stun = 0
-	m.hx = m.pos.x - 30.0
+	m.hx = m.pos.x - 50.0
 	m.hy = m._inner().end.y
+	var k0: float = m.s_hp
 	tick({"rotate": 1})
-	for i in m.HJAB_TOTAL + 30:
+	for i in m.HKICK_HIT + 3:
+		m.hx = m.pos.x - 50.0
 		tick()
+	check(m.s_hp <= k0 - m.HKICK_DMG + 0.1, "o chute (giro direito) alcança mais longe e passa pela defesa (%.0f -> %.0f)" % [k0, m.s_hp])
+	idle(40)
+	# a fase guardada: tirou 60% da vida, ele volta com 2/3
+	m.s_hp = m.S_HP_MAX * 0.4
+	m.ring_t = 2
+	idle(3 + m.DEFLATE_FRAMES + 2)
+	check(absf(m.s_hp - m.S_HP_MAX * 2.0 / 3.0) < 0.5, "tirou 60%% da vida: ele volta com 2/3 (%.0f)" % m.s_hp)
+	while m.state != "berserk":
+		tick()
+	m.energy = 0.01
+	while m.state != "hold":
+		tick()
+	idle(5)
+	sr = m.syringe_rect()
+	room.rabbit.pos = Vector2i(sr.get_center()) - Vector2i(6, 6)
+	tick()
+	idle(m.G_END + 2)
+	# nocaute no Senzi
+	m.s_hp = 3.0
+	m.s_block = false
+	m._hit_senzi(m.HJAB_DMG)
+	idle(30)
 	check(m.state == "dying" or m.state == "dead", "nocaute: o Senzi cai")
 	idle(m.DIE_FRAMES + 5)
 	check(m.state == "dead" and room.door_unlocked and not room.rabbit_hidden, "e morre: a porta destrava e o coelho volta ao normal")
@@ -3677,14 +3713,14 @@ func test_senzi_bot() -> void:
 			# no ringue: chega perto e dá jab; defende o jab dele andando para trás; foge do carregado
 			var toward := signf(m.pos.x - m.hx)
 			var dist := absf(m.pos.x - m.hx)
-			mv = toward if dist > 34.0 else 0.0
+			mv = toward if dist > 44.0 else 0.0
 			jump = false
 			if m.act == "jab" and m.act_t < m.SJAB_WIND + 4:
 				mv = -toward
 			elif m.act == "charge" and m.act_t < m.SCHARGE_WIND + 8:
 				mv = -toward
-			elif dist < m.HJAB_REACH - 4.0 and m.h_jab < 0 and m.h_cd == 0:
-				r = 1
+			elif dist < m.HKICK_REACH - 6.0 and m.h_jab < 0 and m.h_cd == 0:
+				r = 1    # chute (alcança mais e passa pela defesa)
 			m.h_hp = 90.0
 		elif m.fighting() and not room.rotating and room.rot_lock == 0 and m.pos.distance_to(m._rabbit_c()) < 70.0:
 			r = 1
