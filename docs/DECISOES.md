@@ -876,3 +876,8 @@ Diagnóstico que motivou estas decisões: as salas atuais são todas uma caixa v
   - **O coelho preso entre cogumelos:** um de cima e um de baixo na mesma coluna (de ondas diferentes) deixavam um vão menor que o coelho, e o "sair pela ponta" o empurrava de um para dentro do outro. Agora um cogumelo não brota se deixaria um vão menor que 16 px com outro da face oposta; e, se mesmo assim o coelho ficar preso, o cogumelo que o prende estoura (em vez de empurrá-lo para dentro do outro).
   - **Sem giro até a luta começar:** na sala do Senzi, o giro fica travado desde o início (o caramujinho e a revelação) até ele entrar em fúria.
   - **A injeção devolve só 1/3 da energia** (Victor: "se o coelho não pegar a seringa, o Senzi volta com 1/3 da stamina, para não ficar frustrante"): ele logo cansa de novo e a seringa volta. (Depois do ringue, a energia dele continua voltando cheia.)
+
+### D116 — Senzi: o grito distorcido
+- **Victor:** "um grito distorcido; em alguns movimentos, e quando leva hit na luta".
+- **O som** (gerado em código, `sfx_factory.gd`, `_senzi_voice`): uma voz de vogal aberta ("aah": três formantes) sobre dente de serra, com o tom subindo, segurando e caindo, vibrato e chiado de bafo; um anel de modulação a 63 Hz a deixa estranha (de bicho), e o final passa por saturação forte, esmagamento de bits e queda de taxa (a distorção). Dois: **`senzi_scream`** (0,85 s, o grito inteiro) e **`senzi_grunt`** (0,28 s, curto, mais agudo).
+- **Onde:** o grito inteiro na revelação, na pausa de raiva, no PUMP da injeção, quando encara o coelhão na transformação, no soco carregado do ringue, quando perde um coração e quando morre; o curto no pulo, no soco, no arremesso do agarrão e **a cada golpe que leva no ringue**.

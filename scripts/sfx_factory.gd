@@ -18,6 +18,7 @@ const ONE_SHOTS := {
 	"spring": [-13.0, 0.05], "steam_warn": [-20.0, 0.05], "steam_burst": [-14.0, 0.06],
 	"lock_on": [-20.0, 0.0], "missile": [-17.0, 0.12], "homer": [-18.0, 0.08], "slam": [-8.0, 0.05],
 	"blast": [-15.0, 0.15], "thump": [-11.0, 0.08],
+	"senzi_scream": [-11.0, 0.08], "senzi_grunt": [-12.0, 0.14],
 	"step_grass": [-22.0, 0.14], "step_dirt": [-20.0, 0.14], "step_stone": [-23.0, 0.12],
 	"step_wet": [-22.0, 0.14], "step_metal": [-25.0, 0.1], "step_wood": [-21.0, 0.12],
 	"step_plate": [-24.0, 0.12], "step_water": [-21.0, 0.15],
@@ -82,6 +83,10 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _blast()
 		"thump":
 			return _thump()
+		"senzi_scream":
+			return _senzi_voice(0.85, [180.0, 430.0, 300.0, 130.0], 1)
+		"senzi_grunt":
+			return _senzi_voice(0.28, [260.0, 330.0, 190.0, 110.0], 2)
 	if sfx_name.begins_with("step_"):
 		return _step(sfx_name.trim_prefix("step_"))
 	return null
@@ -636,3 +641,53 @@ static func rumble() -> AudioStreamWAV:
 			v = v * k + raw[i + n] * (1.0 - k)   # o fim do ruído entra por baixo do começo
 		b[i] = tanh(v * 1.2) * 0.8
 	return _wav(b, true)
+
+
+## A voz do Senzi (D116): um grito distorcido, meio de bicho, meio de máquina. O tom sobe, segura e
+## cai (os quatro pontos de `pitch`), com vibrato; a fonte é dente de serra com quadrada, filtrada por três
+## formantes de vogal aberta ("aah"), com chiado de bafo; um anel de modulação a 63 Hz deixa estranha
+## (alienígena), e o final passa por saturação forte, esmagamento de bits e queda de taxa (a distorção).
+static func _senzi_voice(seconds: float, pitch: Array, seed_value: int) -> AudioStreamWAV:
+	var b := _buf(seconds)
+	var rng := _rng(seed_value)
+	var n := b.size()
+	var formants := [[720.0, 1.0, 140.0], [1150.0, 0.7, 180.0], [2600.0, 0.45, 300.0]]
+	var phase := 0.0
+	var hold := 0.0
+	var amps := PackedFloat32Array()
+	amps.resize(18)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var k := t / seconds
+		# o contorno do tom: sobe rápido, segura, cai
+		var f0: float
+		if k < 0.12:
+			f0 = lerpf(pitch[0], pitch[1], k / 0.12)
+		elif k < 0.55:
+			f0 = lerpf(pitch[1], pitch[2], (k - 0.12) / 0.43)
+		else:
+			f0 = lerpf(pitch[2], pitch[3], (k - 0.55) / 0.45)
+		f0 *= 1.0 + 0.07 * sin(TAU * 9.0 * t) + 0.03 * sin(TAU * 23.0 * t)
+		phase += f0 / MIX_RATE
+		# harmônicos pesados pelos formantes (os pesos mudam devagar: recalculados a cada 64 amostras)
+		if i % 64 == 0:
+			for h in range(1, 18):
+				var fh := f0 * h
+				var amp := 0.0
+				for fm in formants:
+					var d: float = (fh - fm[0]) / fm[2]
+					amp += fm[1] * exp(-d * d)
+				amps[h] = amp / h * 2.2
+		var v := 0.0
+		for h in range(1, 18):
+			v += sin(TAU * phase * h) * amps[h]
+		v += (fmod(phase, 1.0) * 2.0 - 1.0) * 0.18                # o dente de serra cru por baixo
+		v += rng.randf_range(-1.0, 1.0) * (0.18 + 0.25 * k)         # o bafo
+		v *= 0.6 + 0.4 * sin(TAU * 63.0 * t)                        # o anel: estranho
+		var env := minf(t / 0.025, 1.0) * (1.0 - smoothstep(0.7, 1.0, k))
+		v = tanh(v * 3.2 * env)                                     # a saturação
+		v = roundf(v * 14.0) / 14.0                                 # o esmagamento de bits
+		if i % 3 == 0:
+			hold = v                                                # a queda de taxa
+		b[i] = hold * 0.75
+	return _wav(b)

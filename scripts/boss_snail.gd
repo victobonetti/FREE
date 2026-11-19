@@ -509,8 +509,8 @@ func step(r) -> void:
 					var a := rng.randf() * TAU
 					r.particles.append({"pos": pos, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(40.0, 160.0),
 						"life": rng.randi_range(12, 26), "col": C_MUSCLE if i % 2 else C_SHELL, "grav": 120.0})
-			if t == R_ROAR + 10:
-				r.sfx.emit("gatsby_dash")
+			if t == R_ROAR + 2:
+				r.sfx.emit("senzi_scream")   # o rugido da revelação
 			if t >= REVEAL:
 				intro_seen = true
 				r.input_lock = false
@@ -527,7 +527,7 @@ func step(r) -> void:
 				state = "leap"
 				t = 0
 				leap_from = pos
-				r.sfx.emit("gatsby_dash")
+				r.sfx.emit("senzi_grunt")
 		"leap":
 			var k := clampf(float(t) / LEAP_FRAMES, 0.0, 1.0)
 			pos = leap_from.lerp(leap_to, k) + Vector2(0, -sin(k * PI) * LEAP_HIGH)
@@ -561,7 +561,7 @@ func step(r) -> void:
 			# passou de um terço da barra: para, flexiona e ruge; volta mais rápido
 			_hit_rabbit()
 			if t == 10:
-				r.sfx.emit("gatsby_dash")
+				r.sfx.emit("senzi_scream")
 				r.shake = maxf(r.shake, 3.0)
 			if t >= RAGE_FRAMES:
 				state = "berserk"
@@ -606,6 +606,7 @@ func step(r) -> void:
 				r.shake = 8.0
 				r.impact.emit(3.5)
 				r.sfx.emit("blast")
+				r.sfx.emit("senzi_scream")   # o PUMP
 				for i in 24:
 					var a := rng.randf() * TAU
 					r.particles.append({"pos": pos, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(60.0, 200.0),
@@ -712,6 +713,7 @@ func _in_reach(reach: float) -> bool:
 func _punch() -> void:
 	if t == PUNCH_WIND:
 		room.sfx.emit("blast")
+		room.sfx.emit("senzi_grunt")
 		if _in_reach(PUNCH_REACH):
 			var lives0 := lives
 			room.kill()   # um coração (ou a morte, no último)
@@ -1031,6 +1033,7 @@ func _take_syringe() -> void:
 
 
 func _die() -> void:
+	room.sfx.emit("senzi_scream")
 	energy = 0.0
 	state = "dying"
 	t = 0
@@ -1589,7 +1592,7 @@ func _grabbed() -> void:
 		r.impact.emit(1.5 + 0.8 * k)
 		r.sfx.emit("blast" if k == 2 else "slam")
 	if t == G_ROAR:
-		r.sfx.emit("gatsby_dash")
+		r.sfx.emit("senzi_scream")
 	if hero_on:
 		r.cam_focus = Vector2((hx + pos.x) / 2.0, hy - 40.0)
 	if t >= G_END:
@@ -1770,6 +1773,8 @@ func _s_act() -> void:
 				pos.x += toward * 7.0   # a investida
 			if act_t == wind + 1:
 				room.sfx.emit("blast" if act == "charge" else "thump")
+				if act == "charge":
+					room.sfx.emit("senzi_scream")
 			if act_t >= wind + 1 and act_t <= wind + 4 and not s_hit_done:
 				var reach := SJAB_REACH + (24.0 if act == "charge" else 0.0)
 				if dist < reach and hy > _inner().end.y - 34.0 and not h_crouch:   # agachado, passa por cima
@@ -1843,6 +1848,7 @@ func _s_act() -> void:
 				if grabbed_t >= GRAB_HOLD:
 					grabbed_t = -1
 					# arremessa por cima, para trás dele
+					room.sfx.emit("senzi_grunt")
 					_hit_hero(GRAB_DMG, true, Vector2(-toward * 230.0, -240.0))
 					act_t = GRAB_WIND + 20
 			if act_t >= GRAB_WIND + 32 and grabbed_t < 0:
@@ -1918,11 +1924,13 @@ func _hit_senzi(dmg: float, kind := "jab") -> void:
 	bar_hit = 10
 	room.shake = maxf(room.shake, 2.5)
 	room.sfx.emit("crunch")
+	room.sfx.emit("senzi_grunt")   # apanhou: grita
 	_spark(Vector2(pos.x - sd * 12.0, pos.y - 14.0), Color(1, 1, 1))
 	if _s_hearts() < hearts0:
 		room.shake = 6.0
 		room.impact.emit(3.0)
 		room.sfx.emit("blast")
+		room.sfx.emit("senzi_scream")   # perdeu um coração: o grito inteiro
 		act_i = 0
 	if s_hp <= 0.0:
 		_ring_win()

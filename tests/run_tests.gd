@@ -3378,6 +3378,8 @@ func test_senzi() -> void:
 	var m = _senzi(false)
 	check(m.state == "lurk", "começa como um caramujo comum")
 	check(not room.allow_rotate, "sem giro até a luta começar")
+	var heard: Array = []
+	room.sfx.connect(func(n): heard.append(n))
 	var n := 0
 	while m.state == "lurk" and n < 600:
 		tick({"move": 1.0})
@@ -3388,6 +3390,9 @@ func test_senzi() -> void:
 		tick()
 		n += 1
 	check(m.state == "berserk" and not room.input_lock, "e entra em fúria")
+	check(heard.has("senzi_scream"), "e ruge, o grito distorcido")
+	check(SfxFactory.make("senzi_scream") != null and SfxFactory.ONE_SHOTS.has("senzi_scream") and SfxFactory.ONE_SHOTS.has("senzi_grunt"),
+		"o grito distorcido do Senzi existe (o inteiro e o curto)")
 	# grudado: girar não o solta
 	var u0: float = m._u_of(m.pos)
 	wait_rot_ready()
