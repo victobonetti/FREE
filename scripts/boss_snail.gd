@@ -53,12 +53,12 @@ const BELL_EVERY := 140
 const RAGE_FRAMES := 45              # a pausa de raiva ao passar de um terço da barra
 const DIE_FRAMES := 150
 
-const C_SKIN := Color("ccbeac")
-const C_MUSCLE := Color("e2d6c6")
+const C_SKIN := Color("d7cdb8")
+const C_MUSCLE := Color("e9e3d4")
+const C_GOO := Color("aca08c")
 const C_SHELL := Color("8a5f9e")
 const C_SHELL_DARK := Color("5e3f70")
 const C_SHELL_LINE := Color("c9a6dd")
-const C_BAND := Color("e0384e")
 const C_HEART := Color("e0657c")
 const C_HEART_EMPTY := Color(1, 1, 1, 0.18)
 const C_ENERGY := Color("b98ee0")
@@ -88,6 +88,8 @@ var hud_hit := 0
 var bar_hit := 0
 var pop_flash := 0             # clarão branco da revelação
 var phase := 0
+var vis_ang := 0.0             # o ângulo desenhado (vira suave nos cantos)
+var snap_ang := true
 var run_dist := 0.0            # px corridos (o quadro da corrida segue a distância, não o tempo)
 var throw_t := 0               # quadros da animação de arremesso do haltere
 var fly_t := 0                 # o coelho voando do soco
@@ -135,6 +137,7 @@ func on_rotate(r, d: int) -> void:
 	vel = _rv(vel, d)
 	leap_from = r._rot_point(leap_from, d)
 	leap_to = r._rot_point(leap_to, d)
+	snap_ang = true
 	for w in walls:
 		w["rect"] = r._rot_rect(w["rect"], d)
 		w["n"] = _rv(w["n"], d)
@@ -215,6 +218,13 @@ func _u_of(q: Vector2) -> float:
 	if m == d_ceil:
 		return p.size.x + p.size.y + (p.end.x - x)
 	return 2.0 * p.size.x + p.size.y + (y - p.position.y)
+
+
+## O ponto do chão embaixo de x (o alvo dele: o coelho está sempre no chão ou caindo para ele; no
+## canto, projetar no ponto mais perto fazia o alvo pular entre o chão e a parede e ele tremia).
+func _u_floor(x: float) -> float:
+	var p := _path()
+	return clampf(x - p.position.x, 0.0, p.size.x)
 
 
 func _pt_of(u: float) -> Vector2:
@@ -337,7 +347,7 @@ func step(r) -> void:
 				t = 0
 				leap_from = pos
 				var ahead := 1.0 if room.rabbit.facing > 0 else -1.0
-				leap_to = _pt_of(_u_of(_rabbit_c() + Vector2(ahead * 44.0, 0)))
+				leap_to = _pt_of(_u_floor(_rabbit_c().x + ahead * 44.0))
 				r.sfx.emit("gatsby_dash")
 		"leap":
 			var k := clampf(float(t) / LEAP_FRAMES, 0.0, 1.0)
@@ -381,7 +391,7 @@ func _berserk() -> void:
 	var p := _path()
 	var L := _u_len(p)
 	var u := _u_of(pos)
-	var ur := _u_of(_rabbit_c())
+	var ur := _u_floor(_rabbit_c().x)
 	var d := fposmod(ur - u + L / 2.0, L) - L / 2.0
 	var want := signf(d) if absf(d) > 3.0 else dir
 	if want != dir:
@@ -409,6 +419,11 @@ func _berserk() -> void:
 		room.sfx.emit("lock_on")
 		return
 	_smash_walls()
+	# deixa gosma pelo caminho
+	if int(run_dist) % 9 < int(float(SPEED[ph]) / 60.0 + 1.0) and rng.randf() < 0.6:
+		var n := _surf_n()
+		room.particles.append({"pos": pos - n * (BODY.y / 2.0 - 1.0) - _ahead() * rng.randf_range(4.0, 14.0),
+			"vel": n * rng.randf_range(4.0, 16.0), "life": rng.randi_range(30, 60), "col": C_GOO if rng.randf() < 0.5 else C_SKIN, "grav": 0.0})
 	# muros de cogumelo no caminho do coelho
 	wall_t += 1
 	if wall_t >= WALL_EVERY[ph]:
@@ -472,6 +487,11 @@ func _punch() -> void:
 				rb.var_jump = 0
 				rb.coyote = 0
 				fly_t = FLY_FRAMES
+				# e gira a sala à força: a parede para onde o coelho voa vira o chão (ele despenca
+				# até a borda oposta com o embalo do soco)
+				if not room.rotating:
+					room.pending_rot = 0
+					room._begin_rotate(1 if side > 0.0 else -1, true)
 				room.shake = maxf(room.shake, 10.0)
 				room.impact.emit(4.0)
 				var c := _rabbit_c()
@@ -701,7 +721,13 @@ func _bulk() -> float:
 
 func _draw_snail(base: Transform2D) -> void:
 	var n := _surf_n() if _stuck() else Vector2(0, -1)
-	var ang := Vector2(0, -1).angle_to(n)
+	var target := Vector2(0, -1).angle_to(n)
+	if snap_ang or state == "lurk":
+		vis_ang = target
+		snap_ang = false
+	else:
+		vis_ang = lerp_angle(vis_ang, target, 0.3)   # vira suave na quina
+	var ang := vis_ang
 	var flip := -1.0 if dir < 0 else 1.0
 	if state == "reveal" and t < R_STARE:
 		flip = signf(_rabbit_c().x - pos.x) if t > 25 else flip   # para e vira para o coelho
@@ -716,7 +742,6 @@ func _draw_snail(base: Transform2D) -> void:
 		draw_circle(Vector2(-0.5, 0), 1.3, C_SHELL_DARK)
 		draw_line(Vector2(3 + crawl, 1), Vector2(4 + crawl, -2), C_SKIN, 1.0)
 		draw_rect(Rect2(4 + crawl, -3, 1, 1), Color("1a1820"))
-		draw_rect(Rect2(2 + crawl, -1, 1, 1), C_BAND)   # a faixinha: só quem repara
 		if state == "reveal" and t > 30 and t < R_POPS[0]:
 			# encara... e treme
 			draw_rect(Rect2(4 + crawl, -3, 1, 1), Color("ff3b4e"))
@@ -776,19 +801,6 @@ func _draw_snail(base: Transform2D) -> void:
 func _draw_hud() -> void:
 	if pop_flash > 0:
 		draw_rect(Rect2(-200, -120, 400, 240), Color(1, 1, 1, 0.12 * pop_flash))
-	if state == "reveal" and t >= R_ROAR:
-		# o nome, batendo na tela
-		var k := clampf(float(t - R_ROAR) / 8.0, 0.0, 1.0)
-		var font := ThemeDB.fallback_font
-		var size := int(lerpf(40.0, 22.0, k))
-		var txt := "SENZI"
-		var w := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		var p := Vector2(-w / 2.0, -40) + Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * (1.0 - k) * 3.0
-		draw_string(font, p + Vector2(2, 2), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0, 0, 0, 0.7))
-		draw_string(font, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, size, C_BAND)
-		var sub := "o caramujo"
-		var w2 := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
-		draw_string(font, Vector2(-w2 / 2.0, -30), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1, 1, 1, 0.8 * k))
 	if state == "lurk" or state == "reveal" or state == "dead":
 		return
 	var y := -89.0
@@ -809,8 +821,6 @@ func _draw_hud() -> void:
 	for q in [1.0 / 3.0, 2.0 / 3.0]:
 		draw_rect(Rect2(bar.position + Vector2(bar.size.x * q, 0), Vector2(1, bar.size.y)), Color(0.05, 0.05, 0.08, 0.9))
 	draw_rect(bar.grow(1.0), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
-	var font := ThemeDB.fallback_font
-	draw_string(font, bar.position + Vector2(3, 8), "SENZI", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.1, 0.06, 0.14, 0.8) if k > 0.15 else Color(1, 1, 1, 0.7))
 
 
 func _draw_heart(q: Vector2, full: bool) -> void:

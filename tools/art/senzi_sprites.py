@@ -1,13 +1,14 @@
-"""Folha de sprites do Senzi (D112, 2ª arte). Pixel art quadro a quadro, a partir de um esqueleto por
-quadro. O Senzi é alto e atlético, um velocista: pernas longas, cintura fina, músculos secos. Não tem
-rosto: no lugar da cabeça, um pescoço mole e calombudo de caramujo, com dois tentáculos caídos e, em
-cima, a concha pequena, como um chapéu. A corrida é o principal: tronco bem inclinado para a frente,
-as pernas empurrando para trás, como um corredor profissional.
+"""Folha de sprites do Senzi (D112). Pixel art quadro a quadro, a partir de um esqueleto por quadro.
+
+O Senzi é um caramujo que virou um corredor alto: o corpo é a mesma carne bege dos caramujos de enfeite,
+mas mole, calombuda e escorrendo gosma; não tem rosto: no lugar da cabeça, um pescoço de caramujo com
+dois tentáculos caídos e, em cima, a concha roxa pequena, como um chapéu. No estilo do jogo: cores
+chapadas (um tom de sombra embaixo de cada parte), sem contorno, sem músculos desenhados. A forma
+treme de um quadro para outro (gosma).
 
     python3 tools/art/senzi_sprites.py     ->  art/senzi.png  e  art/senzi.json
 
-Quadros de 96x96, virado para a direita, pés na linha 93. Um contorno de nanquim só, em volta da
-silhueta; por dentro, luz e sombra e poucas linhas finas.
+Quadros de 96x96, virado para a direita, pés na linha 93.
 """
 import json
 import math
@@ -20,26 +21,22 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 FW, FH = 96, 96
 GROUND = 93
 
-INK = (36, 28, 30, 255)
-SKIN = (204, 190, 172, 255)      # carne de caramujo: bege acinzentado, úmido
-SKIN_D = (146, 132, 124, 255)
-SKIN_L = (234, 226, 212, 255)
-SHELL = (138, 95, 158, 255)
-SHELL_D = (94, 63, 112, 255)
-SHELL_L = (186, 146, 206, 255)
+GOO = (215, 205, 184, 255)       # a carne dos caramujos de enfeite (d7cdb8)
+GOO_D = (172, 160, 140, 255)     # embaixo das partes
+GOO_B = (150, 139, 122, 255)     # os membros de trás
+GOO_B_D = (124, 114, 101, 255)
+WET = (240, 235, 222, 255)       # brilho molhado (pontinhos)
+SHELL = (138, 95, 158, 255)      # a concha dos de enfeite (8a5f9e / 6e4a82 / c9a6dd)
+SHELL_D = (110, 74, 130, 255)
+SHELL_L = (201, 166, 221, 255)
 MOUTH = (58, 26, 36, 255)
-SHINE = (250, 248, 240, 255)
 
 
 class Canvas:
-    def __init__(self):
+    def __init__(self, seed=0):
         self.img = np.zeros((FH, FW, 4), dtype=np.uint8)
-
-    @staticmethod
-    def _mask(draw_fn):
-        m = Image.new("L", (FW, FH), 0)
-        draw_fn(ImageDraw.Draw(m))
-        return np.array(m) > 0
+        self.rng = np.random.default_rng(seed)
+        self.bottoms = []          # pontos de onde a gosma pode escorrer
 
     @staticmethod
     def _shift(m, dx, dy):
@@ -50,34 +47,77 @@ class Canvas:
         out[ys0 + dy:ys1 + dy, xs0 + dx:xs1 + dx] = m[ys0:ys1, xs0:xs1]
         return out
 
-    def _dilate(self, m):
-        o = m.copy()
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            o |= self._shift(m, dx, dy)
-        return o
+    def _mask(self, shapes):
+        m = Image.new("L", (FW, FH), 0)
+        d = ImageDraw.Draw(m)
+        for kind, a in shapes:
+            if kind == "c":
+                x, y, r = a
+                d.ellipse([x - r, y - r, x + r, y + r], fill=255)
+            else:
+                d.polygon([tuple(q) for q in a], fill=255)
+        return np.array(m) > 0
 
-    def part(self, draw_fn, base, dark=None, light=None, sep=None, shade=1):
-        m = self._mask(draw_fn)
+    def lump(self, p0, p1, r0, r1, n=None, wob=0.32):
+        """Um pedaço de gosma de p0 a p1: uma fila de bolas de raio irregular."""
+        ln = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+        n = n or max(3, int(ln / 2.5))
+        out = []
+        for i in range(n + 1):
+            t = i / n
+            r = (r0 + (r1 - r0) * t) * (1.0 + self.rng.uniform(-wob, wob))
+            q = lerp(p0, p1, t)
+            j = self.rng.uniform(-0.5, 0.5, 2)
+            out.append(("c", (q[0] + j[0], q[1] + j[1], max(0.8, r))))
+        return out
+
+    def part(self, shapes, base, dark, drip=True):
+        """Cor chapada; a borda de baixo um tom mais escura (a gosma pesa para baixo)."""
+        m = self._mask(shapes)
         if not m.any():
             return m
-        if sep is not None:
-            ring = self._dilate(m) & ~m & (self.img[:, :, 3] > 0)
-            self.img[ring] = sep
         self.img[m] = base
-        if dark is not None:
-            self.img[m & ~self._shift(m, -shade, -shade)] = dark
-        if light is not None:
-            self.img[m & ~self._shift(m, 1, 1)] = light
+        under = m & ~self._shift(m, 0, -2)
+        self.img[under] = dark
+        if drip:
+            ys, xs = np.nonzero(m & ~self._shift(m, 0, -1))
+            for k in range(len(xs)):
+                self.bottoms.append((int(xs[k]), int(ys[k]), base, dark))
         return m
+
+    def px(self, x, y, col):
+        x, y = int(round(x)), int(round(y))
+        if 0 <= x < FW and 0 <= y < FH:
+            self.img[y, x] = col
 
     def line(self, p0, p1, col, w=1):
         im = Image.fromarray(self.img, "RGBA")
         ImageDraw.Draw(im).line([tuple(p0), tuple(p1)], fill=col, width=w)
         self.img = np.array(im)
 
-    def outline(self):
-        sil = self.img[:, :, 3] > 0
-        self.img[self._dilate(sil) & ~sil] = INK
+    def goo(self, n, ground=GROUND, wind=0.0):
+        """Gosma escorrendo das bordas de baixo: fios de 1 px e gotas (algumas já soltas)."""
+        cand = [b for b in self.bottoms if b[1] < ground - 3]
+        if not cand:
+            return
+        for _ in range(n):
+            x, y, base, dark = cand[int(self.rng.integers(len(cand)))]
+            ln = int(self.rng.integers(2, 6))
+            for k in range(1, ln + 1):
+                self.px(x + wind * k, y + k, dark if k == ln else base)
+            if self.rng.random() < 0.5:
+                g = y + ln + int(self.rng.integers(2, 5))
+                if g < ground:
+                    self.px(x + wind * ln, g, base)
+                    self.px(x + wind * ln, g + 1, dark)
+
+    def wet(self, n):
+        sil = (self.img[:, :, 3] > 0) & (self.img[:, :, 0] == GOO[0])
+        ys, xs = np.nonzero(sil & self._shift(sil, 0, 1) & self._shift(sil, 1, 0))
+        for _ in range(n):
+            if len(xs):
+                k = int(self.rng.integers(len(xs)))
+                self.img[ys[k], xs[k]] = WET
 
 
 def ell(c, rx, ry):
@@ -125,7 +165,7 @@ TORSO = 21.0
 
 
 def draw_senzi(p):
-    cv = Canvas()
+    cv = Canvas(p.get("seed", 0))
     hip = p["hip"]
     tilt = p["tilt"]          # inclinação do tronco: 0 em pé; ~0.85 na corrida
 
@@ -133,91 +173,70 @@ def draw_senzi(p):
         return add(hip, rot((dx, dy), tilt))
 
     neck = U(1.0, -TORSO)
-    sh_b = U(-2.0, -TORSO + 2.0)
-    sh_f = U(2.5, -TORSO + 2.5)
+    sh_b = U(-1.5, -TORSO + 3.0)
+    sh_f = U(2.0, -TORSO + 3.5)
 
     def leg(lg, front):
         knee = add(hip, polar(lg[0], THIGH))
         foot = add(knee, polar(lg[1], CALF))
-        base = SKIN if front else SKIN_D
-        lt = SKIN_L if front else None
-        sep = SKIN_D if front else None
-        cv.part(cap(hip, knee, 5.4, 3.3), base, SKIN_D, lt, sep=sep)          # coxa de velocista
-        cv.part(ell(lerp(hip, knee, 0.4), 4.6, 4.6), base, SKIN_D, lt)       # o quadríceps
-        cv.part(cap(knee, foot, 3.2, 1.9), base, SKIN_D, lt, sep=sep)
-        calf_c = lerp(knee, foot, 0.3)
-        cv.part(ell(add(calf_c, rot((-1.6, 0), lg[1])), 2.2, 3.4), base, SKIN_D, lt)
         fa = lg[2] if len(lg) > 2 else 0.0
-        toe = add(foot, rot((7.5, 0.0), fa))
-        cv.part(cap(add(foot, (-1.5, 0)), toe, 2.0, 1.2), SKIN_D, None, None, sep=sep)
-        if front:
-            cv.line(lerp(hip, knee, 0.25), lerp(hip, knee, 0.75), SKIN_D)
+        toe = add(foot, rot((5.0, 0.0), fa))
+        sh = cv.lump(hip, knee, 5.0, 3.4) + cv.lump(knee, foot, 3.2, 2.2) + cv.lump(add(foot, (-1.0, 0)), toe, 2.4, 1.8, n=3)
+        cv.part(sh, GOO if front else GOO_B, GOO_D if front else GOO_B_D)
 
     def arm(a, sh, front):
         el = add(sh, polar(a[0], UPPER))
         hand = add(el, polar(a[1], FORE))
-        base = SKIN if front else SKIN_D
-        lt = SKIN_L if front else None
-        sep = SKIN_D if front else None
-        cv.part(cap(sh, el, 3.6, 2.7), base, SKIN_D, lt, sep=sep)
-        cv.part(cap(el, hand, 2.5, 1.9), base, SKIN_D, lt, sep=sep)
-        cv.part(ell(hand, 2.4, 2.2), base, SKIN_D, lt, sep=sep)
+        shp = cv.lump(sh, el, 3.4, 2.5) + cv.lump(el, hand, 2.4, 2.0) + [("c", (hand[0], hand[1], 2.6))]
+        cv.part(shp, GOO if front else GOO_B, GOO_D if front else GOO_B_D)
 
     arm(p["arm_b"], sh_b, False)
     leg(p["leg_b"], False)
 
-    torso = [U(-4.5, 2.0), U(-5.5, -10.0), U(-5.5, -TORSO + 1.0), U(1.0, -TORSO - 1.5),
-             U(7.0, -TORSO + 2.0), U(7.5, -13.0), U(4.5, -5.0), U(3.5, 2.0)]
-    cv.part(ell(U(-3.0, 0.5), 5.0, 4.4), SKIN, SKIN_D, SKIN_L)   # o glúteo
-    cv.part(poly(torso), SKIN, SKIN_D, SKIN_L)
-    cv.line(U(1.0, -14.0), U(6.0, -14.5), SKIN_D)
-    cv.line(U(3.0, -12.5), U(3.5, -2.0), SKIN_D)
-    for y in (-10.0, -7.0, -4.0):
-        cv.line(U(2.0, y), U(5.0, y), SKIN_D)
-    cv.line(U(-3.5, -9.0), U(-1.0, -3.0), SKIN_D)
+    # o tronco: um saco mole, mais largo em cima, que escorre
+    tor = cv.lump(U(0.0, 1.0), U(1.0, -TORSO + 2.0), 5.6, 6.4, wob=0.18)
+    tor += [("c", add(U(-2.5, -1.0), (0, 0)) + (5.0,)), ("c", U(3.5, -TORSO + 5.0) + (5.0,))]
+    cv.part(tor, GOO, GOO_D)
 
     leg(p["leg_f"], True)
 
+    # o pescoço de caramujo, calombudo
     nd = p.get("neck", 0.0)
     seg = [neck]
     ang = tilt + 0.55 + nd
     for i, ln in enumerate((5.0, 5.0, 4.5)):
         a_ = ang + i * (0.18 + nd * 0.5)
         seg.append(add(seg[-1], (math.sin(a_) * ln, -math.cos(a_) * ln)))
+    nk = []
     for i in range(3):
-        r0 = 3.6 - i * 0.4
-        cv.part(cap(seg[i], seg[i + 1], r0, r0 - 0.4), SKIN, SKIN_D, SKIN_L)
-        mid = lerp(seg[i], seg[i + 1], 0.5)
-        cv.part(ell(add(mid, (-0.8, -1.2)), r0 * 0.75, r0 * 0.6), SKIN, SKIN_D, SKIN_L)
+        nk += cv.lump(seg[i], seg[i + 1], 3.8 - i * 0.5, 3.3 - i * 0.5, n=3, wob=0.25)
     tip = seg[-1]
-    cv.part(ell(add(tip, (1.5, 0.5)), 3.6, 3.0), SKIN, SKIN_D, SKIN_L)
-    face = p.get("face", "")
-    mouth = add(tip, (4.0, 1.2))
-    if face == "roar":
-        cv.part(ell(mouth, 2.0, 2.6), MOUTH)
-        cv.line(add(mouth, (-1, -2)), add(mouth, (1, -2)), SHINE)
+    nk.append(("c", (tip[0] + 1.2, tip[1] + 0.5, 3.0)))
+    cv.part(nk, GOO, GOO_D)
+    if p.get("face", "") == "roar":
+        m = add(tip, (3.6, 1.0))
+        for dx, dy in ((0, 0), (0, 1), (1, 0), (1, 1), (0, 2)):
+            cv.px(m[0] + dx, m[1] + dy, MOUTH)
+    # dois tentáculos moles (como os dos caramujos de enfeite, mas sem olhos)
     sway = p.get("tent", 0.0)
-    for k, (ox, ln) in enumerate(((0.5, 8.0), (2.8, 9.5))):
+    for k, (ox, ln) in enumerate(((0.5, 7.0), (2.6, 8.5))):
         q = [add(tip, (ox + 1.0, -1.5))]
         a0 = 0.9 + k * 0.25 + sway
-        for j in range(1, 6):
-            a_ = a0 + j * (0.32 + p.get("droop", 0.0))
-            q.append(add(q[-1], (math.sin(a_) * ln / 5.0, -math.cos(a_) * ln / 5.0)))
+        for j in range(1, 5):
+            a_ = a0 + j * (0.34 + p.get("droop", 0.0))
+            q.append(add(q[-1], (math.sin(a_) * ln / 4.0, -math.cos(a_) * ln / 4.0)))
         for j in range(len(q) - 1):
-            cv.line(q[j], q[j + 1], SKIN_D if k == 0 else SKIN, 2 if j < 2 else 1)
-    hat = add(tip, (-1.0, -3.6))
-    cv.part(ell(hat, 4.6, 3.8), SHELL, SHELL_D, SHELL_L)
-    pts = []
-    for i in range(24):
-        a_ = i * 0.48 + 2.4
-        r_ = 3.5 - i * 0.14
-        pts.append((hat[0] + math.cos(a_) * r_ * 1.15, hat[1] + math.sin(a_) * r_))
-    for i in range(len(pts) - 1):
-        cv.line(pts[i], pts[i + 1], SHELL_D)
-    cv.line(lerp(seg[0], seg[1], 0.3), lerp(seg[1], seg[2], 0.6), SKIN_L)
+            cv.line(q[j], q[j + 1], GOO_D if k == 0 else GOO, 1)
+    # a concha: a mesma dos caramujos de enfeite, um pouco maior, de chapéu
+    hat = add(tip, (-1.0, -3.4))
+    cv.part([("c", (hat[0], hat[1], 4.3))], SHELL, SHELL, drip=False)
+    cv.part([("c", (hat[0] - 0.3, hat[1] + 0.3, 2.5))], SHELL_D, SHELL_D, drip=False)
+    cv.px(hat[0] - 0.5, hat[1] - 0.5, SHELL_L)
+    cv.px(hat[0] - 2.5, hat[1] - 2.5, SHELL_L)
 
     arm(p["arm_f"], sh_f, True)
-    cv.outline()
+    cv.goo(p.get("goo", 8), wind=p.get("wind", 0.0))
+    cv.wet(4)
     return cv.img
 
 
@@ -249,7 +268,7 @@ def run_pose(i):
         s = math.sin(a + k * math.pi)
         arms.append((tilt * 0.5 - s * 1.15, tilt * 0.5 - s * 1.15 + 1.4 + max(0.0, s) * 0.6))
     return {"hip": hip, "tilt": tilt, "leg_f": la, "leg_b": lb, "arm_f": arms[1], "arm_b": arms[0],
-            "neck": math.sin(a * 2) * 0.05, "tent": -0.35 + math.sin(a * 2) * 0.15}
+            "neck": math.sin(a * 2) * 0.05, "tent": -0.35 + math.sin(a * 2) * 0.15, "wind": -0.6, "goo": 7}
 
 
 def idle_pose(i):
@@ -323,7 +342,9 @@ def main():
     meta = {"frame": [FW, FH], "ground": GROUND, "anims": {}}
     for row, (name, n, fn) in enumerate(ANIMS):
         for i in range(n):
-            sheet.paste(Image.fromarray(draw_senzi(fn(i)), "RGBA"), (i * FW, row * FH))
+            pose = fn(i)
+            pose.setdefault("seed", row * 31 + i * 7 + 3)
+            sheet.paste(Image.fromarray(draw_senzi(pose), "RGBA"), (i * FW, row * FH))
         meta["anims"][name] = {"row": row, "frames": n}
     os.makedirs(os.path.join(ROOT, "art"), exist_ok=True)
     sheet.save(os.path.join(ROOT, "art", "senzi.png"))

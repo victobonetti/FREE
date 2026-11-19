@@ -3426,8 +3426,10 @@ func test_senzi() -> void:
 	check(m.state == "punch", "chegando no coelho, ele carrega o soco")
 	idle(m.PUNCH_WIND + 2)
 	check(m.lives == m.LIVES - 1 and m.fly_t > 0, "o soco tira um coração e o coelho sai voando")
-	idle(40)
-	check(room.rabbit.pos.x > x0 + 100, "voa longe, para o outro lado (%d -> %d)" % [x0, room.rabbit.pos.x])
+	check(room.orientation != 0, "e a sala gira à força")
+	idle(60)
+	var dd: float = m.pos.distance_to(m._rabbit_c())
+	check(dd > 120.0, "o coelho vai parar do outro lado (%.0f px dele)" % dd)
 	check(m.walls.is_empty(), "quebrando o muro no caminho")
 	# a cada terço da barra: mais rápido (com uma pausa de raiva)
 	m.energy = m.ENERGY * 0.66
