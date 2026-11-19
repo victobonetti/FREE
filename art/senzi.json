@@ -24,6 +24,14 @@
 		"die": {
 			"row": 4,
 			"frames": 4
+		},
+		"leap": {
+			"row": 5,
+			"frames": 3
+		},
+		"punch": {
+			"row": 6,
+			"frames": 4
 		}
 	}
 }

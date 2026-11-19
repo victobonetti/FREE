@@ -283,7 +283,38 @@ def die_pose(i):
             "neck": 0.5 * k, "tent": 0.4 * k, "droop": 0.2 * k}
 
 
-ANIMS = [("run", 8, run_pose), ("idle", 4, idle_pose), ("flex", 6, flex_pose), ("throw", 4, throw_pose), ("die", 4, die_pose)]
+def leap_pose(i):
+    """0: agachado, mãos nos joelhos (o aviso); 1 e 2: a cambalhota, encolhido, mãos nos joelhos."""
+    if i == 0:
+        legs = [(1.1, -0.35, -0.1), (0.8, -0.6, 0.0)]
+        hip = stand_hip(legs, x=38.0)
+        return {"hip": hip, "tilt": 0.95, "leg_f": legs[0], "leg_b": legs[1],
+                "arm_f": (0.1, -0.05), "arm_b": (0.0, -0.1), "neck": 0.3, "tent": -0.1}
+    sq = 0.12 if i == 2 else 0.0
+    legs = [(2.55 + sq, 0.35 + sq, 1.2), (2.4 + sq, 0.2 + sq, 1.1)]
+    return {"hip": (40.0, 66.0), "tilt": 0.55 + sq, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (0.75, 0.05), "arm_b": (0.65, -0.05), "neck": 0.75, "tent": -0.6 - sq, "droop": -0.05}
+
+
+def punch_pose(i):
+    """0: carrega (o punho atrás); 1: o soco, o braço esticado; 2: segura; 3: volta."""
+    if i == 0:
+        legs = [(0.55, 0.15, -0.1), (-0.5, -0.45)]
+        return {"hip": stand_hip(legs, 2.0, x=40.0), "tilt": 0.2, "leg_f": legs[0], "leg_b": legs[1],
+                "arm_f": (-1.25, 1.2), "arm_b": (0.9, 2.3), "neck": -0.1, "tent": 0.3}
+    if i in (1, 2):
+        legs = [(0.75, 0.05, -0.1), (-0.85, -0.7, 0.3)]
+        ext = 0.0 if i == 1 else 0.06
+        return {"hip": stand_hip(legs, 1.0, x=40.0), "tilt": 0.55, "leg_f": legs[0], "leg_b": legs[1],
+                "arm_f": (1.62 - ext, 1.6 - ext), "arm_b": (-0.9, 0.2), "neck": 0.15, "tent": -0.45 - ext * 3,
+                "face": "roar" if i == 1 else ""}
+    legs = [(0.5, 0.15, -0.1), (-0.5, -0.35)]
+    return {"hip": stand_hip(legs, x=42.0), "tilt": 0.3, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (0.9, 1.9), "arm_b": (-0.4, 0.3), "neck": 0.05, "tent": -0.1}
+
+
+ANIMS = [("run", 8, run_pose), ("idle", 4, idle_pose), ("flex", 6, flex_pose), ("throw", 4, throw_pose), ("die", 4, die_pose),
+         ("leap", 3, leap_pose), ("punch", 4, punch_pose)]
 
 
 def main():

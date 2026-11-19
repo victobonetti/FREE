@@ -3392,7 +3392,7 @@ func test_senzi() -> void:
 	wait_rot_ready()
 	tick({"rotate": 1})
 	idle(20)
-	check(m.state == "berserk" and m.body_rect().grow(2.0).intersects(m._path().grow(0.5)) , "na fúria, girar não o derruba (continua grudado no contorno)")
+	check(m._stuck() and m.body_rect().grow(2.0).intersects(m._path().grow(0.5)) , "na fúria, girar não o derruba (continua grudado no contorno)")
 	# energia cai com o tempo e mais a cada muro quebrado
 	m = _senzi()
 	idle(40)
@@ -3408,6 +3408,27 @@ func test_senzi() -> void:
 	m.walls.append({"rect": w, "n": Vector2(0, -1), "age": 0})
 	check(room.solid_static(Rect2i(104, 104, 4, 4)), "o muro de cogumelo é sólido para o coelho")
 	m.walls.clear()
+	# alcançou o coelho: o soco joga ele longe, quebrando os muros no caminho
+	m = _senzi()
+	while m.state != "berserk":
+		tick()
+	m.dir = 1.0
+	m.pos = m._pt_of(m._u_of(Vector2(80, 1000)))
+	room.rabbit.pos = Vector2i(int(m.pos.x) + 18, int(m._inner().end.y) - 12)
+	room.rabbit.vel = Vector2.ZERO
+	var wall := Rect2i(int(m.pos.x) + 70, int(m._inner().end.y) - 20, 12, 20)
+	m.walls.append({"rect": wall, "n": Vector2(0, -1), "age": 0})
+	var x0: int = room.rabbit.pos.x
+	var n2 := 0
+	while m.state != "punch" and n2 < 30:
+		tick()
+		n2 += 1
+	check(m.state == "punch", "chegando no coelho, ele carrega o soco")
+	idle(m.PUNCH_WIND + 2)
+	check(m.lives == m.LIVES - 1 and m.fly_t > 0, "o soco tira um coração e o coelho sai voando")
+	idle(40)
+	check(room.rabbit.pos.x > x0 + 100, "voa longe, para o outro lado (%d -> %d)" % [x0, room.rabbit.pos.x])
+	check(m.walls.is_empty(), "quebrando o muro no caminho")
 	# a cada terço da barra: mais rápido (com uma pausa de raiva)
 	m.energy = m.ENERGY * 0.66
 	tick()

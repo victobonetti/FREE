@@ -21,7 +21,8 @@ const BODY := Vector2(30, 46)        # ao longo da superfície × para fora dela
 const SHEET := preload("res://art/senzi.png")
 const FRAME := Vector2(96, 96)
 const FEET := 94.0                   # a linha dos pés no quadro
-const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4]}
+const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4], "leap": [5, 3], "punch": [6, 4]}
+const TUCK := Vector2(8, -33)        # o centro da bola encolhida, a partir dos pés (o eixo da cambalhota)
 const STRIDE := 5.0                  # px corridos por quadro da corrida
 const SPEED := [62.0, 76.0, 90.0]    # px/s, por terço da barra gasto
 const TURN_DELAY := [34, 22, 14]     # quadros para dar meia-volta quando o coelho passa por ele
@@ -39,7 +40,14 @@ const R_POPS := [70, 92, 114]
 const R_ROAR := 114
 const LEAP_EVERY := 170
 const LEAP_WARN := 30
-const LEAP_FRAMES := 26
+const LEAP_FRAMES := 30
+const LEAP_HIGH := 58.0              # altura da cambalhota
+const PUNCH_REACH := 40.0            # alcance do soco, à frente do centro dele
+const PUNCH_WIND := 8                # quadros carregando o soco (dá para escapar)
+const PUNCH_FRAMES := 34
+const PUNCH_SPEED := 520.0           # px/s, o coelho voando
+const PUNCH_LIFT := 150.0
+const FLY_FRAMES := 70               # quadros em que o coelho voando quebra o que encontra
 const BELL_EVERY := 140
 const RAGE_FRAMES := 45              # a pausa de raiva ao passar de um terço da barra
 const DIE_FRAMES := 150
@@ -81,6 +89,7 @@ var pop_flash := 0             # clarão branco da revelação
 var phase := 0
 var run_dist := 0.0            # px corridos (o quadro da corrida segue a distância, não o tempo)
 var throw_t := 0               # quadros da animação de arremesso do haltere
+var fly_t := 0                 # o coelho voando do soco
 
 
 static func replay_state() -> Dictionary:
@@ -100,6 +109,7 @@ func on_reset(r) -> void:
 	vel = Vector2.ZERO
 	flash = 0
 	hud_hit = 0
+	fly_t = 0
 	if state == "dead":
 		r.door_unlocked = true
 		pos = Vector2(r.pw * 0.5, _inner().end.y - 3.0)
@@ -149,6 +159,8 @@ func absorb_kill(r) -> bool:
 
 ## Os muros de cogumelo são sólidos (para o coelho).
 func blocks(r: Rect2i) -> bool:
+	if fly_t > 0:
+		return false   # o coelho voando do soco atravessa (e quebra) os muros
 	for w in walls:
 		if r.intersects(w["rect"]):
 			return true
@@ -248,7 +260,7 @@ func body_rect() -> Rect2:
 
 
 func _stuck() -> bool:
-	return state in ["berserk", "rage", "leap_warn", "lurk", "reveal"]
+	return state in ["berserk", "rage", "leap_warn", "punch", "lurk", "reveal"]
 
 
 func _rabbit_c() -> Vector2:
@@ -256,7 +268,7 @@ func _rabbit_c() -> Vector2:
 
 
 func fighting() -> bool:
-	return state in ["berserk", "rage", "leap_warn", "leap"]
+	return state in ["berserk", "rage", "leap_warn", "leap", "punch"]
 
 
 ## O terço da barra em que ele está: 0 (cheia), 1, 2 (o fim).
@@ -277,7 +289,9 @@ func step(r) -> void:
 	if r.state != "play":
 		return
 	t += 1
+	room.invuln = maxi(room.invuln - 1, 0)
 	_update_bells()
+	_update_fly()
 	match state:
 		"lurk":
 			# um caramujo um pouco maior, passeando devagar
@@ -326,7 +340,7 @@ func step(r) -> void:
 				r.sfx.emit("gatsby_dash")
 		"leap":
 			var k := clampf(float(t) / LEAP_FRAMES, 0.0, 1.0)
-			pos = leap_from.lerp(leap_to, k) + Vector2(0, -sin(k * PI) * 36.0)
+			pos = leap_from.lerp(leap_to, k) + Vector2(0, -sin(k * PI) * LEAP_HIGH)
 			_hit_rabbit()
 			_smash_walls()
 			if t >= LEAP_FRAMES:
@@ -335,6 +349,8 @@ func step(r) -> void:
 				t = 0
 				r.shake = maxf(r.shake, 3.0)
 				r.sfx.emit("slam")
+		"punch":
+			_punch()
 		"rage":
 			# passou de um terço da barra: para, flexiona e ruge; volta mais rápido
 			_hit_rabbit()
@@ -383,7 +399,14 @@ func _berserk() -> void:
 		u += dir * float(SPEED[ph]) / 60.0
 		run_dist += float(SPEED[ph]) / 60.0
 	pos = _pt_of(u)
-	_hit_rabbit()
+	if _in_reach(PUNCH_REACH * 0.8):
+		state = "punch"
+		t = 0
+		var along := (_rabbit_c() - pos).dot(_ahead())
+		if along < -2.0:
+			dir = -dir   # vira para o coelho
+		room.sfx.emit("lock_on")
+		return
 	_smash_walls()
 	# muros de cogumelo no caminho do coelho
 	wall_t += 1
@@ -415,6 +438,78 @@ func _berserk() -> void:
 		flash = 24
 		walls.clear()
 		room.sfx.emit("lock_on")
+
+
+## O vetor ao longo da superfície, no sentido em que ele corre.
+func _ahead() -> Vector2:
+	var n := _surf_n()
+	return Vector2(-n.y, n.x) * dir
+
+
+## O coelho está ao alcance do soco (à frente dele, na altura do corpo)?
+func _in_reach(reach: float) -> bool:
+	if room.invuln > 0 or fly_t > 0:
+		return false
+	# pela distância (e não só à frente): no canto, encurralado, o coelho também apanha
+	return pos.distance_to(_rabbit_c()) < reach
+
+
+## O soco: carrega, estoura (o coelho voa para o outro lado, quebrando tudo), segura e volta.
+func _punch() -> void:
+	if t == PUNCH_WIND:
+		room.sfx.emit("blast")
+		if _in_reach(PUNCH_REACH):
+			var lives0 := lives
+			room.kill()   # um coração (ou a morte, no último)
+			if lives < lives0 and lives > 0:
+				var rb = room.rabbit
+				# para o outro lado da sala, um pouco para o alto (sai do chão)
+				var side := 1.0 if _rabbit_c().x < _inner().get_center().x else -1.0
+				rb.vel = Vector2(side * PUNCH_SPEED, -PUNCH_LIFT)
+				rb.launched = true
+				rb.on_ground = false
+				rb.var_jump = 0
+				rb.coyote = 0
+				fly_t = FLY_FRAMES
+				room.shake = maxf(room.shake, 10.0)
+				room.impact.emit(4.0)
+				var c := _rabbit_c()
+				room.particles.append({"pos": c, "vel": Vector2.ZERO, "life": 12, "col": Color(1, 1, 1, 0.9), "grav": 0.0, "ring": 6.0})
+				for i in 18:
+					var a := rng.randf() * TAU
+					room.particles.append({"pos": c, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(60.0, 200.0),
+						"life": rng.randi_range(10, 22), "col": Color("efeadf") if i % 2 else C_MUSCLE, "grav": 120.0})
+	if t >= PUNCH_FRAMES:
+		state = "berserk"
+		t = 0
+
+
+## O coelho voando do soco: quebra os muros que encontra e deixa um rastro; a sala treme.
+func _update_fly() -> void:
+	if fly_t <= 0:
+		return
+	fly_t -= 1
+	var rb = room.rabbit
+	if fly_t < FLY_FRAMES - 6 and rb.on_ground:
+		fly_t = 0
+		return
+	var rr := Rect2(rb.rect).grow(3.0)
+	var keep: Array = []
+	for w in walls:
+		if rr.intersects(Rect2(w["rect"])):
+			room.shake = maxf(room.shake, 7.0)
+			room.impact.emit(2.0)
+			room.sfx.emit("crunch")
+			var c := Rect2(w["rect"]).get_center()
+			for i in 16:
+				room.particles.append({"pos": c, "vel": Vector2(rng.randf_range(-140, 140), -rng.randf_range(20, 160)),
+					"life": rng.randi_range(14, 28), "col": Color("9b6bc4") if i % 2 else Color("cfc6d8"), "grav": 300.0})
+		else:
+			keep.append(w)
+	walls = keep
+	room.shake = maxf(room.shake, 3.0 + fly_t * 0.06)
+	if fly_t % 2 == 0:
+		room.particles.append({"pos": _rabbit_c(), "vel": Vector2.ZERO, "life": 10, "col": Color(1, 1, 1, 0.5), "grav": 0.0})
 
 
 func _hit_rabbit() -> void:
@@ -633,14 +728,23 @@ func _draw_snail(base: Transform2D) -> void:
 	var anim_name := "idle"
 	var fr := (anim / 9) % 4
 	match state:
-		"berserk", "leap":
+		"leap":
+			anim_name = "leap"
+			fr = 1 + (anim / 4) % 2
+		"berserk":
 			if throw_t > 0:
 				anim_name = "throw"
 				fr = clampi((16 - throw_t) / 4, 0, 3)
 			else:
 				anim_name = "run"
 				fr = int(run_dist / STRIDE) % 8
-		"leap_warn", "rage":
+		"leap_warn":
+			anim_name = "leap"
+			fr = 0
+		"punch":
+			anim_name = "punch"
+			fr = 0 if t < PUNCH_WIND else (1 if t < PUNCH_WIND + 5 else (2 if t < PUNCH_WIND + 14 else 3))
+		"rage":
 			anim_name = "flex"
 			fr = mini(t / 4, 2) if t < 8 else 2 + (t / 5) % 4
 		"reveal":
@@ -655,6 +759,12 @@ func _draw_snail(base: Transform2D) -> void:
 	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO))
 	var src := Rect2(Vector2(fr, row) * FRAME, FRAME)
 	var hd := body_rect().size.y / 2.0 if (state == "dying" or state == "dead") else h
+	if state == "leap":
+		# a cambalhota: uma volta inteira, para a frente, em torno da bola encolhida
+		var k := clampf(float(t) / LEAP_FRAMES, 0.0, 1.0)
+		var c := Vector2(TUCK.x, hd + TUCK.y)
+		draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO)
+			* Transform2D(0.0, c) * Transform2D(k * TAU, Vector2.ZERO) * Transform2D(0.0, -c))
 	draw_texture_rect_region(SHEET, Rect2(Vector2(-FRAME.x / 2.0, hd - FEET), FRAME), src, mod)
 	draw_set_transform_matrix(base)
 
