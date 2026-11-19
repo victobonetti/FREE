@@ -2154,6 +2154,9 @@ func _draw_exits() -> void:
 func solid_static(r: Rect2i) -> bool:
 	if tile_solid_rect(r):
 		return true
+	for a in actors:
+		if a.has_method("blocks") and a.blocks(r):
+			return true   # sólidos de um ator (os muros de cogumelo do Senzi)
 	for ex in exits:
 		if not exit_open(ex) and overlaps(r, ex["rect"]):
 			return true

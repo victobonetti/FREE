@@ -1,0 +1,36 @@
+{
+	"name": "Senzi",
+	"rotate": true,
+	"limiter": false,
+	"start_rot": 0,
+	"version": 1,
+	"theme": "fungos",
+	"rows": [
+		"##############################",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#............................#",
+		"#.........................DD.#",
+		"#.........................DD.#",
+		"#.PP......................DD.#",
+		"#.PP......................DD.#",
+		"##############################",
+		"##############################",
+		"##############################"
+	],
+	"hint": "Fuja dele. Cansado, ele se solta: gire para jogá-lo no cogumelo vermelho",
+	"hint_touch": "Fuja dele. Cansado, ele se solta: gire para jogá-lo no cogumelo vermelho",
+	"notes": "Boss do ato 3 (D112): Senzi, o caramujo. Fúria grudado nas superfícies, muros de cogumelo, cansaço, cogumelos vermelhos e espinhos. Provado pelo teste-bot test_senzi_bot.",
+	"actors": [
+		"res://scripts/boss_snail.gd"
+	]
+}

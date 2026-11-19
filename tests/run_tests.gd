@@ -86,6 +86,8 @@ func _init() -> void:
 	test_mecha_screen_lock()
 	test_mecha_drop()
 	test_mecha_bot()
+	test_senzi()
+	test_senzi_bot()
 	print("")
 	if failures == 0:
 		print("TODOS OS TESTES PASSARAM")
@@ -2220,7 +2222,8 @@ func test_jeffrey_lives() -> void:
 ## lista quando ganhar um replay gravado no editor; fases novas só entram com replay.
 const BOT_IDS := ["passos", "degraus", "giro", "comporta", "derrame", "toca", "setas", "espinhos",
 	"prumo", "vertigem", "agua", "mare", "represa", "naufragio", "mergulho", "fuga", "jeffrey",
-	"a-mecha"]   # a mecha: provada por test_mecha_bot
+	"a-mecha",   # a mecha: provada por test_mecha_bot
+	"senzi"]     # o Senzi: provado por test_senzi_bot
 ## Fases na campanha ainda sem prova (a rota precisa ser refeita): aparecem no relatório, sem falhar.
 ## A corrida do Gatsby perdeu os giros programados (D88); a rota antiga dependia deles.
 const PENDING_PROOF := ["gatsby"]
@@ -3359,3 +3362,87 @@ func test_mecha_drop() -> void:
 	for i in 200:
 		tick()
 	check(m.lives == 2, "embaixo dela, a queda acerta (um coração só: vidas %d)" % m.lives)
+
+
+# ------------------------------------------------------------ boss do ato 3: Senzi, o caramujo (D112)
+
+func _senzi(skip_intro := true) -> Variant:
+	var BossSnail = load("res://scripts/boss_snail.gd")
+	BossSnail.intro_seen = skip_intro
+	load_def(JSON.parse_string(FileAccess.get_file_as_string("res://levels/wip/senzi.json")))
+	return room.actors[0]
+
+
+func test_senzi() -> void:
+	print("Senzi: revelação, fúria grudada, muros, cansaço")
+	var m = _senzi(false)
+	check(m.state == "lurk", "começa como um caramujo comum")
+	var n := 0
+	while m.state == "lurk" and n < 600:
+		tick({"move": 1.0})
+		n += 1
+	check(m.state == "reveal" and room.input_lock, "chegando perto, ele se revela (a entrada trava na cena)")
+	n = 0
+	while m.state != "berserk" and n < 300:
+		tick()
+		n += 1
+	check(m.state == "berserk" and not room.input_lock, "e entra em fúria")
+	# grudado: girar não o solta
+	var u0: float = m._u_of(m.pos)
+	wait_rot_ready()
+	tick({"rotate": 1})
+	idle(20)
+	check(m.state == "berserk" and m.body_rect().grow(2.0).intersects(m._path().grow(0.5)) , "na fúria, girar não o derruba (continua grudado no contorno)")
+	# energia cai com o tempo e mais a cada muro quebrado
+	m = _senzi()
+	idle(40)
+	var e0: float = m.energy
+	idle(60)
+	check(m.energy < e0 and m.energy > e0 - 6.0, "a energia cai devagar com o tempo (%.1f -> %.1f)" % [e0, m.energy])
+	m.walls.append({"rect": Rect2i(m.body_rect()), "n": Vector2(0, -1), "age": 0})
+	var e1: float = m.energy
+	tick()
+	check(m.walls.is_empty() and m.energy < e1 - 10.0, "quebrar um muro gasta bem mais (%.1f -> %.1f)" % [e1, m.energy])
+	# muros são sólidos para o coelho
+	var w := Rect2i(100, 100, 12, 20)
+	m.walls.append({"rect": w, "n": Vector2(0, -1), "age": 0})
+	check(room.solid_static(Rect2i(104, 104, 4, 4)), "o muro de cogumelo é sólido para o coelho")
+	# cansado: solto; cogumelos vermelhos e espinhos aparecem
+	m.walls.clear()
+	m.energy = 0.01
+	idle(3)
+	check(m.state == "tired" and m.reds.size() == 3 and m.spikes_band != null, "sem energia: cansado, com cogumelos vermelhos e espinhos")
+	var ok := 0
+	for rd in m.reds:
+		if rd["ok"]:
+			ok += 1
+	check(ok == 1, "um cogumelo vermelho certo, alinhado com ele")
+	# tempo cansado acaba: ele se recupera
+	idle(m.TIRED + 5)
+	check(m.state == "berserk" and m.reds.is_empty() and m.spikes_band == null, "se demorar, ele se recupera")
+
+
+## Um bot que gira para o lado do cogumelo vermelho certo sempre que o Senzi cansa (as vidas do
+## coelho são repostas: só interessa o giro).
+func test_senzi_bot() -> void:
+	print("Senzi: girar na hora certa vence")
+	var m = _senzi()
+	var i := 0
+	var turned := false
+	while m.hearts > 0 and i < 40000:
+		var r := 0
+		if m.state == "tired" and not turned and m.t > 20 and not room.rotating and room.rot_lock == 0:
+			for rd in m.reds:
+				if rd["ok"]:
+					var nn: Vector2 = rd["n"]
+					r = -1 if nn.x > 0.5 else (1 if nn.x < -0.5 else 0)
+			turned = r != 0
+		if m.state != "tired":
+			turned = false
+		m.lives = m.LIVES
+		tick({"rotate": r})
+		i += 1
+	print("  %d quadros (%.0f s)" % [i, i / 60.0])
+	check(m.hearts == 0, "o bot tira os 3 corações do Senzi")
+	idle(m.DIE_FRAMES + 60)
+	check(room.door_unlocked, "a porta destrava")

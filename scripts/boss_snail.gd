@@ -1,0 +1,815 @@
+extends Node2D
+## Boss do ato 3: Senzi, o caramujo (D112). Ator da sala (campo "actors"): a sala chama step(room) a
+## cada quadro, on_reset(room) quando reinicia e on_rotate(room, dir) quando gira.
+##
+## Parece só um caramujo um pouco maior, andando devagar. Chegando perto, ele se revela: incha em três
+## trancos e vira um caramujo enorme e marombado, em fúria.
+##
+## A regra da luta: com raiva, ele fica GRUDADO na superfície (anda pelo chão, sobe as paredes, anda
+## no teto; girar a sala não o derruba). Cansado, ele se SOLTA e cai com a gravidade.
+##   - Fúria: persegue o coelho pelo contorno da sala; encostar nele tira um coração do coelho. Muros
+##     de cogumelo brotam no caminho do coelho (o coelho pula; ele atravessa na força bruta). A energia
+##     dele cai com o tempo (devagar) e a cada muro quebrado (bem mais).
+##   - Cansado (energia zero): desaba, ofegante, solto. Aparecem cogumelos vermelhos nas paredes e uma
+##     faixa de espinhos. Girando a sala, ele cai; num cogumelo vermelho, é arremessado para longe da
+##     parede dele, e o certo o joga nos espinhos: ele perde um coração. Se demorar, ele se recupera.
+##   - A cada coração perdido ele fica mais rápido. Com 2: às vezes pula para a frente do coelho ou
+##     vira de repente (pisca e grunhe antes). Com 1: também arremessa halteres.
+## O dano no coelho vem só do corpo dele (na fúria), dos halteres e dos espinhos. 3 corações do coelho
+## nesta sala, como na mecha.
+
+const LIVES := 3
+const HEARTS := 3
+const INVULN := 60
+const BODY := Vector2(26, 20)        # ao longo da superfície × para fora dela
+const SPEED := [40.0, 56.0, 70.0]    # px/s na fúria, por coração perdido
+const TURN_DELAY := [34, 22, 14]     # quadros para dar meia-volta quando o coelho passa por ele
+const ENERGY := 100.0
+const DRAIN := [3.2, 3.6, 4.0]       # energia por segundo, só de correr
+const WALL_COST := 20.0              # energia por muro quebrado
+const WALL_EVERY := [105, 92, 80]    # quadros entre dois muros
+const WALL_MAX := 3
+const WALL_LIFE := 600
+const WALL_SIZE := Vector2(12, 20)   # largura × altura, de pé no chão
+const TIRED := 300                   # quadros cansado (a janela)
+const FLING := 560.0                 # px/s, o arremesso do cogumelo vermelho
+const GRAV := 700.0
+const REVEAL := 110
+const LEAP_EVERY := 170
+const LEAP_WARN := 30
+const LEAP_FRAMES := 26
+const BELL_EVERY := 140
+const HURT_FRAMES := 70
+const DIE_FRAMES := 150
+
+const C_SKIN := Color("d9bfa3")
+const C_SKIN_DARK := Color("a98c74")
+const C_MUSCLE := Color("eed6bd")
+const C_SHELL := Color("8a5f9e")
+const C_SHELL_DARK := Color("5e3f70")
+const C_SHELL_LINE := Color("c9a6dd")
+const C_BAND := Color("e0384e")
+const C_RED_CAP := Color("d9384a")
+const C_HEART := Color("e0657c")
+const C_HEART_EMPTY := Color(1, 1, 1, 0.18)
+const C_ENERGY := Color("b98ee0")
+const C_SPIKE := Color("ff6f8e")
+
+static var intro_seen := false
+
+var room
+var rng := RandomNumberGenerator.new()
+var state := "lurk"
+var t := 0
+var anim := 0
+var pos := Vector2.ZERO        # centro do corpo, px da sala atual
+var vel := Vector2.ZERO        # cansado / arremessado
+var dir := 1.0                 # sentido no contorno (+1 / -1)
+var turn_t := 0
+var hearts := HEARTS
+var lives := LIVES
+var energy := ENERGY
+var walls: Array = []          # {"rect": Rect2i, "n": Vector2 (normal da face onde nasceu), "age"}
+var reds: Array = []           # {"rect": Rect2i, "n": Vector2, "ok": bool}
+var spikes_band = null         # {"rect": Rect2i, "n": Vector2} ou null
+var bells: Array = []          # {"pos", "vel", "age", "bounced"}
+var wall_t := 0
+var leap_t := 0
+var bell_t := 0
+var leap_from := Vector2.ZERO
+var leap_to := Vector2.ZERO
+var flash := 0
+var hud_hit := 0
+var bar_hit := 0
+var flung_n := Vector2.ZERO    # para onde o arremesso vai (a normal da face do cogumelo)
+
+
+static func replay_state() -> Dictionary:
+	return {"intro_seen": intro_seen}
+
+
+static func apply_replay_state(d: Dictionary) -> void:
+	intro_seen = bool(d.get("intro_seen", false))
+
+
+func on_reset(r) -> void:
+	room = r
+	r.input_lock = false
+	rng.seed = 20261119
+	walls.clear()
+	reds.clear()
+	bells.clear()
+	spikes_band = null
+	vel = Vector2.ZERO
+	flash = 0
+	hud_hit = 0
+	if hearts <= 0 and state == "dead":
+		r.door_unlocked = true
+		pos = Vector2(r.pw * 0.5, _inner().end.y - 3.0)
+		return
+	hearts = HEARTS
+	lives = LIVES
+	energy = ENERGY
+	wall_t = 0
+	leap_t = 0
+	bell_t = 0
+	t = 0
+	var inn := _inner()
+	pos = Vector2(inn.position.x + inn.size.x * 0.72, inn.end.y - 3.0)
+	dir = -1.0
+	state = "lurk" if not intro_seen else "reveal"
+	if state == "reveal":
+		t = REVEAL - 30   # já visto: a revelação é curta
+
+
+func on_rotate(r, d: int) -> void:
+	pos = r._rot_point(pos, d)
+	vel = _rv(vel, d)
+	leap_from = r._rot_point(leap_from, d)
+	leap_to = r._rot_point(leap_to, d)
+	flung_n = _rv(flung_n, d)
+	for w in walls:
+		w["rect"] = r._rot_rect(w["rect"], d)
+		w["n"] = _rv(w["n"], d)
+	for rd in reds:
+		rd["rect"] = r._rot_rect(rd["rect"], d)
+		rd["n"] = _rv(rd["n"], d)
+	if spikes_band != null:
+		spikes_band["rect"] = r._rot_rect(spikes_band["rect"], d)
+		spikes_band["n"] = _rv(spikes_band["n"], d)
+	for b in bells:
+		b["pos"] = r._rot_point(b["pos"], d)
+		b["vel"] = _rv(b["vel"], d)
+
+
+static func _rv(v: Vector2, d: int) -> Vector2:
+	return Vector2(-v.y, v.x) if d > 0 else Vector2(v.y, -v.x)
+
+
+func absorb_kill(r) -> bool:
+	lives -= 1
+	hud_hit = 50
+	if lives <= 0:
+		return false
+	r.invuln = INVULN
+	r.shake = maxf(r.shake, 3.0)
+	r.sfx.emit("death")
+	return true
+
+
+## Os muros de cogumelo são sólidos (para o coelho).
+func blocks(r: Rect2i) -> bool:
+	for w in walls:
+		if r.intersects(w["rect"]):
+			return true
+	return false
+
+
+# ---------------------------------------------------------------- medidas
+
+## O vão da sala (o retângulo de ar), na sala de agora.
+func _inner() -> Rect2:
+	var gw: int = room.gw
+	var gh: int = room.gh
+	var x0 := gw
+	var y0 := gh
+	var x1 := 0
+	var y1 := 0
+	for r in gh:
+		for c in gw:
+			if room.tiles[r * gw + c] == 0:
+				x0 = mini(x0, c)
+				y0 = mini(y0, r)
+				x1 = maxi(x1, c)
+				y1 = maxi(y1, r)
+	return Rect2(x0 * 8, y0 * 8, (x1 - x0 + 1) * 8, (y1 - y0 + 1) * 8)
+
+
+## O caminho do centro dele quando grudado: o vão encolhido de meia altura do corpo.
+func _path() -> Rect2:
+	return _inner().grow(-BODY.y / 2.0)
+
+
+func _u_len(p: Rect2) -> float:
+	return 2.0 * (p.size.x + p.size.y)
+
+
+## A posição no contorno (0 no canto de baixo à esquerda, correndo pelo chão, a parede da direita, o
+## teto e a parede da esquerda) do ponto do contorno mais perto de `q`.
+func _u_of(q: Vector2) -> float:
+	var p := _path()
+	var x := clampf(q.x, p.position.x, p.end.x)
+	var y := clampf(q.y, p.position.y, p.end.y)
+	var d_floor := absf(q.y - p.end.y)
+	var d_right := absf(q.x - p.end.x)
+	var d_ceil := absf(q.y - p.position.y)
+	var d_left := absf(q.x - p.position.x)
+	var m := minf(minf(d_floor, d_right), minf(d_ceil, d_left))
+	if m == d_floor:
+		return x - p.position.x
+	if m == d_right:
+		return p.size.x + (p.end.y - y)
+	if m == d_ceil:
+		return p.size.x + p.size.y + (p.end.x - x)
+	return 2.0 * p.size.x + p.size.y + (y - p.position.y)
+
+
+func _pt_of(u: float) -> Vector2:
+	var p := _path()
+	var L := _u_len(p)
+	u = fposmod(u, L)
+	if u < p.size.x:
+		return Vector2(p.position.x + u, p.end.y)
+	u -= p.size.x
+	if u < p.size.y:
+		return Vector2(p.end.x, p.end.y - u)
+	u -= p.size.y
+	if u < p.size.x:
+		return Vector2(p.end.x - u, p.position.y)
+	u -= p.size.x
+	return Vector2(p.position.x, p.position.y + u)
+
+
+## A normal (para dentro da sala) da superfície em que ele está grudado.
+func _surf_n() -> Vector2:
+	var p := _path()
+	var d_floor := absf(pos.y - p.end.y)
+	var d_right := absf(pos.x - p.end.x)
+	var d_ceil := absf(pos.y - p.position.y)
+	var d_left := absf(pos.x - p.position.x)
+	var m := minf(minf(d_floor, d_right), minf(d_ceil, d_left))
+	if m == d_floor:
+		return Vector2(0, -1)
+	if m == d_right:
+		return Vector2(-1, 0)
+	if m == d_ceil:
+		return Vector2(0, 1)
+	return Vector2(1, 0)
+
+
+func body_rect() -> Rect2:
+	var n := _surf_n() if _stuck() else Vector2(0, -1)
+	var sz := BODY if absf(n.y) > 0.5 else Vector2(BODY.y, BODY.x)
+	if state == "lurk":
+		sz = Vector2(10, 6)
+	return Rect2(pos - sz / 2.0, sz)
+
+
+func _stuck() -> bool:
+	return state == "berserk" or state == "leap_warn" or state == "lurk" or state == "reveal"
+
+
+func _rabbit_c() -> Vector2:
+	return Vector2(room.rabbit.pos) + Vector2(6, 6)
+
+
+func fighting() -> bool:
+	return state in ["berserk", "leap_warn", "leap", "tired", "flung", "hurt"]
+
+
+func _phase() -> int:
+	return clampi(HEARTS - hearts, 0, 2)
+
+
+# ---------------------------------------------------------------- simulação
+
+func step(r) -> void:
+	room = r
+	anim += 1
+	flash = maxi(flash - 1, 0)
+	hud_hit = maxi(hud_hit - 1, 0)
+	bar_hit = maxi(bar_hit - 1, 0)
+	if r.state != "play":
+		return
+	t += 1
+	_update_bells()
+	_update_spikes_touch()
+	match state:
+		"lurk":
+			# um caramujo um pouco maior, passeando devagar
+			var u := _u_of(pos) + dir * 8.0 / 60.0
+			var p := _path()
+			if u < 10.0 or u > p.size.x - 10.0:
+				dir = -dir
+			pos = _pt_of(u)
+			if pos.distance_to(_rabbit_c()) < 64.0:
+				state = "reveal"
+				t = 0
+				r.input_lock = true
+				r.allow_rotate = false
+		"reveal":
+			if t in [20, 45, 70]:
+				r.shake = maxf(r.shake, 2.0 + t / 30.0)
+				r.impact.emit(1.0 + t / 60.0)
+				r.sfx.emit("crunch")
+			if t >= REVEAL:
+				intro_seen = true
+				r.input_lock = false
+				r.allow_rotate = bool(r.def.get("rotate", true))
+				state = "berserk"
+				t = 0
+				r.sfx.emit("gatsby_dash")
+		"berserk":
+			_berserk()
+		"leap_warn":
+			if t % 6 == 0:
+				r.sfx.emit("lock_on")
+			if t >= LEAP_WARN:
+				state = "leap"
+				t = 0
+				leap_from = pos
+				var ahead := 1.0 if room.rabbit.facing > 0 else -1.0
+				leap_to = _pt_of(_u_of(_rabbit_c() + Vector2(ahead * 44.0, 0)))
+				r.sfx.emit("gatsby_dash")
+		"leap":
+			var k := clampf(float(t) / LEAP_FRAMES, 0.0, 1.0)
+			pos = leap_from.lerp(leap_to, k) + Vector2(0, -sin(k * PI) * 36.0)
+			_hit_rabbit()
+			_smash_walls()
+			if t >= LEAP_FRAMES:
+				pos = leap_to
+				state = "berserk"
+				t = 0
+				r.shake = maxf(r.shake, 3.0)
+				r.sfx.emit("slam")
+		"tired":
+			_fall()
+			_touch_reds()
+			if t >= TIRED:
+				_recover()
+		"flung":
+			pos += vel / 60.0
+			vel.y += GRAV * 0.3 / 60.0
+			var inn := _inner()
+			var br := body_rect()
+			var hit_wall := br.position.x <= inn.position.x or br.end.x >= inn.end.x or br.position.y <= inn.position.y or br.end.y >= inn.end.y
+			if hit_wall:
+				pos.x = clampf(pos.x, inn.position.x + br.size.x / 2.0, inn.end.x - br.size.x / 2.0)
+				pos.y = clampf(pos.y, inn.position.y + br.size.y / 2.0, inn.end.y - br.size.y / 2.0)
+				if spikes_band != null and body_rect().grow(2.0).intersects(Rect2(spikes_band["rect"])):
+					_hurt()
+				else:
+					vel = Vector2.ZERO
+					state = "tired"   # errou: continua cansado, onde caiu
+					r.shake = maxf(r.shake, 3.0)
+					r.sfx.emit("slam")
+		"hurt":
+			if t >= HURT_FRAMES:
+				state = "berserk"
+				t = 0
+				energy = ENERGY
+				pos = _pt_of(_u_of(pos))
+		"dying":
+			if t % 10 == 0:
+				r.particles.append({"pos": pos, "vel": Vector2(rng.randf_range(-40, 40), -rng.randf_range(20, 60)), "life": 20, "col": C_MUSCLE, "grav": 60.0})
+			if t >= DIE_FRAMES:
+				state = "dead"
+				r.door_unlocked = true
+				r.sfx.emit("gate_open")
+		"dead":
+			pass
+
+
+func _berserk() -> void:
+	var ph := _phase()
+	# energia: cai com o tempo
+	energy -= DRAIN[ph] / 60.0
+	# perseguição pelo contorno
+	var p := _path()
+	var L := _u_len(p)
+	var u := _u_of(pos)
+	var ur := _u_of(_rabbit_c())
+	var d := fposmod(ur - u + L / 2.0, L) - L / 2.0
+	var want := signf(d) if absf(d) > 3.0 else dir
+	if want != dir:
+		turn_t += 1
+		var delay: int = TURN_DELAY[ph]
+		if ph >= 1 and turn_t == 1 and rng.randf() < 0.5:
+			flash = 12
+			room.sfx.emit("lock_on")   # vira de repente (com aviso)
+			delay = 12
+		if turn_t >= delay:
+			dir = want
+			turn_t = 0
+	else:
+		turn_t = 0
+	if absf(d) > 3.0 or want == dir:
+		u += dir * float(SPEED[ph]) / 60.0
+	pos = _pt_of(u)
+	_hit_rabbit()
+	_smash_walls()
+	# muros de cogumelo no caminho do coelho
+	wall_t += 1
+	if wall_t >= WALL_EVERY[ph]:
+		wall_t = 0
+		_spawn_wall()
+	for w in walls:
+		w["age"] += 1
+	walls = walls.filter(func(w): return w["age"] < WALL_LIFE)
+	# truques
+	if ph >= 1:
+		leap_t += 1
+		if leap_t >= LEAP_EVERY and pos.distance_to(_rabbit_c()) > 50.0 and _surf_n().y < -0.5:
+			leap_t = 0
+			state = "leap_warn"
+			t = 0
+			flash = LEAP_WARN
+	if ph >= 2:
+		bell_t += 1
+		if bell_t >= BELL_EVERY:
+			bell_t = 0
+			_throw_bell()
+	if energy <= 0.0:
+		_tire()
+
+
+func _hit_rabbit() -> void:
+	if room.invuln == 0 and Rect2(room.rabbit.rect).intersects(body_rect().grow(-2.0)):
+		room.kill()
+
+
+func _smash_walls() -> void:
+	var br := body_rect()
+	var keep: Array = []
+	for w in walls:
+		if br.intersects(Rect2(w["rect"])):
+			energy -= WALL_COST
+			bar_hit = 14
+			room.shake = maxf(room.shake, 2.5)
+			room.sfx.emit("crunch")
+			var c := Rect2(w["rect"]).get_center()
+			for i in 10:
+				room.particles.append({"pos": c, "vel": Vector2(rng.randf_range(-90, 90), -rng.randf_range(20, 110)),
+					"life": rng.randi_range(12, 24), "col": Color("9b6bc4") if i % 2 else Color("cfc6d8"), "grav": 300.0})
+		else:
+			keep.append(w)
+	walls = keep
+
+
+## Um muro de cogumelo brota no chão de agora, no caminho de fuga do coelho.
+func _spawn_wall() -> void:
+	if walls.size() >= WALL_MAX:
+		return
+	var inn := _inner()
+	var rc := _rabbit_c()
+	var away := signf(rc.x - pos.x)
+	if away == 0.0:
+		away = 1.0
+	var x := rc.x + away * 38.0
+	x = clampf(x, inn.position.x + 10.0, inn.end.x - 10.0 - WALL_SIZE.x)
+	var r := Rect2i(int(x), int(inn.end.y - WALL_SIZE.y), int(WALL_SIZE.x), int(WALL_SIZE.y))
+	if Rect2(r).grow(3.0).intersects(Rect2(room.rabbit.rect)) or Rect2(r).grow(6.0).intersects(body_rect()):
+		return
+	for w in walls:
+		if Rect2(w["rect"]).grow(8.0).intersects(Rect2(r)):
+			return
+	walls.append({"rect": r, "n": Vector2(0, -1), "age": 0})
+	room.sfx.emit("plate_on")
+
+
+func _tire() -> void:
+	energy = 0.0
+	state = "tired"
+	t = 0
+	vel = Vector2.ZERO
+	room.sfx.emit("steam_burst")
+	room.shake = maxf(room.shake, 2.0)
+	_spawn_reds()
+
+
+## Os cogumelos vermelhos e os espinhos: um cogumelo certo numa das paredes de lado, alinhado com
+## ele (girando para aquele lado, ele cai em cima), que o arremessa para a parede oposta, onde estão
+## os espinhos; e dois de enfeite, desalinhados, nas outras faces.
+func _spawn_reds() -> void:
+	reds.clear()
+	var inn := _inner()
+	var side := 1.0 if rng.randf() < 0.5 else -1.0
+	var y := clampf(pos.y, inn.position.y + 16.0, inn.end.y - 16.0)
+	var ok_n := Vector2(side, 0)          # (1, 0): parede da esquerda; (-1, 0): da direita
+	reds.append({"rect": _face_rect(ok_n, y, 36.0), "n": ok_n, "ok": true})
+	var other_n := Vector2(-side, 0)
+	var y2 := y - 48.0 if y - 48.0 > inn.position.y + 16.0 else y + 48.0
+	reds.append({"rect": _face_rect(other_n, y2, 24.0), "n": other_n, "ok": false})
+	var cx := inn.position.x + inn.size.x * (0.25 if pos.x > inn.get_center().x else 0.75)
+	reds.append({"rect": _face_rect(Vector2(0, 1), cx, 24.0), "n": Vector2(0, 1), "ok": false})
+	spikes_band = {"rect": _band_rect(other_n), "n": other_n}
+	room.sfx.emit("lock_on")
+
+
+## Um cogumelo vermelho colado na face de normal `n`, centrado em `along` (y numa parede, x no teto).
+func _face_rect(n: Vector2, along: float, length: float) -> Rect2i:
+	var inn := _inner()
+	if n.x > 0.5:
+		return Rect2i(int(inn.position.x), int(along - length / 2.0), 8, int(length))
+	if n.x < -0.5:
+		return Rect2i(int(inn.end.x - 8), int(along - length / 2.0), 8, int(length))
+	if n.y > 0.5:
+		return Rect2i(int(along - length / 2.0), int(inn.position.y), int(length), 8)
+	return Rect2i(int(along - length / 2.0), int(inn.end.y - 8), int(length), 8)
+
+
+## A faixa de espinhos ao longo da face toda.
+func _band_rect(n: Vector2) -> Rect2i:
+	var inn := _inner()
+	if n.x > 0.5:
+		return Rect2i(int(inn.position.x), int(inn.position.y), 8, int(inn.size.y))
+	if n.x < -0.5:
+		return Rect2i(int(inn.end.x - 8), int(inn.position.y), 8, int(inn.size.y))
+	if n.y > 0.5:
+		return Rect2i(int(inn.position.x), int(inn.position.y), int(inn.size.x), 8)
+	return Rect2i(int(inn.position.x), int(inn.end.y - 8), int(inn.size.x), 8)
+
+
+## Cansado: solto, cai com a gravidade de agora.
+func _fall() -> void:
+	vel.y = minf(vel.y + GRAV / 60.0, 360.0)
+	vel.x = move_toward(vel.x, 0.0, 6.0)
+	pos += vel / 60.0
+	var inn := _inner()
+	var br := body_rect()
+	if br.end.y >= inn.end.y:
+		pos.y = inn.end.y - br.size.y / 2.0
+		if vel.y > 120.0:
+			room.shake = maxf(room.shake, 2.0)
+			room.sfx.emit("slam")
+		vel.y = 0.0
+	pos.x = clampf(pos.x, inn.position.x + br.size.x / 2.0, inn.end.x - br.size.x / 2.0)
+	pos.y = maxf(pos.y, inn.position.y + br.size.y / 2.0)
+
+
+func _touch_reds() -> void:
+	var br := body_rect().grow(1.0)
+	for rd in reds:
+		if br.intersects(Rect2(rd["rect"])):
+			# o cogumelo vermelho arremessa para longe da face dele
+			state = "flung"
+			t = 0
+			flung_n = rd["n"]
+			vel = rd["n"] * FLING
+			pos += rd["n"] * 4.0
+			room.sfx.emit("launch")
+			room.shake = maxf(room.shake, 2.0)
+			reds.erase(rd)
+			return
+
+
+func _hurt() -> void:
+	hearts -= 1
+	vel = Vector2.ZERO
+	flash = 40
+	bar_hit = 30
+	room.shake = 6.0
+	room.impact.emit(2.5)
+	room.sfx.emit("blast")
+	for i in 16:
+		room.particles.append({"pos": pos, "vel": Vector2(rng.randf_range(-120, 120), rng.randf_range(-120, 60)),
+			"life": rng.randi_range(14, 26), "col": C_SKIN if i % 2 else C_SHELL, "grav": 200.0})
+	reds.clear()
+	spikes_band = null
+	walls.clear()
+	bells.clear()
+	t = 0
+	if hearts <= 0:
+		state = "dying"
+		return
+	state = "hurt"
+
+
+func _recover() -> void:
+	reds.clear()
+	spikes_band = null
+	energy = ENERGY
+	state = "berserk"
+	t = 0
+	pos = _pt_of(_u_of(pos))
+	room.sfx.emit("gatsby_dash")
+
+
+func _update_spikes_touch() -> void:
+	if spikes_band == null:
+		return
+	if room.invuln == 0 and Rect2(room.rabbit.rect).intersects(Rect2(spikes_band["rect"]).grow(-2.0)):
+		room.kill()
+
+
+func _throw_bell() -> void:
+	var rc := _rabbit_c()
+	var T := 0.9
+	var v := Vector2((rc.x - pos.x) / T, (rc.y - pos.y) / T - 0.5 * GRAV * T)
+	bells.append({"pos": pos + Vector2(0, -10), "vel": v, "age": 0, "bounced": false})
+	room.sfx.emit("gatsby_dash")
+
+
+func _update_bells() -> void:
+	var inn := _inner()
+	var keep: Array = []
+	for b in bells:
+		b["age"] += 1
+		b["vel"].y += GRAV / 60.0
+		b["pos"] += b["vel"] / 60.0
+		var p: Vector2 = b["pos"]
+		if p.y > inn.end.y - 4.0:
+			p.y = inn.end.y - 4.0
+			if not b["bounced"]:
+				b["vel"] = Vector2(b["vel"].x * 0.5, -absf(b["vel"].y) * 0.4)
+				b["bounced"] = true
+				room.sfx.emit("crunch")
+			else:
+				b["vel"] = Vector2(b["vel"].x * 0.9, 0.0)
+		if p.x < inn.position.x + 4.0 or p.x > inn.end.x - 4.0:
+			b["vel"].x = -b["vel"].x * 0.5
+			p.x = clampf(p.x, inn.position.x + 4.0, inn.end.x - 4.0)
+		b["pos"] = p
+		if room.invuln == 0 and Rect2(room.rabbit.rect).intersects(Rect2(p - Vector2(5, 3), Vector2(10, 6))):
+			room.kill()
+			continue
+		if b["age"] < 200:
+			keep.append(b)
+	bells = keep
+
+
+# ---------------------------------------------------------------- desenho
+
+func _process(_d: float) -> void:
+	queue_redraw()
+
+
+func _draw() -> void:
+	if room == null:
+		return
+	var base := Transform2D(room.view_angle, Vector2.ZERO) * Transform2D(0.0, -room.cam.round())
+	draw_set_transform_matrix(base)
+	_draw_walls()
+	_draw_reds()
+	_draw_band()
+	for b in bells:
+		draw_set_transform_matrix(base * Transform2D(b["age"] * 0.3, (b["pos"] as Vector2).round()))
+		draw_rect(Rect2(-5, -1, 10, 2), Color("6a6d75"))
+		draw_rect(Rect2(-6, -3, 3, 6), Color("2b2c33"))
+		draw_rect(Rect2(3, -3, 3, 6), Color("2b2c33"))
+		draw_rect(Rect2(-6, -3, 3, 1), Color("8a8d95"))
+		draw_rect(Rect2(3, -3, 3, 1), Color("8a8d95"))
+	_draw_snail(base)
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+	_draw_hud()
+
+
+func _draw_walls() -> void:
+	for w in walls:
+		var r := Rect2(w["rect"])
+		var k := clampf(float(w["age"]) / 10.0, 0.0, 1.0)
+		var n: Vector2 = w["n"]
+		var stem := r
+		var cap := r
+		if absf(n.y) > 0.5:
+			var hh := r.size.y * k
+			stem = Rect2(r.position.x + 3, r.end.y - hh if n.y < 0 else r.position.y, r.size.x - 6, hh)
+			cap = Rect2(r.position.x - 2, (r.end.y - hh) if n.y < 0 else (r.position.y + hh - 6), r.size.x + 4, 6)
+		else:
+			var ww := r.size.x * k
+			stem = Rect2(r.end.x - ww if n.x < 0 else r.position.x, r.position.y + 3, ww, r.size.y - 6)
+			cap = Rect2((r.end.x - ww) if n.x < 0 else (r.position.x + ww - 6), r.position.y - 2, 6, r.size.y + 4)
+		draw_rect(stem, Color("cfc6d8"))
+		draw_rect(Rect2(stem.position, Vector2(2, stem.size.y)), Color("a99fb4"))
+		draw_rect(cap, Color("9b6bc4"))
+		draw_rect(Rect2(cap.position, Vector2(cap.size.x, 1)), Color("c9a6dd"))
+		if w["age"] > WALL_LIFE - 60 and (anim / 4) % 2 == 0:
+			draw_rect(r, Color(0, 0, 0, 0.25))
+
+
+func _draw_reds() -> void:
+	for rd in reds:
+		var r := Rect2(rd["rect"])
+		var pulse := 0.5 + 0.5 * sin(anim * 0.2)
+		draw_rect(r.grow(2.0), Color(C_RED_CAP, 0.12 + 0.1 * pulse))
+		draw_rect(r, C_RED_CAP)
+		draw_rect(r.grow(-1.0), C_RED_CAP.lightened(0.15))
+		var n: Vector2 = rd["n"]
+		var long := maxf(r.size.x, r.size.y)
+		for i in int(long / 7.0):
+			var off := 3.0 + i * 7.0
+			var q := r.position + (Vector2(off, 3) if absf(n.y) > 0.5 else Vector2(3, off))
+			draw_rect(Rect2(q, Vector2(2, 2)), Color(1, 1, 1, 0.9))   # pintas brancas (amanita)
+
+
+func _draw_band() -> void:
+	if spikes_band == null:
+		return
+	var r := Rect2(spikes_band["rect"])
+	var n: Vector2 = spikes_band["n"]
+	var grow := clampf(float(t) / 12.0, 0.0, 1.0) if state == "tired" else 1.0
+	var long := maxf(r.size.x, r.size.y)
+	var side := n.orthogonal()
+	var basep := r.get_center() - n * 4.0 - side * long / 2.0 * (1.0 if absf(n.x) > 0.5 else -1.0)
+	if absf(n.y) > 0.5:
+		basep = Vector2(r.position.x, r.get_center().y - n.y * 4.0)
+	else:
+		basep = Vector2(r.get_center().x - n.x * 4.0, r.position.y)
+	var step := Vector2(1, 0) if absf(n.y) > 0.5 else Vector2(0, 1)
+	for i in int(long / 8.0):
+		var a := basep + step * (i * 8.0)
+		var b2 := a + step * 8.0
+		var tip := (a + b2) / 2.0 + n * 7.0 * grow
+		draw_colored_polygon(PackedVector2Array([a, b2, tip]), C_SPIKE)
+
+
+func _draw_snail(base: Transform2D) -> void:
+	var n := _surf_n() if _stuck() else Vector2(0, -1)
+	var ang := Vector2(0, -1).angle_to(n)
+	var scale_k := 1.0
+	if state == "lurk":
+		scale_k = 0.35
+	elif state == "reveal":
+		scale_k = lerpf(0.35, 1.0, clampf(float(t) / REVEAL, 0.0, 1.0))
+		scale_k += 0.06 * sin(t * 0.8) if t % 25 < 10 else 0.0
+	elif state == "dying":
+		scale_k = lerpf(1.0, 0.35, clampf(float(t) / DIE_FRAMES, 0.0, 1.0))
+	elif state == "dead":
+		scale_k = 0.35
+	var flip := -1.0 if dir < 0 else 1.0
+	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(scale_k * flip, scale_k), 0.0, Vector2.ZERO))
+	var tired := state == "tired" or state == "flung" or state == "hurt"
+	var white := flash > 0 and (flash / 3) % 2 == 0
+	var skin := C_MUSCLE if white else C_SKIN
+	var squash := 0.6 if tired else 1.0
+	var h := BODY.y / 2.0
+	# pé (a sola), com uma sombra
+	draw_rect(Rect2(-13, h - 4, 26, 4), C_SKIN_DARK)
+	# corpo: o pescoço grosso e a cabeça erguida na frente
+	draw_rect(Rect2(-12, h - 9 * squash, 24, 6 * squash), skin)
+	var head := Vector2(10, h - 13 * squash)
+	draw_circle(head, 5.5 * squash + 0.5, skin)
+	# concha
+	var sc := Vector2(-4, h - 12 * squash)
+	draw_circle(sc, 9.0 * squash, C_SHELL_DARK)
+	draw_circle(sc, 8.0 * squash, C_SHELL)
+	draw_arc(sc, 5.0 * squash, 0.0, PI * 1.6, 10, C_SHELL_LINE, 1.0)
+	draw_arc(sc + Vector2(1, 1), 2.5 * squash, PI, TAU + PI * 0.6, 8, C_SHELL_LINE, 1.0)
+	if state == "lurk" or (state == "reveal" and t < 40) or state == "dead":
+		# ainda (ou de novo) um caramujo comum: antenas e olhinhos
+		draw_line(head, head + Vector2(2, -6), skin, 1.0)
+		draw_line(head + Vector2(-2, 0), head + Vector2(-1, -6), skin, 1.0)
+		draw_rect(Rect2(head + Vector2(1.5, -7), Vector2(1, 1)), Color("1a1820"))
+		draw_rect(Rect2(head + Vector2(-1.5, -7), Vector2(1, 1)), Color("1a1820"))
+		draw_set_transform_matrix(base)
+		return
+	# braços marombados: bíceps fletindo (na fúria), caídos (cansado)
+	var flex := sin(anim * 0.25) * 2.0 if not tired else 0.0
+	for side in [-1.0, 1.0]:
+		var sh := Vector2(4 + side * 2.0, h - 10 * squash)
+		var el := sh + (Vector2(5, -6 + flex) if not tired else Vector2(6, 2))
+		var fist := el + (Vector2(-1, -6) if not tired else Vector2(4, 1))
+		draw_line(sh, el, C_SKIN_DARK, 6.0)
+		draw_line(sh, el, skin, 5.0)
+		draw_line(el, fist, skin, 4.0)
+		draw_circle(el + Vector2(-1.5, -1.5), 4.5 if not tired else 3.0, C_MUSCLE)   # o bíceps
+		draw_circle(el + Vector2(-2.5, -2.5), 1.5, Color(1, 1, 1, 0.5))
+		draw_circle(fist, 3.0, skin)
+	# peitoral estufado, entre a cabeça e a concha
+	if not tired:
+		draw_circle(Vector2(5, h - 10), 4.0, C_MUSCLE)
+		draw_line(Vector2(5, h - 13), Vector2(5, h - 7), C_SKIN_DARK, 1.0)
+	# faixa na testa e os olhos (raivosos; em espiral, cansado)
+	draw_rect(Rect2(head + Vector2(-5, -4 * squash), Vector2(10, 2)), C_BAND)
+	if tired:
+		draw_arc(head + Vector2(2, -1), 1.6, 0.0, TAU * 0.9, 6, Color("1a1820"), 1.0)
+		draw_rect(Rect2(head + Vector2(3, 2), Vector2(2, 2)), Color("e0657c"))   # a língua de fora
+		if (anim / 8) % 3 == 0:
+			draw_rect(Rect2(head + Vector2(-6, -8), Vector2(1, 2)), Color(0.6, 0.8, 1.0, 0.9))   # suor
+	else:
+		draw_line(head + Vector2(0, -3), head + Vector2(4, -1), Color("1a1820"), 1.0)   # sobrancelha brava
+		draw_rect(Rect2(head + Vector2(2, -1), Vector2(2, 2)), Color("ff3b4e"))
+		draw_line(head + Vector2(2, 3), head + Vector2(5, 3), Color("1a1820"), 1.0)     # boca cerrada
+	draw_set_transform_matrix(base)
+
+
+func _draw_hud() -> void:
+	if state == "lurk" or state == "reveal" or state == "dead":
+		return
+	var y := -89.0
+	var rb := Rect2(-72, y, 16, 18)
+	draw_rect(rb, Color(C_HEART, 0.9) if hud_hit > 0 and (hud_hit / 4) % 2 == 0 else Color(0.05, 0.05, 0.08, 0.85))
+	draw_rect(rb, Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
+	var tex: Texture2D = room._rabbit_tex("up", "stand", room.state == "dead" or hud_hit > 0)
+	draw_texture(tex, rb.position + Vector2(2, 1))
+	for i in LIVES:
+		_draw_heart(Vector2(-52 + i * 10, y + 6), i < lives)
+	# energia do Senzi e os corações dele
+	var bar := Rect2(-8, y + 5, 70, 6)
+	draw_rect(bar.grow(1.0), Color(0.05, 0.05, 0.08, 0.85))
+	var k := clampf(energy / ENERGY, 0.0, 1.0)
+	var col := Color(1, 1, 1) if bar_hit > 0 and (bar_hit / 3) % 2 == 0 else C_ENERGY
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * k, bar.size.y)), col)
+	draw_rect(bar.grow(1.0), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
+	for i in HEARTS:
+		_draw_heart(Vector2(66 + i * 9, y + 5), i < hearts)
+
+
+func _draw_heart(q: Vector2, full: bool) -> void:
+	var c := C_HEART if full else C_HEART_EMPTY
+	draw_rect(Rect2(q + Vector2(1, 0), Vector2(2, 1)), c)
+	draw_rect(Rect2(q + Vector2(4, 0), Vector2(2, 1)), c)
+	draw_rect(Rect2(q + Vector2(0, 1), Vector2(7, 2)), c)
+	draw_rect(Rect2(q + Vector2(1, 3), Vector2(5, 1)), c)
+	draw_rect(Rect2(q + Vector2(2, 4), Vector2(3, 1)), c)
+	draw_rect(Rect2(q + Vector2(3, 5), Vector2(1, 1)), c)
