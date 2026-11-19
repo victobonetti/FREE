@@ -201,7 +201,6 @@ var hud_hit := 0
 var bar_hit := 0
 var pop_flash := 0             # clarão branco da revelação
 var phase := 0
-var leap_fix := false          # girou durante o pulo: o alvo vai para o chão novo
 var vis_ang := 0.0             # o ângulo desenhado (vira suave nos cantos)
 var snap_ang := true
 var run_dist := 0.0            # px corridos (o quadro da corrida segue a distância, não o tempo)
@@ -301,16 +300,7 @@ func on_rotate(r, d: int) -> void:
 	pos = r._rot_point(pos, d)
 	vel = _rv(vel, d)
 	leap_from = r._rot_point(leap_from, d)
-	if state == "leap_warn" or state == "leap":
-		# o pulo não muda de parede com o giro: o alvo continua no chão, no mesmo lugar (ele sai de
-		# onde o giro o deixou)
-		# (a sala ainda tem os tiles de antes aqui: o alvo vai para o chão novo no próximo quadro)
-		leap_fix = true
-		if state == "leap":
-			leap_from = pos   # o resto do voo sai de onde ele está agora
-			t = 0
-	else:
-		leap_to = r._rot_point(leap_to, d)
+	leap_to = r._rot_point(leap_to, d)
 	snap_ang = true
 	for w in walls:
 		w["rect"] = r._rot_rect(w["rect"], d)
@@ -478,9 +468,6 @@ func step(r) -> void:
 		return
 	t += 1
 	room.invuln = maxi(room.invuln - 1, 0)
-	if leap_fix:
-		leap_fix = false
-		leap_to = _pt_of(_u_floor(leap_to.x))
 	_update_debris()
 	_melt_drips()
 	bolt_t = maxi(bolt_t - 1, 0)
@@ -1123,9 +1110,6 @@ func _process(_d: float) -> void:
 func _draw() -> void:
 	if room == null:
 		return
-	if leap_fix:
-		leap_fix = false
-		leap_to = _pt_of(_u_floor(leap_to.x))
 	var base := Transform2D(room.view_angle, Vector2.ZERO) * Transform2D(0.0, -room.cam.round())
 	draw_set_transform_matrix(base)
 	_wall_base = base
