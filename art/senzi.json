@@ -60,6 +60,22 @@
 		"hit": {
 			"row": 13,
 			"frames": 2
+		},
+		"upper": {
+			"row": 14,
+			"frames": 4
+		},
+		"sweep": {
+			"row": 15,
+			"frames": 3
+		},
+		"spit": {
+			"row": 16,
+			"frames": 3
+		},
+		"grab": {
+			"row": 17,
+			"frames": 4
 		}
 	},
 	"hand_up": [

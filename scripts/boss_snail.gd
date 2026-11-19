@@ -23,7 +23,8 @@ var sheet: Texture2D = load("res://art/senzi.png")
 const FRAME := Vector2(96, 96)
 const FEET := 94.0                   # a linha dos pés no quadro
 const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4], "leap": [5, 3], "punch": [6, 4],
-	"tired": [7, 4], "hold": [8, 4], "inject": [9, 12], "guard": [10, 4], "walk": [11, 6], "block": [12, 2], "hit": [13, 2]}
+	"tired": [7, 4], "hold": [8, 4], "inject": [9, 12], "guard": [10, 4], "walk": [11, 6], "block": [12, 2], "hit": [13, 2],
+	"upper": [14, 4], "sweep": [15, 3], "spit": [16, 3], "grab": [17, 4]}
 # O plot twist (D113): sem energia, ele para, ergue a seringa verde e se injeta (a energia volta toda).
 # O coelho pode pegá-la enquanto ela flutua acima da mão aberta.
 const TIRED_FRAMES := 50             # para, ofegando
@@ -37,7 +38,8 @@ const DOSE_SPEED := 0.1              # cada dose: 10% mais rápido
 # O ringue (D114): o coelho pega a seringa e vira o coelhão por 12 s.
 const HERO_SHEET := "res://art/coelhao.png"
 const HERO_ANIM := {"guard": [0, 4], "walk": [1, 6], "jab": [2, 4], "block": [3, 2], "hit": [4, 2], "jump": [5, 2],
-	"flex": [6, 6], "die": [7, 4], "kick": [8, 4]}
+	"flex": [6, 6], "die": [7, 4], "kick": [8, 4], "crouch": [9, 2], "crouch_block": [10, 1], "uppercut": [11, 4],
+	"lowkick": [12, 3]}
 const G_UNROT := 20                  # a transformação: quando a sala volta ao normal
 const G_BOLT := 100                  # o raio
 const G_POPS := [112, 128, 144]      # os três estouros do coelhão crescendo
@@ -54,11 +56,16 @@ const H_JUMP := 230.0
 const HJAB_HIT := 4                  # o jab do coelho: quadro em que acerta, total, alcance, dano
 const HJAB_TOTAL := 13
 const HJAB_REACH := 40.0
-const HJAB_DMG := 6.0
+const HJAB_DMG := 3.5
 const HKICK_HIT := 9                 # o chute (giro direito): mais lento, mais longe, mais forte, e quebra a defesa
 const HKICK_TOTAL := 24
 const HKICK_REACH := 54.0
-const HKICK_DMG := 7.0
+const HKICK_DMG := 5.0
+# Os golpes do coelhão: [quadro em que acerta, total, alcance, dano]. Em pé: jab (giro esquerdo) e chute
+# (giro direito). Agachado (para baixo): o gancho de baixo para cima, estilo Mortal Kombat (giro
+# esquerdo: joga o Senzi para o alto) e a rasteira (giro direito: baixa, a defesa em pé dele não segura).
+const HMOVES := {"jab": [HJAB_HIT, HJAB_TOTAL, HJAB_REACH, HJAB_DMG], "kick": [HKICK_HIT, HKICK_TOTAL, HKICK_REACH, HKICK_DMG],
+	"upper": [7, 30, 36.0, 7.0], "low": [6, 18, 50.0, 3.5]}
 const S_STUN := 12                   # quadros sem agir depois de apanhar
 const H_STUN := 16
 const S_WALK := 46.0
@@ -69,11 +76,26 @@ const SJAB_DMG := 10.0
 const SCHARGE_WIND := 32             # o soco carregado: pisca e grunhe; não dá para defender (recue ou pule)
 const SCHARGE_DMG := 20.0
 const SLEAP_DMG := 15.0
+# Os golpes novos (D114): gancho (rápido, de perto, joga para o alto; dá para defender), rasteira (baixa,
+# longa; não dá para defender: pule), cuspe (de longe, a gosma deixa o coelho lento; dá para defender) e
+# agarrão (pune quem só defende; não dá para defender: pule ou saia de perto). Defendendo, ele
+# contra-ataca com o gancho; carregando o soco, não para de carregar quando apanha.
 const RING_PATTERNS := [
-	["approach", "jab", "jab", "retreat", "guard"],                       # 3 corações
-	["approach", "jab", "jab", "charge", "retreat"],                      # 2
-	["approach", "jab", "leap", "jab", "jab", "charge", "guard"],         # 1
+	["approach", "jab", "jab", "upper", "guard", "spit", "approach", "sweep", "grab"],                  # 3 corações
+	["approach", "jab", "sweep", "grab", "charge", "spit", "approach", "jab", "upper", "guard"],         # 2
+	["approach", "jab", "jab", "upper", "leap", "sweep", "grab", "charge", "spit", "guard"],            # 1
 ]
+const UPPER_WIND := 8
+const UPPER_DMG := 12.0
+const SWEEP_WIND := 16
+const SWEEP_REACH := 54.0
+const SWEEP_DMG := 10.0
+const SPIT_WIND := 12
+const SPIT_DMG := 6.0
+const SLOW_FRAMES := 100             # lento na gosma
+const GRAB_WIND := 6
+const GRAB_HOLD := 20
+const GRAB_DMG := 14.0
 const TUCK := Vector2(8, -33)        # o centro da bola encolhida, a partir dos pés (o eixo da cambalhota)
 const STRIDE := 5.0                  # px corridos por quadro da corrida
 const SPEED := [62.0, 76.0, 90.0]    # px/s, por terço da barra gasto
@@ -190,7 +212,9 @@ var h_vx := 0.0
 var h_vy := 0.0
 var h_face := 1.0
 var h_jab := -1                # quadro do golpe (-1: sem golpe)
-var h_kick := false            # o golpe é o chute (senão, o jab)
+var h_move := "jab"            # o golpe em curso: jab, kick, upper, low
+var h_crouch := false          # agachado
+var s_vy := 0.0                # o Senzi no ar (o gancho do coelho o joga para cima)
 var h_jab_hit := false
 var h_cd := 0
 var h_stun := 0
@@ -208,6 +232,9 @@ var s_hp := S_HP_MAX           # a vida do Senzi no ringue (fica perdida entre o
 var hitstop := 0
 var bolt_t := 0
 var win_deflate := false
+var spits: Array = []          # as bolas de gosma do cuspe: {"pos", "vel"}
+var h_slow := 0                # quadros lento (gosma)
+var grabbed_t := -1            # o agarrão segurando o coelho
 var debris: Array = []         # os pedaços dos cogumelos quebrados, voando (px da sala)
 var splats: Array = []         # os que voam para a tela e grudam no vidro (px da tela)
 
@@ -228,6 +255,9 @@ func on_reset(r) -> void:
 	bells.clear()
 	debris.clear()
 	splats.clear()
+	spits.clear()
+	h_slow = 0
+	grabbed_t = -1
 	vel = Vector2.ZERO
 	flash = 0
 	hud_hit = 0
@@ -1062,8 +1092,18 @@ func _draw() -> void:
 		draw_rect(Rect2(-6, -3, 3, 1), Color("8a8d95"))
 		draw_rect(Rect2(3, -3, 3, 1), Color("8a8d95"))
 	_draw_snail(base)
+	for sp in spits:
+		var q: Vector2 = (sp["pos"] as Vector2).round()
+		draw_circle(q, 4.0, C_GOO)
+		draw_circle(q + Vector2(-1, -1), 2.5, C_SKIN)
+		draw_rect(Rect2(q + Vector2(-2, -3), Vector2(1, 1)), C_MUSCLE)
 	if hero_on:
 		_draw_hero(base)
+		if h_slow > 0:
+			# gosma nos pés: lento
+			draw_set_transform_matrix(base)
+			draw_rect(Rect2(Vector2(hx - 11, hy - 3).round(), Vector2(22, 3)), C_GOO)
+			draw_rect(Rect2(Vector2(hx - 9, hy - 6).round(), Vector2(18, 3)), Color(C_SKIN, 0.9))
 	if bolt_t > 0:
 		_draw_bolt(base)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
@@ -1323,6 +1363,18 @@ func _draw_snail(base: Transform2D) -> void:
 					"leap":
 						anim_name = "leap"
 						fr = 1 + (anim / 4) % 2
+					"upper":
+						anim_name = "upper"
+						fr = 0 if act_t <= UPPER_WIND else (1 if act_t <= UPPER_WIND + 5 else (2 if act_t <= UPPER_WIND + 11 else 3))
+					"sweep":
+						anim_name = "sweep"
+						fr = 0 if act_t <= SWEEP_WIND else (1 if act_t <= SWEEP_WIND + 8 else 2)
+					"spit":
+						anim_name = "spit"
+						fr = 0 if act_t < SPIT_WIND else (1 if act_t < SPIT_WIND + 8 else 2)
+					"grab":
+						anim_name = "grab"
+						fr = 0 if act_t < GRAB_WIND else (1 if grabbed_t < 0 else (2 if grabbed_t < GRAB_HOLD - 4 else 3))
 		"tired":
 			anim_name = "tired"
 			fr = (anim / 7) % 4
@@ -1512,6 +1564,8 @@ func _ring_begin() -> void:
 	h_vy = 0.0
 	h_jab = -1
 	h_stun = 0
+	h_crouch = false
+	s_vy = 0.0
 	act_i = 0
 	act = ""
 	act_t = 0
@@ -1552,23 +1606,35 @@ func _ring() -> void:
 	h_face = 1.0 if sx >= hx else -1.0
 	h_block = false
 	h_stun = maxi(h_stun - 1, 0)
+	h_slow = maxi(h_slow - 1, 0)
+	if grabbed_t >= 0:
+		h_stun = maxi(h_stun, 2)   # agarrado: sem controle
 	if h_stun > 0:
 		h_vx = move_toward(h_vx, 0.0, 12.0)
 		h_jab = -1
 	else:
+		var ground := hy >= fl - 0.5
+		var down := float(inp.get("climb", 0.0)) > 0.5
+		if h_jab < 0:
+			h_crouch = ground and down
 		var rq := int(inp.get("rotate", 0))
 		if rq != 0 and h_jab < 0 and h_cd == 0:
-			# giro esquerdo: jab; giro direito: chute
-			h_kick = rq > 0
+			# em pé: giro esquerdo jab, direito chute; agachado: gancho e rasteira
+			if h_crouch:
+				h_move = "low" if rq > 0 else "upper"
+			else:
+				h_move = "kick" if rq > 0 else "jab"
 			h_jab = 0
-			h_cd = (HKICK_TOTAL if h_kick else HJAB_TOTAL) + 2
-			r.sfx.emit("jump" if h_kick else "thump")
-		var ground := hy >= fl - 0.5
+			h_jab_hit = false   # (um golpe cortado por apanhar não deixa o próximo sem acertar)
+			h_cd = int(HMOVES[h_move][1]) + 2
+			r.sfx.emit("jump" if h_move in ["kick", "upper"] else "thump")
 		var back := absf(mv) > 0.2 and signf(mv) == -h_face
 		h_block = back and ground and h_jab < 0
-		var spd := H_WALK * (0.6 if h_block else 1.0)
+		var spd := H_WALK * (0.6 if h_block else 1.0) * (0.5 if h_slow > 0 else 1.0)
+		if h_crouch:
+			spd = 0.0   # agachado não anda (para trás: defende agachado)
 		h_vx = mv * spd if h_jab < 0 or not ground else move_toward(h_vx, 0.0, 20.0)
-		if bool(inp.get("jump", false)) and ground and h_jab < 0:
+		if (bool(inp.get("jump_pressed", false)) or bool(inp.get("jump", false))) and ground and h_jab < 0 and not h_crouch:
 			h_vy = -H_JUMP
 			r.sfx.emit("jump")
 	h_cd = maxi(h_cd - 1, 0)
@@ -1579,25 +1645,36 @@ func _ring() -> void:
 		h_vy = 0.0
 	if h_jab >= 0:
 		h_jab += 1
-		var hit_at := HKICK_HIT if h_kick else HJAB_HIT
+		var mvd: Array = HMOVES[h_move]
+		var hit_at: int = mvd[0]
 		if h_jab >= hit_at and h_jab < hit_at + 3 and not h_jab_hit:
-			if absf(sx - hx) < (HKICK_REACH if h_kick else HJAB_REACH) and s_air() < 20.0:
+			if absf(sx - hx) < float(mvd[2]) and s_air() < (12.0 if h_move == "low" else 40.0):
 				h_jab_hit = true
-				_hit_senzi(HKICK_DMG if h_kick else HJAB_DMG, h_kick)
-		if h_jab >= (HKICK_TOTAL if h_kick else HJAB_TOTAL):
+				_hit_senzi(float(mvd[3]), h_move)
+		if h_jab >= int(mvd[1]):
 			h_jab = -1
 			h_jab_hit = false
 	# ---- o Senzi
 	s_stun = maxi(s_stun - 1, 0)
 	s_block = false
+	if s_vy != 0.0 or (s_air() > 0.5 and act != "leap"):
+		# no ar (o gancho do coelho): cai com a gravidade
+		s_vy += GRAV / 60.0
+		pos.y = minf(pos.y + s_vy / 60.0, _inner().end.y - BODY.y / 2.0)
+		if s_air() <= 0.0 and s_vy > 0.0:
+			s_vy = 0.0
+			room.shake = maxf(room.shake, 4.0)
+			room.sfx.emit("slam")
+		s_stun = maxi(s_stun, 2)
 	if s_stun > 0:
 		pos.x += s_push / 60.0
 		s_push = move_toward(s_push, 0.0, 8.0)
 	else:
 		_s_act()
+	_update_spits()
 	# os corpos não se atravessam; as paredes seguram
 	var gap := 26.0
-	if absf(pos.x - hx) < gap and s_air() < 20.0 and hy > fl - 30.0:
+	if grabbed_t < 0 and absf(pos.x - hx) < gap and s_air() < 20.0 and hy > fl - 30.0:
 		var mid := (pos.x + hx) / 2.0
 		var sd := 1.0 if pos.x >= hx else -1.0
 		pos.x = mid + sd * gap / 2.0
@@ -1659,12 +1736,81 @@ func _s_act() -> void:
 				room.sfx.emit("blast" if act == "charge" else "thump")
 			if act_t >= wind + 1 and act_t <= wind + 4 and not s_hit_done:
 				var reach := SJAB_REACH + (24.0 if act == "charge" else 0.0)
-				if dist < reach and hy > _inner().end.y - 34.0:
+				if dist < reach and hy > _inner().end.y - 34.0 and not h_crouch:   # agachado, passa por cima
 					s_hit_done = true
 					_hit_hero(SJAB_DMG if act == "jab" else SCHARGE_DMG, act == "charge")
 			if act_t >= wind + (14 if act == "jab" else 24):
 				act = ""
 				s_hit_done = false
+		"upper":
+			# o gancho: agacha e sobe explodindo; joga o coelho para o alto (dá para defender)
+			if act_t == 1 and dist > S_RANGE + 6.0:
+				act = "approach"
+				act_i -= 1
+				return
+			if act_t == UPPER_WIND + 1:
+				room.sfx.emit("blast")
+			if act_t >= UPPER_WIND + 1 and act_t <= UPPER_WIND + 4 and not s_hit_done and dist < 36.0:
+				s_hit_done = true
+				_hit_hero(UPPER_DMG, false, Vector2(toward * 90.0, -280.0))
+			if act_t >= UPPER_WIND + 18:
+				act = ""
+				s_hit_done = false
+		"sweep":
+			# a rasteira: baixa e longa; não dá para defender (pule)
+			if act_t == 1 and dist > SWEEP_REACH + 20.0:
+				act = "approach"
+				act_i -= 1
+				return
+			if act_t < SWEEP_WIND and act_t % 5 == 0:
+				flash = 2
+			if act_t == SWEEP_WIND + 1:
+				room.sfx.emit("thump")
+				room.shake = maxf(room.shake, 2.0)
+			if act_t >= SWEEP_WIND + 1 and act_t <= SWEEP_WIND + 5 and not s_hit_done:
+				if dist < SWEEP_REACH and hy >= _inner().end.y - 3.0:
+					s_hit_done = true
+					if h_crouch and h_block:
+						_hit_hero(SWEEP_DMG, false)   # defendendo agachado, segura a rasteira
+					else:
+						_hit_hero(SWEEP_DMG, true, Vector2(toward * 140.0, -90.0))
+			if act_t >= SWEEP_WIND + 20:
+				act = ""
+				s_hit_done = false
+		"spit":
+			# o cuspe: de longe, uma bola de gosma em arco
+			if act_t == 1 and dist < 60.0:
+				act = "jab"   # perto demais: jab
+				act_t = 0
+				return
+			if act_t == SPIT_WIND:
+				room.sfx.emit("steam_burst")
+				var mouth := pos + Vector2(toward * 16.0, -34.0)
+				var tt := clampf(dist / 190.0, 0.35, 0.9)
+				var tgt := Vector2(hx, hy - 30.0)
+				spits.append({"pos": mouth, "vel": Vector2((tgt.x - mouth.x) / tt, (tgt.y - mouth.y) / tt - 0.5 * 420.0 * tt)})
+			if act_t >= SPIT_WIND + 18:
+				act = ""
+		"grab":
+			# o agarrão: pune quem fica defendendo; não dá para defender (pule ou saia de perto)
+			if act_t == 1 and dist > S_RANGE:
+				act = "approach"
+				act_i -= 1
+				return
+			if act_t == GRAB_WIND and grabbed_t < 0 and dist < 34.0 and hy >= _inner().end.y - 3.0:
+				grabbed_t = 0
+				room.sfx.emit("crunch")
+			if grabbed_t >= 0:
+				grabbed_t += 1
+				hx = pos.x + toward * lerpf(22.0, 4.0, clampf(float(grabbed_t) / GRAB_HOLD, 0.0, 1.0))
+				hy = _inner().end.y - sin(clampf(float(grabbed_t) / GRAB_HOLD, 0.0, 1.0) * PI * 0.5) * 30.0
+				if grabbed_t >= GRAB_HOLD:
+					grabbed_t = -1
+					# arremessa por cima, para trás dele
+					_hit_hero(GRAB_DMG, true, Vector2(-toward * 230.0, -240.0))
+					act_t = GRAB_WIND + 20
+			if act_t >= GRAB_WIND + 32 and grabbed_t < 0:
+				act = ""
 		"leap":
 			# a cambalhota por cima, caindo no coelho (dá para defender)
 			if act_t == 1:
@@ -1682,8 +1828,9 @@ func _s_act() -> void:
 				act = ""
 
 
-func _hit_senzi(dmg: float, kick := false) -> void:
+func _hit_senzi(dmg: float, kind := "jab") -> void:
 	var sd := signf(pos.x - hx) if pos.x != hx else 1.0
+	var kick := kind != "jab"   # o chute, a rasteira e o gancho passam pela defesa em pé dele
 	if kick and s_block:
 		# o chute quebra a defesa: ele cambaleia
 		_spark(Vector2(pos.x - sd * 12.0, pos.y - 10.0), Color("ffd27a"))
@@ -1693,13 +1840,34 @@ func _hit_senzi(dmg: float, kick := false) -> void:
 		room.sfx.emit("plate_on")
 		hitstop = 2
 		_spark(Vector2(pos.x - sd * 12.0, pos.y - 10.0), Color("cfe8ff"))
-		s_push = sd * 60.0
-		s_stun = 4
+		# defendeu: contra-ataca com o gancho, na hora
+		act = "upper"
+		act_t = 3
+		s_hit_done = false
+		return
+	if act == "charge" and act_t <= SCHARGE_WIND:
+		# carregando o soco: apanha, mas não para
+		s_hp -= dmg
+		hitstop = 2
+		flash = 4
+		bar_hit = 10
+		room.sfx.emit("crunch")
+		_spark(Vector2(pos.x - sd * 12.0, pos.y - 14.0), Color(1, 1, 1))
+		if s_hp <= 0.0:
+			_ring_win()
 		return
 	var hearts0 := _s_hearts()
 	s_hp -= dmg
 	s_stun = S_STUN + (8 if kick else 0)
-	s_push = sd * (170.0 if kick else 90.0)
+	s_push = sd * (170.0 if kind == "kick" else 90.0)
+	if kind == "upper":
+		# o gancho: o Senzi sobe
+		s_vy = -260.0
+		s_stun = 34
+		s_push = sd * 50.0
+		room.shake = maxf(room.shake, 5.0)
+		room.impact.emit(3.0)
+		room.sfx.emit("blast")
 	act = ""
 	s_hit_done = false
 	hitstop = 4
@@ -1717,7 +1885,7 @@ func _hit_senzi(dmg: float, kick := false) -> void:
 		_ring_win()
 
 
-func _hit_hero(dmg: float, unblockable: bool) -> void:
+func _hit_hero(dmg: float, unblockable: bool, knock := Vector2.INF) -> void:
 	var sd := signf(hx - pos.x) if hx != pos.x else 1.0
 	if h_block and not unblockable:
 		h_hp -= dmg * 0.2
@@ -1730,6 +1898,10 @@ func _hit_hero(dmg: float, unblockable: bool) -> void:
 		h_stun = H_STUN if not unblockable else H_STUN * 2
 		h_vx = sd * (260.0 if unblockable else 110.0)
 		h_vy = -150.0 if unblockable else 0.0
+		if knock != Vector2.INF:
+			h_vx = knock.x
+			h_vy = knock.y
+			h_stun = maxi(h_stun, 26)
 		h_jab = -1
 		hitstop = 4 if not unblockable else 8
 		hud_hit = 30
@@ -1825,9 +1997,16 @@ func _draw_hero(base: Transform2D) -> void:
 				anim_name = "hit"
 				fr = 0 if h_stun > H_STUN / 2 else 1
 			elif h_jab >= 0:
-				anim_name = "kick" if h_kick else "jab"
-				var at := HKICK_HIT if h_kick else HJAB_HIT
-				fr = 0 if h_jab < at else (1 if h_jab < at + 3 else (2 if h_jab < at + (10 if h_kick else 6) else 3))
+				var at: int = HMOVES[h_move][0]
+				var tot: int = HMOVES[h_move][1]
+				anim_name = {"jab": "jab", "kick": "kick", "upper": "uppercut", "low": "lowkick"}[h_move]
+				if h_move == "low":
+					fr = 0 if h_jab < at else (1 if h_jab < at + 6 else 2)
+				else:
+					fr = 0 if h_jab < at else (1 if h_jab < at + 3 else (2 if h_jab < at + (tot - at) / 2 else 3))
+			elif h_crouch:
+				anim_name = "crouch_block" if h_block else "crouch"
+				fr = 0 if h_block else (anim / 12) % 2
 			elif hy < _inner().end.y - 0.5:
 				anim_name = "jump"
 				fr = 0 if h_vy < 0.0 else 1
@@ -2044,3 +2223,37 @@ func _draw_splats() -> void:
 			draw_rect(Rect2(-2, 4, 1, dl), Color(sp["dark"], a * 0.8))
 			draw_rect(Rect2(1, 4, 1, dl * 0.6), Color(sp["dark"], a * 0.8))
 	draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## As bolas de gosma do cuspe: em arco, caem no coelho (defendendo, quase nada) ou se esborracham no chão.
+func _update_spits() -> void:
+	var inn := _inner()
+	var keep: Array = []
+	for sp in spits:
+		sp["vel"].y += 420.0 / 60.0
+		sp["pos"] += sp["vel"] / 60.0
+		var p: Vector2 = sp["pos"]
+		var hit := Rect2(hx - 10.0, hy - 64.0, 20.0, 64.0).has_point(p)
+		if hit and grabbed_t < 0:
+			if h_block:
+				h_hp -= 1.0
+				room.sfx.emit("plate_on")
+				_spark(p, C_GOO)
+			else:
+				_hit_hero(SPIT_DMG, false)
+				h_slow = SLOW_FRAMES
+			_splash(p)
+			continue
+		if p.y >= inn.end.y - 1.0 or p.x < inn.position.x or p.x > inn.end.x:
+			_splash(Vector2(p.x, minf(p.y, inn.end.y - 1.0)))
+			continue
+		keep.append(sp)
+	spits = keep
+
+
+func _splash(p: Vector2) -> void:
+	room.sfx.emit("steam_burst")
+	for i in 10:
+		var a := rng.randf_range(PI, TAU)
+		room.particles.append({"pos": p, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(30.0, 110.0),
+			"life": rng.randi_range(12, 24), "col": C_GOO if i % 2 else C_SKIN, "grav": 300.0})

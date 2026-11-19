@@ -40,6 +40,22 @@
 		"kick": {
 			"row": 8,
 			"frames": 4
+		},
+		"crouch": {
+			"row": 9,
+			"frames": 2
+		},
+		"crouch_block": {
+			"row": 10,
+			"frames": 1
+		},
+		"uppercut": {
+			"row": 11,
+			"frames": 4
+		},
+		"lowkick": {
+			"row": 12,
+			"frames": 3
 		}
 	}
 }

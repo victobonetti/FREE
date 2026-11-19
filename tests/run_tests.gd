@@ -3602,6 +3602,94 @@ func test_senzi() -> void:
 		tick({"move": -1.0 if m.hx < m.pos.x else 1.0})
 		m.hx = m.pos.x - 30.0
 	check(m.h_hp <= h0 - m.SCHARGE_DMG + 0.1, "o soco carregado passa pela defesa (%.0f -> %.0f)" % [h0, m.h_hp])
+	# os golpes novos do Senzi
+	var rfl2: float = m._inner().end.y
+	var setup := func(act_name: String, gap_px: float) -> void:
+		m.act = act_name
+		m.act_t = 0
+		m.s_hit_done = false
+		m.s_stun = 0
+		m.h_stun = 0
+		m.h_slow = 0
+		m.grabbed_t = -1
+		m.hx = m.pos.x - gap_px
+		m.hy = rfl2
+		m.h_vx = 0.0
+		m.h_vy = 0.0
+		m.h_hp = 90.0
+		m.h_jab = -1
+		m.ring_t = m.RING_FRAMES   # (os testes são longos: o ringue não acaba no meio)
+	idle(30)
+	setup.call("upper", 28.0)
+	for i in m.UPPER_WIND + 4:
+		tick()
+	check(m.h_hp <= 90.0 - m.UPPER_DMG + 0.1 and m.h_vy < -100.0, "o gancho joga o coelho para o alto (vy %.0f)" % m.h_vy)
+	idle(60)
+	setup.call("sweep", 40.0)
+	for i in m.SWEEP_WIND + 5:
+		tick({"move": -1.0})
+		m.hx = m.pos.x - 40.0
+	check(m.h_hp <= 90.0 - m.SWEEP_DMG + 0.1, "a rasteira passa pela defesa")
+	idle(60)
+	setup.call("sweep", 40.0)
+	for i in m.SWEEP_WIND + 6:
+		tick({"jump": i == m.SWEEP_WIND - 6})
+		m.hx = m.pos.x - 40.0
+	check(m.h_hp >= 90.0 - 0.1, "pulando, a rasteira passa por baixo")
+	idle(60)
+	setup.call("grab", 26.0)
+	var side0 := signf(m.hx - m.pos.x)
+	for i in m.GRAB_WIND + m.GRAB_HOLD + 40:
+		tick({"move": -1.0})
+	check(m.h_hp <= 90.0 - m.GRAB_DMG + 0.1 and signf(m.hx - m.pos.x) != side0, "o agarrão pega mesmo defendendo e arremessa por cima, para trás dele")
+	idle(60)
+	setup.call("spit", 120.0)
+	m.pos.x = m._inner().end.x - 30.0
+	m.hx = m.pos.x - 120.0
+	for i in 70:
+		tick()
+	check(m.h_hp < 90.0 and m.h_slow > 0, "o cuspe acerta de longe e deixa o coelho lento na gosma")
+	idle(120)
+	setup.call("guard", 30.0)
+	m.h_cd = 0
+	tick({"rotate": -1})
+	for i in m.HJAB_HIT + 2:
+		tick()
+	check(m.act == "upper", "defendendo um jab, ele contra-ataca com o gancho")
+	# agachado: o jab dele passa por cima; defendendo agachado, segura a rasteira
+	idle(60)
+	setup.call("jab", 30.0)
+	for i in m.SJAB_WIND + 6:
+		tick({"climb": 1.0})
+		m.hx = m.pos.x - 30.0
+	check(m.h_hp >= 90.0 - 0.1 and m.h_crouch, "agachado, o jab dele passa por cima")
+	idle(60)
+	setup.call("sweep", 40.0)
+	for i in m.SWEEP_WIND + 6:
+		tick({"climb": 1.0, "move": -1.0})
+		m.hx = m.pos.x - 40.0
+	check(m.h_hp > 90.0 - m.SWEEP_DMG * 0.5, "defendendo agachado, segura a rasteira (%.0f)" % m.h_hp)
+	# o gancho de baixo para cima (agachado + giro esquerdo) joga o Senzi para o alto
+	idle(60)
+	setup.call("retreat", 30.0)
+	m.act_t = -999
+	m.h_cd = 0
+	var up0: float = m.s_hp
+	tick({"climb": 1.0, "rotate": -1})
+	for i in 9:
+		tick({"climb": 1.0})
+		m.hx = m.pos.x - 30.0
+	check(m.s_hp < up0 and m.s_vy < 0.0, "agachado, o gancho de baixo para cima joga o Senzi para o alto (vy %.0f)" % m.s_vy)
+	idle(80)
+	# a rasteira do coelho (agachado + giro direito) passa pela defesa dele
+	setup.call("guard", 40.0)
+	m.h_cd = 0
+	var l0: float = m.s_hp
+	tick({"climb": 1.0, "rotate": 1})
+	for i in 8:
+		tick({"climb": 1.0})
+		m.hx = m.pos.x - 40.0
+	check(m.s_hp <= l0 - 3.0, "a rasteira do coelho passa pela defesa em pé dele (%.1f -> %.1f)" % [l0, m.s_hp])
 	# o tempo acaba: o coelhão desincha, a perseguição volta, e a vida perdida do Senzi fica perdida
 	var shp: float = m.s_hp
 	m.h_hp = 90.0
@@ -3626,6 +3714,10 @@ func test_senzi() -> void:
 	m.act = "guard"
 	m.act_t = 0
 	m.s_stun = 0
+	m.h_stun = 0
+	m.h_cd = 0
+	m.h_jab = -1
+	m.grabbed_t = -1
 	m.hx = m.pos.x - 50.0
 	m.hy = m._inner().end.y
 	var k0: float = m.s_hp

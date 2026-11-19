@@ -529,6 +529,93 @@ def kick_pose(i):
             "tent": 0.0}
 
 
+def upper_pose(i):
+    """O gancho: agacha, sobe explodindo com o braço da frente de baixo para cima, segura, volta."""
+    if i == 0:
+        legs = [(0.9, -0.5, -0.1), (0.4, -0.7)]
+        return {"hip": stand_hip(legs, 0.0, x=42.0), "tilt": 0.55, "leg_f": legs[0], "leg_b": legs[1],
+                "arm_f": (0.2, 0.9), "arm_b": (0.7, 2.9), "neck": 0.3, "tent": 0.1}
+    legs = [(0.25, -0.05, -0.05), (-0.45, -0.2)]
+    arm = [(None), (2.3, 3.0), (2.5, 3.05), (1.3, 2.6)][i]
+    return {"hip": stand_hip(legs, -1.0 if i == 1 else 0.0, x=46.0), "tilt": -0.1 if i in (1, 2) else 0.1,
+            "leg_f": legs[0], "leg_b": legs[1], "arm_f": arm, "arm_b": (-0.4, 0.4), "neck": -0.25 if i == 1 else 0.0,
+            "tent": -0.5 if i == 1 else -0.1, "face": "roar" if i == 1 else ""}
+
+
+def sweep_pose(i):
+    """A rasteira: agacha baixo e varre com a perna da frente esticada rente ao chão."""
+    if i == 0:
+        legs = [(1.2, -0.6, -0.1), (0.7, -0.9)]
+        return {"hip": stand_hip(legs, 0.0, x=40.0), "tilt": 0.8, "leg_f": legs[0], "leg_b": legs[1],
+                "arm_f": (0.4, 0.8), "arm_b": (0.2, 0.5), "neck": 0.4, "tent": 0.2}
+    # quase sentado: o quadril perto do chão, a perna de trás dobrada embaixo, a da frente varrendo
+    hip = (38.0, 81.0)
+    lf = (1.5, 1.52, 1.45) if i == 1 else (1.25, 0.9, 0.8)
+    lb = (2.2, -0.2, -0.4)
+    return {"hip": hip, "tilt": 0.55, "leg_f": lf, "leg_b": lb, "arm_f": {"at": (30.0, 91.0), "bend": 1.0},
+            "arm_b": {"at": (26.0, 91.0), "bend": 1.0}, "neck": 0.45, "tent": 0.1 if i == 1 else 0.3, "face": "roar" if i == 1 else ""}
+
+
+def spit_pose(i):
+    """O cuspe: inclina para trás enchendo, joga o pescoço para a frente e cospe a gosma."""
+    legs = [(0.35, -0.05, -0.05), (-0.45, -0.15)]
+    tilt = [-0.25, 0.45, 0.25][i]
+    return {"hip": stand_hip(legs, 0.0, x=44.0), "tilt": tilt, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (0.4, 0.3), "arm_b": (-0.3, 0.2), "neck": [-0.4, 0.6, 0.3][i], "tent": [0.4, -0.6, -0.3][i],
+            "face": "roar" if i == 1 else "", "goo": 12}
+
+
+def grab_pose(i):
+    """O agarrão: os dois braços para a frente, fecha, levanta e arremessa por cima."""
+    legs = [(0.5, -0.05, -0.05), (-0.5, -0.15)]
+    arms = [((1.4, 1.5), (1.3, 1.45)), ((1.5, 2.0), (1.4, 1.9)), ((2.6, 3.0), (2.5, 2.9)), ((-0.8, 0.2), (-0.6, 0.0))][i]
+    return {"hip": stand_hip(legs, 0.0, x=44.0), "tilt": [0.35, 0.3, -0.2, 0.2][i], "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": arms[0], "arm_b": arms[1], "neck": [0.1, 0.1, -0.3, 0.2][i], "tent": [-0.2, 0.0, -0.5, 0.0][i],
+            "face": "roar" if i == 2 else ""}
+
+
+CROUCH_LEGS = [(1.3, -0.65, -0.05), (0.85, -0.95, 0.0)]
+
+
+def crouch_pose(i):
+    """Agachado em guarda: joelhos bem dobrados, os punhos na frente do queixo."""
+    legs = CROUCH_LEGS
+    return {"hip": stand_hip(legs, (0.0, 0.8)[i], x=42.0), "tilt": 0.35, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (1.0, 2.7), "arm_b": (0.75, 2.85), "neck": 0.1, "ears": 0.1 + 0.05 * i}
+
+
+def crouch_block_pose(i):
+    legs = CROUCH_LEGS
+    return {"hip": stand_hip(legs, 1.0, x=44.0), "tilt": 0.15, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (1.35, 3.0), "arm_b": (1.25, 3.05), "neck": -0.05, "ears": 0.3}
+
+
+def uppercut_pose(i):
+    """O gancho de baixo para cima (estilo Mortal Kombat): agachado com o punho embaixo, explode para cima
+    esticando o corpo todo, o punho lá no alto, e volta."""
+    if i == 0:
+        legs = CROUCH_LEGS
+        return {"hip": stand_hip(legs, 1.0, x=40.0), "tilt": 0.45, "leg_f": legs[0], "leg_b": legs[1],
+                "arm_f": (0.25, -0.35), "arm_b": (0.75, 2.85), "neck": 0.15, "ears": -0.1}
+    if i in (1, 2):
+        legs = [(0.35, 0.05, -0.2), (-0.35, -0.2, 0.3)] if i == 1 else [(0.15, 0.0, -0.4), (-0.3, -0.1, 0.5)]
+        return {"hip": stand_hip(legs, -2.0 if i == 2 else 0.0, x=44.0), "tilt": -0.05 if i == 1 else -0.2,
+                "leg_f": legs[0], "leg_b": legs[1], "arm_f": (2.55, 3.0) if i == 1 else (2.85, 3.1),
+                "arm_b": (-0.5, 0.3), "neck": -0.2, "ears": -0.45}
+    legs = [(0.6, -0.3, -0.05), (0.2, -0.6)]
+    return {"hip": stand_hip(legs, 0.0, x=42.0), "tilt": 0.25, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (1.6, 2.6), "arm_b": (0.75, 2.85), "neck": 0.05, "ears": 0.05}
+
+
+def lowkick_pose(i):
+    """A rasteira baixa do coelhão: agachado, varre com a perna da frente rente ao chão."""
+    hip = (40.0, 80.0)
+    lf = (1.5, 1.53, 1.45) if i == 1 else (1.3, 0.8, 0.7)
+    lb = (2.1, -0.3, -0.4)
+    return {"hip": hip, "tilt": 0.3, "leg_f": lf, "leg_b": lb, "arm_f": (1.0, 2.7), "arm_b": {"at": (32.0, 91.0), "bend": 1.0},
+            "neck": 0.1, "ears": 0.2}
+
+
 def rabbit(fn):
     """A mesma pose, no coelhão."""
     def f(i):
@@ -540,13 +627,16 @@ def rabbit(fn):
 
 RABBIT_ANIMS = [("guard", 4, rabbit(guard_pose)), ("walk", 6, rabbit(walk_pose)), ("jab", 4, rabbit(jab_pose)),
                 ("block", 2, rabbit(block_pose)), ("hit", 2, rabbit(hit_pose)), ("jump", 2, rabbit(jump_pose)),
-                ("flex", 6, rabbit(flex_pose)), ("die", 4, rabbit(die_pose)), ("kick", 4, rabbit(kick_pose))]
+                ("flex", 6, rabbit(flex_pose)), ("die", 4, rabbit(die_pose)), ("kick", 4, rabbit(kick_pose)),
+                ("crouch", 2, rabbit(crouch_pose)), ("crouch_block", 1, rabbit(crouch_block_pose)),
+                ("uppercut", 4, rabbit(uppercut_pose)), ("lowkick", 3, rabbit(lowkick_pose))]
 
 
 ANIMS = [("run", 8, run_pose), ("idle", 4, idle_pose), ("flex", 6, flex_pose), ("throw", 4, throw_pose), ("die", 4, die_pose),
          ("leap", 3, leap_pose), ("punch", 4, punch_pose), ("tired", 4, tired_pose), ("hold", 4, hold_pose),
          ("inject", INJ, inject_pose), ("guard", 4, guard_pose), ("walk", 6, walk_pose), ("block", 2, block_pose),
-         ("hit", 2, hit_pose)]
+         ("hit", 2, hit_pose), ("upper", 4, upper_pose), ("sweep", 3, sweep_pose), ("spit", 3, spit_pose),
+         ("grab", 4, grab_pose)]
 
 
 def build(anims, name):
