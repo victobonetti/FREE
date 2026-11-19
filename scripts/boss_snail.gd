@@ -22,7 +22,18 @@ const BODY := Vector2(30, 46)        # ao longo da superfície × para fora dela
 var sheet: Texture2D = load("res://art/senzi.png")
 const FRAME := Vector2(96, 96)
 const FEET := 94.0                   # a linha dos pés no quadro
-const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4], "leap": [5, 3], "punch": [6, 4]}
+const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4], "leap": [5, 3], "punch": [6, 4],
+	"tired": [7, 4], "hold": [8, 4], "inject": [9, 12]}
+# O plot twist (D113): sem energia, ele para, ergue a seringa verde e se injeta (a energia volta toda).
+# O coelho pode pegá-la enquanto ela flutua acima da mão aberta.
+const TIRED_FRAMES := 50             # para, ofegando
+const HOLD_FRAMES := 180             # 3 s com a seringa no alto (a janela do coelho)
+const INJ_FAST := 3                  # quadros do jogo por quadro da injeção (0 a 7: rápida)
+const INJ_PUMP := 5                  # e do PUMP (8 a 11)
+const INJECT_FRAMES := 8 * INJ_FAST + 4 * INJ_PUMP
+const HAND_UP := Vector2(49.3, 18.0) # a mão aberta no quadro "hold" (art/senzi.json, hand_up)
+const SYRINGE_FLOAT := 20.0          # quanto a seringa flutua acima da mão
+const DOSE_SPEED := 0.1              # cada dose: 10% mais rápido
 const TUCK := Vector2(8, -33)        # o centro da bola encolhida, a partir dos pés (o eixo da cambalhota)
 const STRIDE := 5.0                  # px corridos por quadro da corrida
 const SPEED := [62.0, 76.0, 90.0]    # px/s, por terço da barra gasto
@@ -87,6 +98,7 @@ const DIE_FRAMES := 150
 const C_SKIN := Color("d7cdb8")
 const C_MUSCLE := Color("e9e3d4")
 const C_GOO := Color("aca08c")
+const C_JUICE := Color("70ff4a")      # o líquido da seringa
 const C_GRAV := Color("7fe0d0")       # a mola: verde-água, pulsando (ela vira a gravidade)
 const C_SHELL := Color("8a5f9e")
 const C_SHELL_DARK := Color("5e3f70")
@@ -128,6 +140,8 @@ var snap_ang := true
 var run_dist := 0.0            # px corridos (o quadro da corrida segue a distância, não o tempo)
 var throw_t := 0               # quadros da animação de arremesso do haltere
 var fly_t := 0                 # o coelho voando do soco
+var doses := 0                 # quantas vezes ele se injetou
+var syringe_taken := false     # o coelho pegou a seringa
 
 
 static func replay_state() -> Dictionary:
@@ -153,6 +167,8 @@ func on_reset(r) -> void:
 		pos = Vector2(r.pw * 0.5, _inner().end.y - body_rect().size.y / 2.0)
 		return
 	phase = 0
+	doses = 0
+	syringe_taken = false
 	lives = LIVES
 	energy = ENERGY
 	wall_t = 0
@@ -309,7 +325,7 @@ func body_rect() -> Rect2:
 
 
 func _stuck() -> bool:
-	return state in ["berserk", "rage", "leap_warn", "punch", "glued", "lurk", "reveal"]
+	return state in ["berserk", "rage", "leap_warn", "punch", "glued", "tired", "hold", "inject", "lurk", "reveal"]
 
 
 func _rabbit_c() -> Vector2:
@@ -317,7 +333,7 @@ func _rabbit_c() -> Vector2:
 
 
 func fighting() -> bool:
-	return state in ["berserk", "rage", "leap_warn", "leap", "punch", "glued"]
+	return state in ["berserk", "rage", "leap_warn", "leap", "punch", "glued", "tired", "hold", "inject"]
 
 
 ## O terço da barra em que ele está: 0 (cheia), 1, 2 (o fim).
@@ -420,6 +436,57 @@ func step(r) -> void:
 			if t >= RAGE_FRAMES:
 				state = "berserk"
 				t = 0
+		"tired":
+			if t % 12 == 0:
+				r.particles.append({"pos": pos + _up() * 10.0 + _ahead() * 8.0, "vel": _up() * 14.0 + _ahead() * 10.0, "life": 22,
+					"col": Color(1, 1, 1, 0.45), "grav": 0.0})   # o bafo, ofegando
+			if t >= TIRED_FRAMES:
+				state = "hold"
+				t = 0
+				r.sfx.emit("lock_on")
+				r.shake = maxf(r.shake, 1.5)
+		"hold":
+			# a seringa no alto, flutuando; o coelho pode pegá-la
+			if t % 5 == 0:
+				var a := rng.randf() * TAU
+				r.particles.append({"pos": syringe_pos() + Vector2(cos(a), sin(a)) * 6.0, "vel": Vector2(cos(a), sin(a)) * 8.0,
+					"life": 16, "col": C_JUICE, "grav": 0.0})
+			if Rect2(r.rabbit.rect).intersects(syringe_rect()):
+				_take_syringe()
+			elif t >= HOLD_FRAMES:
+				state = "inject"
+				t = 0
+				r.sfx.emit("gatsby_dash")
+		"inject":
+			var stab := 3 * INJ_FAST
+			var pump := 8 * INJ_FAST
+			if t == stab:
+				r.sfx.emit("crunch")
+				r.shake = maxf(r.shake, 3.0)
+			if t > stab and t < pump and t % 4 == 0:
+				flash = 3   # pisca, pisca
+				r.particles.append({"pos": pos + _up() * 14.0, "vel": Vector2(rng.randf_range(-30, 30), rng.randf_range(-30, 10)),
+					"life": 14, "col": C_JUICE, "grav": 60.0})
+			if t == pump:
+				# o PUMP: a energia volta toda
+				energy = ENERGY
+				doses += 1
+				bar_hit = 30
+				pop_flash = 8
+				r.shake = 8.0
+				r.impact.emit(3.5)
+				r.sfx.emit("blast")
+				for i in 24:
+					var a := rng.randf() * TAU
+					r.particles.append({"pos": pos, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(60.0, 200.0),
+						"life": rng.randi_range(14, 28), "col": C_JUICE if i % 3 == 0 else C_SKIN, "grav": 120.0})
+			if t >= INJECT_FRAMES:
+				state = "berserk"
+				t = 0
+				phase = 0
+				wave_i = 0
+				wall_t = 0
+				r.sfx.emit("gatsby_dash")
 		"dying":
 			_fall()
 			if t % 10 == 0:
@@ -456,8 +523,8 @@ func _berserk() -> void:
 	else:
 		turn_t = 0
 	if absf(d) > 3.0 or want == dir:
-		u += dir * float(SPEED[ph]) / 60.0
-		run_dist += float(SPEED[ph]) / 60.0
+		u += dir * _speed(ph) / 60.0
+		run_dist += _speed(ph) / 60.0
 	pos = _pt_of(u)
 	if _in_reach(PUNCH_REACH * 0.8):
 		state = "punch"
@@ -492,7 +559,7 @@ func _berserk() -> void:
 			bell_t = 0
 			_throw_bell()
 	if energy <= 0.0:
-		_die()
+		_tire()
 	elif _phase() > phase:
 		phase = _phase()
 		state = "rage"
@@ -751,6 +818,51 @@ func _age_shrooms() -> void:
 		if w["age"] == 0:
 			room.sfx.emit("crunch")
 	walls = walls.filter(func(w): return w["age"] < WALL_LIFE)
+
+
+func _speed(ph: int) -> float:
+	return float(SPEED[ph]) * (1.0 + DOSE_SPEED * doses)
+
+
+## Para dentro da sala, a partir da superfície em que ele está.
+func _up() -> Vector2:
+	return _surf_n() if _stuck() else Vector2(0, -1)
+
+
+## Sem energia: para, cansado (e depois a seringa).
+func _tire() -> void:
+	energy = 0.0
+	state = "tired"
+	t = 0
+	bells.clear()
+	room.sfx.emit("steam_burst")
+	room.shake = maxf(room.shake, 2.0)
+
+
+## Onde a seringa flutua: acima da mão aberta, no alto (gira com ele, na superfície em que está).
+func syringe_pos() -> Vector2:
+	var flip := -1.0 if dir < 0 else 1.0
+	var h := BODY.y / 2.0
+	var local := Vector2((HAND_UP.x - FRAME.x / 2.0) * flip, h - FEET + HAND_UP.y - SYRINGE_FLOAT + sin(anim * 0.1) * 1.5)
+	return pos + local.rotated(Vector2(0, -1).angle_to(_up()))
+
+
+func syringe_rect() -> Rect2:
+	var c := syringe_pos()
+	return Rect2(c - Vector2(9, 16), Vector2(18, 32))
+
+
+## O coelho pegou a seringa: sem a dose, ele cai (por enquanto, morre).
+func _take_syringe() -> void:
+	syringe_taken = true
+	var c := syringe_pos()
+	room.sfx.emit("gate_open")
+	for i in 20:
+		var a := rng.randf() * TAU
+		room.particles.append({"pos": c, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(30.0, 140.0),
+			"life": rng.randi_range(12, 26), "col": C_JUICE if i % 2 else Color(1, 1, 1), "grav": 0.0})
+	room.particles.append({"pos": c, "vel": Vector2.ZERO, "life": 12, "col": C_JUICE, "grav": 0.0, "ring": 5.0})
+	_die()
 
 
 func _die() -> void:
@@ -1075,6 +1187,15 @@ func _draw_snail(base: Transform2D) -> void:
 		"glued":
 			anim_name = "idle"
 			fr = (anim / 3) % 4
+		"tired":
+			anim_name = "tired"
+			fr = (anim / 7) % 4
+		"hold":
+			anim_name = "hold"
+			fr = (anim / 9) % 4
+		"inject":
+			anim_name = "inject"
+			fr = t / INJ_FAST if t < 8 * INJ_FAST else mini(8 + (t - 8 * INJ_FAST) / INJ_PUMP, 11)
 		"rage":
 			anim_name = "flex"
 			fr = mini(t / 4, 2) if t < 8 else 2 + (t / 5) % 4
@@ -1090,6 +1211,10 @@ func _draw_snail(base: Transform2D) -> void:
 	var row: int = ANIM[anim_name][0]
 	var white := (flash > 0 and (flash / 3) % 2 == 0)
 	var mod := Color(1.0, 0.55, 0.55) if white else Color(1, 1, 1)
+	if state == "inject" and white:
+		mod = Color(2.4, 2.6, 2.4)   # pisca: branco
+	if state == "inject" and t >= 8 * INJ_FAST:
+		sc *= 1.0 + 0.08 * maxf(0.0, 1.0 - float(t - 8 * INJ_FAST) / float(4 * INJ_PUMP))   # o PUMP
 	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO))
 	var src := Rect2(Vector2(fr, row) * FRAME, FRAME)
 	var hd := body_rect().size.y / 2.0 if (state == "dying" or state == "dead") else h
@@ -1101,6 +1226,33 @@ func _draw_snail(base: Transform2D) -> void:
 			* Transform2D(0.0, c) * Transform2D(k * TAU, Vector2.ZERO) * Transform2D(0.0, -c))
 	draw_texture_rect_region(sheet, Rect2(Vector2(-FRAME.x / 2.0, hd - FEET), FRAME), src, mod)
 	draw_set_transform_matrix(base)
+	if state == "hold":
+		_draw_syringe(base * Transform2D(ang, syringe_pos().round()), clampf(float(t) / 10.0, 0.0, 1.0), 2.0)
+
+
+## A seringa flutuando, bem destacada: de pé, a agulha para cima, o líquido verde brilhando, com um
+## halo que pulsa. Desenhada com o centro na origem.
+func _draw_syringe(xf: Transform2D, k: float, size := 1.0) -> void:
+	draw_set_transform_matrix(xf)
+	var pulse := 0.5 + 0.5 * sin(anim * 0.25)
+	var g := size * k
+	draw_circle(Vector2.ZERO, (10.0 + 2.5 * pulse) * g, Color(C_JUICE, 0.1 + 0.1 * pulse))
+	draw_circle(Vector2.ZERO, 6.5 * g, Color(C_JUICE, 0.16))
+	for q in 6:
+		var a := anim * 0.05 + q * TAU / 6.0
+		var d := Vector2(cos(a), sin(a))
+		draw_line(d * 8.5 * g, d * (11.5 + 2.5 * pulse) * g, Color(C_JUICE, 0.55), 1.0)
+	draw_set_transform_matrix(xf * Transform2D(0.0, Vector2(g, g), 0.0, Vector2.ZERO))
+	draw_rect(Rect2(-0.5, -9, 1, 4), Color("d6dae2"))          # a agulha
+	draw_rect(Rect2(-1.5, -5, 3, 1), Color("8a929e"))          # o bico
+	draw_rect(Rect2(-2, -4, 4, 9), Color("3c5c54"))            # o vidro (contorno)
+	draw_rect(Rect2(-1, -4, 2, 8), Color("cfe8e2"))
+	draw_rect(Rect2(-1, -3, 2, 6), C_JUICE)                    # o líquido
+	draw_rect(Rect2(-1, -3, 1, 6), C_JUICE.lightened(0.5))
+	draw_rect(Rect2(-3, 5, 6, 1), Color("3c5c54"))             # as abas
+	draw_rect(Rect2(-0.5, 6, 1, 2), Color("d6dae2"))           # o êmbolo
+	draw_rect(Rect2(-2, 8, 4, 1), Color("d6dae2"))
+	draw_set_transform_matrix(_wall_base)
 
 
 func _draw_hud() -> void:
@@ -1116,6 +1268,9 @@ func _draw_hud() -> void:
 	draw_texture(tex, rb.position + Vector2(2, 1))
 	for i in LIVES:
 		_draw_heart(Vector2(-52 + i * 10, y + 6), i < lives)
+	if syringe_taken:
+		_draw_syringe(Transform2D(0.0, Vector2(-26, y + 9)), 1.0)
+		draw_set_transform_matrix(Transform2D.IDENTITY)
 	# a energia do Senzi: a barra grande, em três terços
 	var bar := Rect2(-18, y + 4, 168, 10)
 	draw_rect(bar.grow(1.0), Color(0.05, 0.05, 0.08, 0.85))

@@ -3447,10 +3447,9 @@ func test_senzi() -> void:
 	m = _senzi()
 	check(absf(m.pos.y - m._path().end.y) < 0.5, "ao reiniciar, o Senzi nasce de pé no chão (centro a %.0f do caminho)" % (m.pos.y - m._path().end.y))
 	# morto: o caramujinho fica no chão
-	m.energy = 0.01
 	while m.state != "berserk":
 		tick()
-	idle(2)
+	m._die()
 	idle(m.DIE_FRAMES + 30)
 	check(m.state == "dead" and absf(m.pos.y + m.body_rect().size.y / 2.0 - m._inner().end.y) < 1.0, "morto, ele fica no chão (não flutua)")
 	# os cogumelos (D112): padrões fixos por terço, com aviso antes de brotar
@@ -3526,28 +3525,74 @@ func test_senzi() -> void:
 	check(m.state == "rage" and m.phase == 1, "passando de um terço da barra, ele para com raiva")
 	idle(m.RAGE_FRAMES + 2)
 	check(m.state == "berserk" and m._phase() == 1, "e volta a correr, mais rápido")
-	# sem energia: desaba e morre; a porta destrava
+	# sem energia: para cansado, ergue a seringa e, se ninguém pega, se injeta e volta com tudo (D113)
 	m.energy = 0.01
 	idle(3)
-	check(m.state == "dying", "sem energia, ele desaba")
+	check(m.state == "tired", "sem energia, ele para, cansado")
+	idle(m.TIRED_FRAMES + 2)
+	check(m.state == "hold", "e ergue a seringa")
+	var sp: Vector2 = m.syringe_pos()
+	check(sp.y < m.pos.y - 40.0, "a seringa flutua no alto, acima da mão (%.0f px acima do centro dele)" % (m.pos.y - sp.y))
+	room.rabbit.pos = Vector2i(int(m._inner().position.x) + 4, int(m._inner().end.y) - 12)
+	idle(m.HOLD_FRAMES + 2)
+	check(m.state == "inject", "3 s sem pegarem: ele se injeta")
+	idle(m.INJECT_FRAMES + 2)
+	check(m.state == "berserk" and m.energy >= m.ENERGY - 1.0 and m.doses == 1, "a energia volta toda e ele volta a correr")
+	check(m._speed(0) > m.SPEED[0], "e mais rápido (%.0f px/s)" % m._speed(0))
+	# o coelho pega a seringa: ele morre (por enquanto) e a porta destrava
+	m.energy = 0.01
+	idle(3 + m.TIRED_FRAMES + 30)
+	check(m.state == "hold", "de novo a seringa")
+	var sr: Rect2 = m.syringe_rect()
+	room.rabbit.pos = Vector2i(sr.get_center()) - Vector2i(6, 6)
+	room.rabbit.vel = Vector2.ZERO
+	tick()
+	check(m.syringe_taken and m.state == "dying", "o coelho pega a seringa: sem a dose, ele desaba")
 	idle(m.DIE_FRAMES + 5)
 	check(m.state == "dead" and room.door_unlocked, "e morre: a porta destrava")
 
 
 ## Um bot que só foge: gira a sala quando ele chega perto, e pula os muros. As vidas do coelho são
 ## repostas: o que se prova é que a energia dele acaba sozinha (tempo + muros) e a porta abre.
+## Um bot que foge até ele cansar e, na seringa, gira a sala para ficar acima dela e cai em cima
+## (a seringa está no alto, fora do pulo: o giro deixa a mão dele de lado e o coelho cai até ela).
 func test_senzi_bot() -> void:
-	print("Senzi: fugir até ele cansar vence")
+	print("Senzi: fugir até ele cansar e pegar a seringa vence")
 	var m = _senzi()
 	var i := 0
+	var turned := false
+	var doses := 0
 	while m.state != "dead" and i < 40000:
 		var r := 0
-		if m.fighting() and not room.rotating and room.rot_lock == 0 and m.pos.distance_to(m._rabbit_c()) < 70.0:
+		var mv := signf(m._rabbit_c().x - m.pos.x)
+		var jump := i % 30 < 10
+		if m.state == "hold":
+			var sp: Vector2 = m.syringe_pos()
+			var rc: Vector2 = m._rabbit_c()
+			if not turned and m.t > 4 and not room.rotating and room.rot_lock == 0:
+				# escolhe o giro que deixa o coelho acima da seringa, perto dela na horizontal
+				var best := -9999.0
+				for d in [1, -1]:
+					var q: Vector2 = room._rot_point(rc, d)
+					var ss: Vector2 = room._rot_point(sp, d)
+					var fall := ss.y - q.y
+					if fall < 16.0:
+						continue
+					var sc := 72.0 * (fall / 130.0 + 0.1) - absf(ss.x - q.x)
+					if sc > best:
+						best = sc
+						r = d
+				turned = true
+			mv = clampf((sp.x - rc.x) / 6.0, -1.0, 1.0)
+			jump = rc.y > sp.y + 4.0 and absf(sp.x - rc.x) < 20.0
+		elif m.fighting() and not room.rotating and room.rot_lock == 0 and m.pos.distance_to(m._rabbit_c()) < 70.0:
 			r = 1
-		var away := signf(m._rabbit_c().x - m.pos.x)
+		if m.state != "hold":
+			turned = false
+		doses = maxi(doses, m.doses)
 		m.lives = m.LIVES
-		tick({"rotate": r, "move": away, "jump": i % 30 < 10})
+		tick({"rotate": r, "move": mv, "jump": jump})
 		i += 1
-	print("  %d quadros (%.0f s)" % [i, i / 60.0])
-	check(m.state == "dead", "a energia do Senzi acaba")
+	print("  %d quadros (%.0f s), %d doses" % [i, i / 60.0, doses])
+	check(m.syringe_taken and m.state == "dead", "o coelho pega a seringa e o Senzi cai")
 	check(room.door_unlocked, "a porta destrava")

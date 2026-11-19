@@ -30,6 +30,12 @@ SHELL = (138, 95, 158, 255)      # a concha dos de enfeite (8a5f9e / 6e4a82 / c9
 SHELL_D = (110, 74, 130, 255)
 SHELL_L = (201, 166, 221, 255)
 MOUTH = (58, 26, 36, 255)
+# a seringa (o plot twist): vidro, o líquido verde bem vivo, a agulha
+GLASS = (206, 232, 226, 255)
+GLASS_D = (60, 92, 84, 255)
+JUICE = (112, 255, 74, 255)
+JUICE_D = (40, 170, 40, 255)
+STEEL = (200, 204, 214, 255)
 
 
 class Canvas:
@@ -37,6 +43,7 @@ class Canvas:
         self.img = np.zeros((FH, FW, 4), dtype=np.uint8)
         self.rng = np.random.default_rng(seed)
         self.bottoms = []          # pontos de onde a gosma pode escorrer
+        self.pump = 1.0            # o PUMP: tudo mais grosso
 
     @staticmethod
     def _shift(m, dx, dy):
@@ -65,7 +72,7 @@ class Canvas:
         out = []
         for i in range(n + 1):
             t = i / n
-            r = (r0 + (r1 - r0) * t) * (1.0 + self.rng.uniform(-wob, wob))
+            r = (r0 + (r1 - r0) * t) * (1.0 + self.rng.uniform(-wob, wob)) * self.pump
             q = lerp(p0, p1, t)
             j = self.rng.uniform(-0.5, 0.5, 2)
             out.append(("c", (q[0] + j[0], q[1] + j[1], max(0.8, r))))
@@ -164,8 +171,43 @@ UPPER, FORE = 12.0, 11.0
 TORSO = 21.0
 
 
+def ik(sh, target, l1, l2, bend=1.0):
+    """Os ângulos (no jeito de polar) do braço para a mão chegar em target; bend escolhe o cotovelo."""
+    dx, dy = target[0] - sh[0], target[1] - sh[1]
+    d = max(1e-3, min(math.hypot(dx, dy), l1 + l2 - 0.01))
+    base = math.atan2(dx, dy)
+    c = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)
+    a1 = base + bend * math.acos(max(-1.0, min(1.0, c)))
+    el = add(sh, polar(a1, l1))
+    a2 = math.atan2(target[0] - el[0], target[1] - el[1])
+    return (a1, a2)
+
+
+def draw_syringe(cv, hand, ang, liquid):
+    """A seringa na mão: o corpo ao longo de ang (polar), a agulha na frente, o êmbolo atrás."""
+    d = polar(ang, 1.0)
+    side = (-d[1], d[0])
+    back = add(hand, d, -4.0)
+    front = add(hand, d, 6.0)
+    tip = add(front, d, 4.0)
+    cv.line(front, tip, STEEL, 1)                                   # a agulha
+    # o corpo de vidro (3 px), com o líquido verde do lado da agulha
+    for k in (-1, 0, 1):
+        o = (side[0] * k, side[1] * k)
+        cv.line(add(back, o), add(front, o), GLASS_D if k != 0 else GLASS, 1)
+    if liquid > 0.0:
+        lq = lerp(front, back, liquid)
+        cv.line(front, lq, JUICE, 1)
+        cv.px(front[0] + side[0], front[1] + side[1], JUICE_D)
+    plunger = add(back, d, -2.0 - 4.0 * (1.0 - liquid))
+    cv.line(back, plunger, STEEL, 1)                                # o êmbolo
+    cv.line(add(plunger, side, -2.0), add(plunger, side, 2.0), STEEL, 1)
+    cv.line(add(back, side, -2.5), add(back, side, 2.5), GLASS_D, 1)  # as abas
+
+
 def draw_senzi(p):
     cv = Canvas(p.get("seed", 0))
+    cv.pump = p.get("pump", 1.0)
     hip = p["hip"]
     tilt = p["tilt"]          # inclinação do tronco: 0 em pé; ~0.85 na corrida
 
@@ -185,10 +227,25 @@ def draw_senzi(p):
         cv.part(sh, GOO if front else GOO_B, GOO_D if front else GOO_B_D)
 
     def arm(a, sh, front):
+        if isinstance(a, dict):   # {"at": ponto, "bend": ±1}: a mão vai até o ponto
+            a = ik(sh, a["at"], UPPER, FORE, a.get("bend", 1.0))
         el = add(sh, polar(a[0], UPPER))
         hand = add(el, polar(a[1], FORE))
-        shp = cv.lump(sh, el, 3.4, 2.5) + cv.lump(el, hand, 2.4, 2.0) + [("c", (hand[0], hand[1], 2.6))]
+        shp = cv.lump(sh, el, 3.4, 2.5) + cv.lump(el, hand, 2.4, 2.0)
+        if front and p.get("open_f"):
+            # a mão aberta, espalmada para cima: a palma e três dedos moles
+            d = polar(a[1], 1.0)
+            sd = (-d[1], d[0])
+            shp.append(("c", (hand[0], hand[1], 2.4 * cv.pump)))
+            for k in (-1.0, 0.0, 1.0):
+                f0 = add(add(hand, d, 1.5), sd, k * 1.8)
+                shp += cv.lump(f0, add(add(f0, d, 3.5), sd, k * 1.0), 1.1, 0.8, n=2, wob=0.1)
+        else:
+            shp.append(("c", (hand[0], hand[1], 2.6)))
         cv.part(shp, GOO if front else GOO_B, GOO_D if front else GOO_B_D)
+        if front:
+            p["_hand"] = hand
+            p["_fore"] = a[1]
 
     arm(p["arm_b"], sh_b, False)
     leg(p["leg_b"], False)
@@ -234,7 +291,11 @@ def draw_senzi(p):
     cv.px(hat[0] - 0.5, hat[1] - 0.5, SHELL_L)
     cv.px(hat[0] - 2.5, hat[1] - 2.5, SHELL_L)
 
+    p["_neck"] = neck
     arm(p["arm_f"], sh_f, True)
+    if p.get("syringe") is not None:
+        sa, sl = p["syringe"]
+        draw_syringe(cv, p["_hand"], p["_fore"] + sa if sa is not None else p["_fore"], sl)
     cv.goo(p.get("goo", 8), wind=p.get("wind", 0.0))
     cv.wet(4)
     return cv.img
@@ -332,8 +393,58 @@ def punch_pose(i):
             "arm_f": (0.9, 1.9), "arm_b": (-0.4, 0.3), "neck": 0.05, "tent": -0.1}
 
 
+def tired_pose(i):
+    """Cansado: curvado, as mãos nos joelhos, ofegando (o corpo sobe e desce)."""
+    b = (0.0, 1.0, 0.0, -0.6)[i]
+    legs = [(0.75, -0.35, -0.1), (0.5, -0.55, 0.0)]
+    hip = stand_hip(legs, b, x=40.0)
+    return {"hip": hip, "tilt": 0.8 + b * 0.04, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (0.25, 0.1), "arm_b": (0.15, 0.0), "neck": 0.35 + b * 0.05, "tent": 0.1, "droop": 0.15, "goo": 10}
+
+
+def hold_pose(i):
+    """A seringa: a mão da frente bem no alto, aberta, e ele ofegando (a seringa flutua, desenhada no jogo)."""
+    b = (0.0, 0.8, 0.0, -0.5)[i]
+    legs = [(0.3, 0.0, -0.05), (-0.25, -0.1)]
+    return {"hip": stand_hip(legs, b, x=44.0), "tilt": 0.12, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (math.pi - 0.08, math.pi - 0.02), "open_f": True, "arm_b": (0.12 + b * 0.05, 0.05),
+            "neck": -0.15 + b * 0.04, "tent": -0.2 + b * 0.1, "goo": 9}
+
+
+INJ = 12
+
+
+def inject_pose(i):
+    """A injeção, quadro a quadro: pega a seringa no alto, desce, crava no pescoço, aperta o êmbolo
+    (o verde some), e o PUMP: tudo incha e ele ruge."""
+    legs = [(0.35, 0.0, -0.05), (-0.3, -0.15)]
+    hip = stand_hip(legs, x=44.0)
+    base = {"hip": hip, "tilt": 0.12, "leg_f": legs[0], "leg_b": legs[1], "arm_b": (0.12, 0.05), "goo": 9}
+    probe = dict(base, arm_f=(0.0, 0.0))
+    draw_senzi(probe)
+    neck = probe["_neck"]
+    U = lambda dx, dy: add(hip, rot((dx, dy), 0.12))
+    if i == 0:
+        return dict(base, arm_f=(math.pi - 0.08, math.pi - 0.02), syringe=(None, 1.0), neck=-0.15, tent=-0.2)
+    if i in (1, 2):
+        at = [None, U(9.0, -TORSO - 16.0), U(12.0, -TORSO - 6.0)][i]
+        return dict(base, arm_f={"at": at, "bend": -1.0}, syringe=(0.0, 1.0), neck=-0.1 + 0.15 * i, tent=-0.1)
+    if i <= 7:
+        liquid = [1.0, 0.85, 0.6, 0.35, 0.1][i - 3]
+        jab = 1.0 if i == 3 else 0.0
+        return dict(base, arm_f={"at": add(neck, (7.0 - jab, -1.0)), "bend": -1.0}, syringe=(1.9, liquid),
+                    neck=0.3, tent=0.25 + 0.05 * (i % 2), droop=0.1, goo=12)
+    k = i - 8
+    pump = [1.32, 1.42, 1.3, 1.2][k]
+    legs2 = [(0.4, 0.1), (-0.4, -0.1)]
+    return {"hip": stand_hip(legs2, x=44.0), "tilt": 0.0, "leg_f": legs2[0], "leg_b": legs2[1],
+            "arm_f": (2.3, 3.4), "arm_b": (-2.1, -3.2), "neck": -0.3, "tent": -0.5, "face": "roar",
+            "pump": pump, "goo": 14}
+
+
 ANIMS = [("run", 8, run_pose), ("idle", 4, idle_pose), ("flex", 6, flex_pose), ("throw", 4, throw_pose), ("die", 4, die_pose),
-         ("leap", 3, leap_pose), ("punch", 4, punch_pose)]
+         ("leap", 3, leap_pose), ("punch", 4, punch_pose), ("tired", 4, tired_pose), ("hold", 4, hold_pose),
+         ("inject", INJ, inject_pose)]
 
 
 def main():
@@ -346,6 +457,9 @@ def main():
             pose.setdefault("seed", row * 31 + i * 7 + 3)
             sheet.paste(Image.fromarray(draw_senzi(pose), "RGBA"), (i * FW, row * FH))
         meta["anims"][name] = {"row": row, "frames": n}
+        if name == "hold":
+            h = pose["_hand"]
+            meta["hand_up"] = [round(h[0], 1), round(h[1], 1)]   # a mão aberta no alto (a seringa flutua ali)
     os.makedirs(os.path.join(ROOT, "art"), exist_ok=True)
     sheet.save(os.path.join(ROOT, "art", "senzi.png"))
     with open(os.path.join(ROOT, "art", "senzi.json"), "w") as f:

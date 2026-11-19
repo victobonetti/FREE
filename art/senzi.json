@@ -32,6 +32,22 @@
 		"punch": {
 			"row": 6,
 			"frames": 4
+		},
+		"tired": {
+			"row": 7,
+			"frames": 4
+		},
+		"hold": {
+			"row": 8,
+			"frames": 4
+		},
+		"inject": {
+			"row": 9,
+			"frames": 12
 		}
-	}
+	},
+	"hand_up": [
+		49.3,
+		18.0
+	]
 }
