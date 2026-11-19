@@ -30,20 +30,40 @@ const TURN_DELAY := [34, 22, 14]     # quadros para dar meia-volta quando o coel
 const ENERGY := 300.0
 const DRAIN := [3.0, 3.5, 4.0]       # energia por segundo, só de correr
 # Os cogumelos que brotam (D112): tipo -> energia que ele perde ao quebrar.
-#   toco (baixo e largo), muro (alto), pendurado (do teto: o coelho passa por baixo), fenda (de cima e
-#   de baixo, só um buraco), gravidade (pisou, a sala vira de ponta-cabeça), mola (joga o coelho alto)
-#   e grudento (gosma: ele fica preso um tempo).
-const COST := {"stump": 20.0, "wall": 30.0, "hang": 30.0, "gap": 25.0, "grav": 20.0, "spring": 20.0, "sticky": 40.0}
-const KINDS := [["stump", "wall", "hang"], ["stump", "wall", "hang", "gap", "spring", "sticky"],
-	["stump", "wall", "hang", "gap", "spring", "sticky", "grav"]]
-const GAP_H := [16, 18]              # o buraco da fenda (o coelho tem 12)
-const HANG_CLEAR := 18               # o vão embaixo do pendurado
+#   toco (baixo e largo), muro (alto), pendurado (do teto: o coelho passa por baixo), fenda (um de cima e
+#   um de baixo, só um buraco), mola (joga o coelho e vira a gravidade) e grudento (gosma: ele fica preso).
+const COST := {"stump": 20.0, "wall": 30.0, "hang": 30.0, "gap": 25.0, "spring": 20.0, "sticky": 40.0}
+# Os padrões: cada terço da barra tem a sua sequência fixa de ondas, que se repete na mesma ordem (dá
+# para aprender). Uma peça: [tipo, distância à frente do coelho (px, no sentido da fuga; negativo = entre
+# ele e o Senzi), largura, altura (toco/muro/grudento) ou altura do pé (fenda)].
+const PATTERNS := [
+	[   # 1º terço: aprender a pular, a passar por baixo e a alternar
+		[["stump", 36, 22, 10]],
+		[["wall", 40, 12, 24]],
+		[["hang", 34, 14, 0], ["hang", 60, 14, 0]],
+		[["stump", 34, 18, 10], ["hang", 66, 14, 0]],
+	],
+	[   # 2º terço: o buraco, a mola (fuga) e a gosma (armadilha para ele)
+		[["gap", 42, 12, 10]],
+		[["spring", 34, 14, 0]],
+		[["sticky", -44, 18, 12], ["wall", 40, 12, 22]],
+		[["hang", 34, 14, 0], ["gap", 66, 12, 8]],
+	],
+	[   # último terço: combinações
+		[["stump", 30, 18, 9], ["wall", 56, 12, 26], ["hang", 84, 14, 0]],
+		[["gap", 36, 12, 8], ["gap", 68, 12, 14]],
+		[["sticky", -44, 18, 12], ["spring", 36, 14, 0]],
+		[["hang", 30, 14, 0], ["wall", 58, 12, 20], ["spring", 86, 14, 0]],
+	],
+]
+const WAVE_EVERY := [150, 135, 120]  # quadros entre duas ondas
+const SPROUT_WARN := 36              # quadros de aviso (esporos e a sombra no lugar) antes de brotar
+const GAP_HOLE := 17                 # o buraco da fenda (o coelho tem 12)
+const HANG_CLEAR := 20               # o vão embaixo do pendurado
 const SPRING_POWER := 300.0          # como o cogumelo-mola do ato 3
 const STICK_FRAMES := 60             # preso na gosma
-const WALL_EVERY := [105, 92, 80]    # quadros entre dois muros
-const WALL_MAX := 3
+const WALL_MAX := 8                  # pedaços (a fenda são dois)
 const WALL_LIFE := 600
-const WALL_SIZE := Vector2(12, 20)   # largura × altura, de pé no chão
 const GRAV := 700.0
 const REVEAL := 200                  # a revelação: parado, encara; então incha em três estouros e ruge
 const R_STARE := 70
@@ -58,6 +78,7 @@ const PUNCH_WIND := 8                # quadros carregando o soco (dá para escap
 const PUNCH_FRAMES := 34
 const PUNCH_SPEED := 520.0           # px/s, o coelho voando
 const PUNCH_LIFT := 150.0
+const PUNCH_MIN := 120.0             # o voo mínimo do coelho socado (px até a parede)
 const FLY_FRAMES := 70               # quadros em que o coelho voando quebra o que encontra
 const BELL_EVERY := 140
 const RAGE_FRAMES := 45              # a pausa de raiva ao passar de um terço da barra
@@ -66,8 +87,7 @@ const DIE_FRAMES := 150
 const C_SKIN := Color("d7cdb8")
 const C_MUSCLE := Color("e9e3d4")
 const C_GOO := Color("aca08c")
-const C_GRAV := Color("7fe0d0")       # o cogumelo da gravidade (verde-água, pulsando)
-const C_SPRING := Color("f0a05a")
+const C_GRAV := Color("7fe0d0")       # a mola: verde-água, pulsando (ela vira a gravidade)
 const C_SHELL := Color("8a5f9e")
 const C_SHELL_DARK := Color("5e3f70")
 const C_SHELL_LINE := Color("c9a6dd")
@@ -89,8 +109,9 @@ var turn_t := 0
 var lives := LIVES
 var energy := ENERGY
 var walls: Array = []          # {"rect": Rect2i, "n": Vector2 (normal da face onde nasceu), "age", "kind", "gid", "k"}
-var last_kind := ""
 var gid_next := 0
+var _wall_base := Transform2D.IDENTITY
+var wave_i := 0                # a próxima onda do padrão do terço
 var bells: Array = []          # {"pos", "vel", "age", "bounced"}
 var wall_t := 0
 var leap_t := 0
@@ -129,17 +150,20 @@ func on_reset(r) -> void:
 	fly_t = 0
 	if state == "dead":
 		r.door_unlocked = true
-		pos = Vector2(r.pw * 0.5, _inner().end.y - 3.0)
+		pos = Vector2(r.pw * 0.5, _inner().end.y - body_rect().size.y / 2.0)
 		return
 	phase = 0
 	lives = LIVES
 	energy = ENERGY
 	wall_t = 0
+	wave_i = 0
 	leap_t = 0
 	bell_t = 0
 	t = 0
 	var inn := _inner()
-	pos = Vector2(inn.position.x + inn.size.x * 0.72, inn.end.y - 3.0)
+	# no caminho (o centro do corpo a meia altura do chão): senão, na revelação curta, o corpo grande
+	# nascia enterrado no chão
+	pos = _pt_of(_u_floor(inn.position.x + inn.size.x * 0.72))
 	dir = -1.0
 	state = "lurk" if not intro_seen else "reveal"
 	if state == "reveal":
@@ -180,7 +204,7 @@ func blocks(r: Rect2i) -> bool:
 	if fly_t > 0:
 		return false   # o coelho voando do soco atravessa (e quebra) os muros
 	for w in walls:
-		if r.intersects(w["rect"]):
+		if w["age"] >= 0 and r.intersects(w["rect"]):
 			return true
 	return false
 
@@ -317,6 +341,8 @@ func step(r) -> void:
 	room.invuln = maxi(room.invuln - 1, 0)
 	_update_bells()
 	_update_fly()
+	if fighting():
+		_age_shrooms()
 	_rabbit_on_shrooms()
 	match state:
 		"lurk":
@@ -449,13 +475,9 @@ func _berserk() -> void:
 			"vel": n * rng.randf_range(4.0, 16.0), "life": rng.randi_range(30, 60), "col": C_GOO if rng.randf() < 0.5 else C_SKIN, "grav": 0.0})
 	# muros de cogumelo no caminho do coelho
 	wall_t += 1
-	if wall_t >= WALL_EVERY[ph]:
+	if wall_t >= WAVE_EVERY[ph]:
 		wall_t = 0
-		_spawn_wall()
-	for w in walls:
-		w["age"] += 1
-		w["k"] = maxf(float(w.get("k", 0.0)) - 0.1, 0.0)
-	walls = walls.filter(func(w): return w["age"] < WALL_LIFE)
+		_spawn_wave()
 	# truques
 	if ph >= 1:
 		leap_t += 1
@@ -477,6 +499,8 @@ func _berserk() -> void:
 		t = 0
 		flash = 24
 		walls.clear()
+		wave_i = 0
+		wall_t = WAVE_EVERY[phase] - RAGE_FRAMES - 20   # a primeira onda do terço novo vem logo
 		room.sfx.emit("lock_on")
 
 
@@ -503,19 +527,23 @@ func _punch() -> void:
 			room.kill()   # um coração (ou a morte, no último)
 			if lives < lives0 and lives > 0:
 				var rb = room.rabbit
-				# para o outro lado da sala, um pouco para o alto (sai do chão)
-				var side := 1.0 if _rabbit_c().x < _inner().get_center().x else -1.0
-				rb.vel = Vector2(side * PUNCH_SPEED, -PUNCH_LIFT)
+				# para onde: longe do Senzi, com pelo menos PUNCH_MIN de voo; se a parede daquele lado
+				# está perto, para a parede adjacente (o teto, ou o outro lado se o Senzi não estiver lá)
+				var to := _punch_dir()
+				rb.vel = to * PUNCH_SPEED + (Vector2(0, -PUNCH_LIFT) if absf(to.x) > 0.5 else Vector2.ZERO)
 				rb.launched = true
 				rb.on_ground = false
 				rb.var_jump = 0
 				rb.coyote = 0
 				fly_t = FLY_FRAMES
 				# e gira a sala à força: a parede para onde o coelho voa vira o chão (ele despenca
-				# até a borda oposta com o embalo do soco)
+				# até ela com o embalo do soco)
 				if not room.rotating:
 					room.pending_rot = 0
-					room._begin_rotate(1 if side > 0.0 else -1, true)
+					if to.y < -0.5:
+						_flip180()
+					else:
+						room._begin_rotate(1 if to.x > 0.0 else -1, true)
 				room.shake = maxf(room.shake, 10.0)
 				room.impact.emit(4.0)
 				var c := _rabbit_c()
@@ -527,6 +555,29 @@ func _punch() -> void:
 	if t >= PUNCH_FRAMES:
 		state = "berserk"
 		t = 0
+
+
+## A direção do soco: entre a fuga (longe do Senzi), o teto e o outro lado, a primeira com pelo menos
+## PUNCH_MIN de espaço até a parede, nunca na direção do Senzi; se nenhuma tem, a de mais espaço.
+func _punch_dir() -> Vector2:
+	var inn := _inner()
+	var rc := _rabbit_c()
+	var away := signf(rc.x - pos.x)
+	if away == 0.0:
+		away = 1.0
+	var to_s := (pos - rc).normalized()
+	var best := Vector2(away, 0)
+	var best_d := -1.0
+	for d in [Vector2(away, 0), Vector2(0, -1), Vector2(-away, 0)]:
+		if d.dot(to_s) > 0.5:
+			continue   # nunca na direção dele
+		var room_d: float = (inn.end.x - rc.x) if d.x > 0.5 else ((rc.x - inn.position.x) if d.x < -0.5 else (rc.y - inn.position.y))
+		if room_d >= PUNCH_MIN:
+			return d
+		if room_d > best_d:
+			best_d = room_d
+			best = d
+	return best
 
 
 ## O coelho voando do soco: quebra os muros que encontra e deixa um rastro; a sala treme.
@@ -541,7 +592,7 @@ func _update_fly() -> void:
 	var rr := Rect2(rb.rect).grow(3.0)
 	var keep: Array = []
 	for w in walls:
-		if rr.intersects(Rect2(w["rect"])):
+		if w["age"] >= 0 and rr.intersects(Rect2(w["rect"])):
 			room.shake = maxf(room.shake, 7.0)
 			room.impact.emit(2.0)
 			room.sfx.emit("crunch")
@@ -567,7 +618,7 @@ func _smash_walls() -> void:
 	var keep: Array = []
 	var glued := false
 	for w in walls:
-		if br.intersects(Rect2(w["rect"])):
+		if w["age"] >= 0 and br.intersects(Rect2(w["rect"])):
 			energy -= float(COST.get(w["kind"], 30.0))
 			bar_hit = 14
 			room.shake = maxf(room.shake, 2.5)
@@ -589,36 +640,34 @@ func _smash_walls() -> void:
 		room.sfx.emit("steam_burst")
 
 
-## O coelho pisando num cogumelo: a mola joga ele alto; o da gravidade vira a sala de ponta-cabeça.
+## O coelho pisando na mola: ela o joga para o alto e a gravidade vira (a sala gira 180° de uma vez):
+## o coelho sai disparado para o lado de lá, que agora é o chão, e o Senzi fica lá em cima.
 func _rabbit_on_shrooms() -> void:
 	var rb = room.rabbit
-	if not rb.on_ground or fly_t > 0 or room.state != "play":
+	if not rb.on_ground or fly_t > 0 or room.state != "play" or room.rotating:
 		return
 	var feet := Rect2(rb.rect.position.x, rb.rect.end.y, rb.rect.size.x, 1)
 	for w in walls:
-		if not feet.intersects(Rect2(w["rect"])):
+		if w["age"] < 0 or w["kind"] != "spring" or not feet.intersects(Rect2(w["rect"])):
 			continue
-		if w["kind"] == "spring":
-			w["k"] = 1.0
-			rb.vel.y = -SPRING_POWER
-			rb.launched = true
-			rb.var_jump = 0
-			rb.on_ground = false
-			rb.coyote = 0
-			rb.jumping = true
-			rb.squash = Vector2(0.7, 1.35)
-			room.sfx.emit("spring")
-			return
-		if w["kind"] == "grav" and not room.rotating:
-			walls.erase(w)
-			room.sfx.emit("limiter")
-			room.shake = maxf(room.shake, 4.0)
-			for i in 14:
-				var a := rng.randf() * TAU
-				room.particles.append({"pos": Rect2(w["rect"]).get_center(), "vel": Vector2(cos(a), sin(a)) * rng.randf_range(30, 120),
-					"life": rng.randi_range(12, 24), "col": C_GRAV, "grav": 0.0})
-			_flip180()
-			return
+		var c := Rect2(w["rect"]).get_center()
+		walls.erase(w)
+		rb.vel.y = -SPRING_POWER
+		rb.launched = true
+		rb.var_jump = 0
+		rb.on_ground = false
+		rb.coyote = 0
+		rb.jumping = true
+		rb.squash = Vector2(0.7, 1.35)
+		room.sfx.emit("spring")
+		room.sfx.emit("limiter")
+		room.shake = maxf(room.shake, 4.0)
+		for i in 16:
+			var a := rng.randf() * TAU
+			room.particles.append({"pos": c, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(30, 140),
+				"life": rng.randi_range(12, 26), "col": C_GRAV if i % 2 else Color("d9f5ef"), "grav": 0.0})
+		_flip180()
+		return
 
 
 ## A gravidade vira: a sala gira 180° de uma vez (como o limitador desfazendo dois giros).
@@ -635,72 +684,73 @@ func _flip180() -> void:
 	room.rot_lock = room.rot_lock_max
 
 
-## Um cogumelo brota no caminho de fuga do coelho: o tipo sorteado entre os do terço da barra (nunca
-## dois iguais seguidos; o da gravidade, um por vez e raro), o tamanho também.
-func _spawn_wall() -> void:
-	if walls.size() >= WALL_MAX:
-		return
-	var pool: Array = (KINDS[_phase()] as Array).duplicate()
-	pool.erase(last_kind)
-	var kind: String = pool[rng.randi() % pool.size()]
-	if kind == "grav" and (rng.randf() < 0.6 or walls.any(func(w): return w["kind"] == "grav")):
-		kind = "wall"
-	if kind == "gap" and walls.size() > WALL_MAX - 2:
-		return
+## A próxima onda do padrão do terço: as peças brotam, cada uma no seu lugar em relação ao coelho, no
+## sentido da fuga (longe do Senzi). Se não couber à frente (o coelho encostado na parede), a onda vira
+## para o outro lado. Antes de brotar, um aviso no lugar (esporos e a sombra).
+func _spawn_wave() -> void:
+	var waves: Array = PATTERNS[_phase()]
+	var wave: Array = waves[wave_i % waves.size()]
+	wave_i += 1
 	var inn := _inner()
 	var rc := _rabbit_c()
 	var away := signf(rc.x - pos.x)
 	if away == 0.0:
 		away = 1.0
+	var reach := 0.0
+	for pc in wave:
+		reach = maxf(reach, float(pc[1]) + float(pc[2]))
+	var room_ahead := (inn.end.x - rc.x) if away > 0.0 else (rc.x - inn.position.x)
+	if room_ahead < reach + 8.0:
+		away = -away
+	gid_next += 1
+	for pc in wave:
+		for piece in _piece_rects(pc, rc.x + away * float(pc[1]), away):
+			var r: Rect2i = piece[0]
+			if Rect2(r).grow(3.0).intersects(Rect2(room.rabbit.rect)) or Rect2(r).grow(4.0).intersects(body_rect()):
+				continue
+			if walls.size() >= WALL_MAX:
+				walls.pop_front()
+			walls.append({"rect": r, "n": piece[1], "age": -SPROUT_WARN, "kind": pc[0], "gid": gid_next, "k": 0.0, "seed": rng.randi()})
+	room.sfx.emit("plate_on")
+
+
+## Os retângulos de uma peça (a fenda são dois), com a normal da face onde nasce.
+func _piece_rects(pc: Array, cx: float, away: float) -> Array:
+	var inn := _inner()
 	var fl := int(inn.end.y)
 	var ce := int(inn.position.y)
-	var rects: Array = []   # [rect, n]
-	var ww := 12
+	var kind: String = pc[0]
+	var ww: int = pc[2]
+	var x := int(clampf(cx - ww / 2.0, inn.position.x + 4.0, inn.end.x - 4.0 - ww))
 	match kind:
-		"stump":
-			ww = rng.randi_range(16, 28)
-		"wall":
-			ww = rng.randi_range(9, 14)
+		"stump", "wall", "sticky":
+			var h: int = pc[3]
+			return [[Rect2i(x, fl - h, ww, h), Vector2(0, -1)]]
 		"hang":
-			ww = rng.randi_range(10, 16)
+			return [[Rect2i(x, ce, ww, fl - HANG_CLEAR - ce), Vector2(0, 1)]]
 		"gap":
-			ww = rng.randi_range(10, 13)
-		"sticky":
-			ww = rng.randi_range(14, 20)
-	var x := int(clampf(rc.x + away * rng.randf_range(30.0, 52.0), inn.position.x + 10.0, inn.end.x - 10.0 - ww))
-	match kind:
-		"stump":
-			var h := rng.randi_range(8, 12)
-			rects.append([Rect2i(x, fl - h, ww, h), Vector2(0, -1)])
-		"wall":
-			var h := rng.randi_range(18, 28)
-			rects.append([Rect2i(x, fl - h, ww, h), Vector2(0, -1)])
-		"hang":
-			var bottom := fl - HANG_CLEAR - rng.randi_range(0, 4)
-			rects.append([Rect2i(x, ce, ww, bottom - ce), Vector2(0, 1)])
-		"gap":
-			var hb := rng.randi_range(6, 14)
-			var g := rng.randi_range(GAP_H[0], GAP_H[1])
-			rects.append([Rect2i(x, fl - hb, ww, hb), Vector2(0, -1)])
-			var top_end := fl - hb - g
-			rects.append([Rect2i(x, ce, ww, top_end - ce), Vector2(0, 1)])
-		"grav", "spring":
-			rects.append([Rect2i(x, fl - 8, ww, 8), Vector2(0, -1)])
-		"sticky":
-			var h := rng.randi_range(10, 16)
-			rects.append([Rect2i(x, fl - h, ww, h), Vector2(0, -1)])
-	for rr in rects:
-		var r: Rect2i = rr[0]
-		if Rect2(r).grow(3.0).intersects(Rect2(room.rabbit.rect)) or Rect2(r).grow(6.0).intersects(body_rect()):
-			return
-		for w in walls:
-			if Rect2(w["rect"]).grow(8.0).intersects(Rect2(r)):
-				return
-	gid_next += 1
-	for rr in rects:
-		walls.append({"rect": rr[0], "n": rr[1], "age": 0, "kind": kind, "gid": gid_next, "k": 0.0})
-	last_kind = kind
-	room.sfx.emit("plate_on")
+			var hb: int = pc[3]
+			return [[Rect2i(x, fl - hb, ww, hb), Vector2(0, -1)], [Rect2i(x, ce, ww, fl - hb - GAP_HOLE - ce), Vector2(0, 1)]]
+		"spring":
+			return [[Rect2i(x, fl - 7, ww, 7), Vector2(0, -1)]]
+	return []
+
+
+## Os cogumelos envelhecem: o aviso conta até brotar (esporos subindo do lugar); depois de um tempo,
+## murcham e somem.
+func _age_shrooms() -> void:
+	for w in walls:
+		w["age"] += 1
+		w["k"] = maxf(float(w.get("k", 0.0)) - 0.1, 0.0)
+		if w["age"] < 0 and w["age"] % 6 == 0:
+			var r := Rect2(w["rect"])
+			var n: Vector2 = w["n"]
+			var at := Vector2(rng.randf_range(r.position.x, r.end.x), r.end.y if n.y < 0 else r.position.y)
+			room.particles.append({"pos": at, "vel": n * rng.randf_range(10, 30), "life": 18,
+				"col": _shroom_cols(w["kind"])[0], "grav": 0.0})
+		if w["age"] == 0:
+			room.sfx.emit("crunch")
+	walls = walls.filter(func(w): return w["age"] < WALL_LIFE)
 
 
 func _die() -> void:
@@ -785,6 +835,7 @@ func _draw() -> void:
 		return
 	var base := Transform2D(room.view_angle, Vector2.ZERO) * Transform2D(0.0, -room.cam.round())
 	draw_set_transform_matrix(base)
+	_wall_base = base
 	_draw_walls()
 	for b in bells:
 		draw_set_transform_matrix(base * Transform2D(b["age"] * 0.3, (b["pos"] as Vector2).round()))
@@ -798,69 +849,153 @@ func _draw() -> void:
 	_draw_hud()
 
 
-## Chapéu e talo de cada tipo: [chapéu, talo].
+## As cores de cada tipo: [chapéu, talo, lamelas (embaixo do chapéu), pintas].
 func _shroom_cols(kind: String) -> Array:
 	match kind:
-		"grav":
-			return [C_GRAV, Color("d9f5ef")]
+		"stump":
+			return [Color("7c6596"), Color("bdb3c9"), Color("4e3f63"), Color("c9b6dd")]
+		"hang":
+			return [Color("b98ee0"), Color("a99fb4"), Color("6e5a8c"), Color("f1e6fb")]
+		"gap":
+			return [Color("c58cff"), Color("cfc6d8"), Color("6e4a82"), Color("f6ecff")]
 		"spring":
-			return [C_SPRING, Color("f3dcc4")]
+			return [C_GRAV, Color("d9f5ef"), Color("2f8a7c"), Color(1, 1, 1)]
 		"sticky":
-			return [C_SKIN, C_GOO]
-	return [Color("9b6bc4"), Color("cfc6d8")]
+			return [C_SKIN, C_MUSCLE, C_GOO, Color(1, 1, 1)]
+	return [Color("9b6bc4"), Color("cfc6d8"), Color("5e3f70"), Color("e7d6f5")]   # muro
 
 
 func _draw_walls() -> void:
+	var base := _wall_base
 	for w in walls:
 		var r := Rect2(w["rect"])
-		var k := clampf(float(w["age"]) / 10.0, 0.0, 1.0)
 		var n: Vector2 = w["n"]
-		var kind: String = w["kind"]
-		var cols := _shroom_cols(kind)
-		if kind == "sticky":
-			# um monte de gosma, mole, escorrendo
-			var gr := Rect2(r.position + r.size * (1.0 - k) * Vector2(0.0, 1.0) * maxf(-n.y, 0.0), r.size * Vector2(1.0, k) if absf(n.y) > 0.5 else r.size * Vector2(k, 1.0))
-			var wob := sin(anim * 0.15 + r.position.x) * 1.0
-			draw_rect(gr.grow_individual(-1.0, -1.0 + wob, -1.0, 0.0), C_SKIN)
-			draw_rect(Rect2(gr.position + Vector2(2, 1 - wob), Vector2(gr.size.x - 4, 2)), C_MUSCLE)
-			draw_rect(Rect2(gr.position.x, gr.end.y - 3, gr.size.x, 3), C_GOO)
-			for q in 3:
-				var dx := fposmod(r.position.x * 7.0 + q * 5.0, maxf(gr.size.x - 2.0, 1.0))
-				var dl := 2.0 + fposmod(anim * 0.05 + q * 1.7, 3.0)
-				draw_rect(Rect2(gr.position.x + 1.0 + dx, gr.position.y + 2.0, 1, dl), C_GOO)
-			continue
-		var stem := r
-		var cap := r
-		var squash := float(w.get("k", 0.0)) * 3.0
+		# o referencial do cogumelo: a origem no meio do pé, "para cima" = para dentro da sala (n)
+		var foot: Vector2
+		var W: float
+		var H: float
 		if absf(n.y) > 0.5:
-			var hh := r.size.y * k - (squash if n.y < 0 else 0.0)
-			var ch := minf(6.0, r.size.y)
-			stem = Rect2(r.position.x + 3, r.end.y - hh if n.y < 0 else r.position.y, r.size.x - 6, hh)
-			cap = Rect2(r.position.x - 2, (r.end.y - hh) if n.y < 0 else (r.position.y + hh - ch), r.size.x + 4, ch)
+			foot = Vector2(r.get_center().x, r.end.y if n.y < 0 else r.position.y)
+			W = r.size.x
+			H = r.size.y
 		else:
-			var ww := r.size.x * k
-			var cw := minf(6.0, r.size.x)
-			stem = Rect2(r.end.x - ww if n.x < 0 else r.position.x, r.position.y + 3, ww, r.size.y - 6)
-			cap = Rect2((r.end.x - ww) if n.x < 0 else (r.position.x + ww - cw), r.position.y - 2, cw, r.size.y + 4)
-		draw_rect(stem, cols[1])
-		draw_rect(Rect2(stem.position, Vector2(2, stem.size.y)), Color(cols[1]).darkened(0.18))
-		var cc: Color = cols[0]
-		if kind == "grav":
-			var pulse := 0.5 + 0.5 * sin(anim * 0.2)
-			draw_rect(cap.grow(2.0), Color(C_GRAV, 0.15 + 0.2 * pulse))
-			cc = C_GRAV.lerp(Color.WHITE, 0.3 * pulse)
-		draw_rect(cap, cc)
-		draw_rect(Rect2(cap.position, Vector2(cap.size.x, 1)), cc.lightened(0.35))
-		if kind == "grav":
-			# duas setas pequenas: para cima e para baixo
-			var c := cap.get_center()
-			draw_rect(Rect2(c + Vector2(-3, -2), Vector2(1, 3)), Color(1, 1, 1, 0.9))
-			draw_rect(Rect2(c + Vector2(2, -1), Vector2(1, 3)), Color(1, 1, 1, 0.9))
+			foot = Vector2(r.end.x if n.x < 0 else r.position.x, r.get_center().y)
+			W = r.size.y
+			H = r.size.x
+		draw_set_transform_matrix(base * Transform2D(Vector2(0, -1).angle_to(n), foot.round()))
+		_draw_shroom(w, W, H)
+	draw_set_transform_matrix(base)
+
+
+## Um cogumelo em pixel art, de pé no referencial dele (o pé em 0, crescendo para -y).
+func _draw_shroom(w: Dictionary, W: float, H: float) -> void:
+	var kind: String = w["kind"]
+	var cols := _shroom_cols(kind)
+	var cap: Color = cols[0]
+	var stem_c: Color = cols[1]
+	var gill: Color = cols[2]
+	var spot: Color = cols[3]
+	var age: int = w["age"]
+	var hw := floorf(W / 2.0)
+	if age < 0:
+		# o aviso: a sombra no chão e o contorno de onde vai brotar, piscando cada vez mais rápido
+		var k0 := 1.0 - float(-age) / SPROUT_WARN
+		var blink := (age / maxi(2, int(8 - k0 * 6))) % 2 == 0
+		draw_rect(Rect2(-hw - 1, -1, W + 2, 1), Color(0, 0, 0, 0.45))
+		draw_rect(Rect2(-hw, -2, W, 1), Color(cap, 0.25 + 0.35 * k0))
+		if blink:
+			draw_rect(Rect2(-hw, -H, W, H), Color(cap, 0.08 + 0.1 * k0), false, 1.0)
+		return
+	var k := clampf(float(age) / 8.0, 0.0, 1.0)
+	var squash := float(w.get("k", 0.0)) * 3.0
+	var Hs := maxf(3.0, roundf(H * k - squash))
+	var wilt := age > WALL_LIFE - 60 and (anim / 4) % 2 == 0
+	if wilt:
+		cap = cap.darkened(0.3)
+		stem_c = stem_c.darkened(0.3)
+	var seed: int = int(w.get("seed", 0))
+	if kind == "sticky":
+		# um monte de gosma em cúpula, mole, que treme e escorre
+		var wob := roundf(sin(anim * 0.12 + seed % 7) * 1.0)
+		var rows := int(Hs + wob)
+		for i in rows:
+			var f := sqrt(clampf(1.0 - pow(1.0 - float(i + 1) / rows, 2.0), 0.0, 1.0))
+			var wi := maxf(2.0, roundf(W * f))
+			var y := -rows + i
+			draw_rect(Rect2(-floorf(wi / 2.0), y, wi, 1), cap if i < rows - 2 else gill)
+			if i > 0 and i < rows - 2:
+				draw_rect(Rect2(-floorf(wi / 2.0), y, 1, 1), stem_c)
+		draw_rect(Rect2(-hw - 2, -1, W + 4, 1), gill)            # a poça
+		for q in 3:
+			var dx := float((seed >> (q * 3)) % int(maxf(W - 2.0, 1.0))) - hw + 1.0
+			var dl := 1.0 + fposmod(anim * 0.04 + q * 1.3, 3.0)
+			draw_rect(Rect2(dx, -rows + 2 + q, 1, dl), gill)
+		draw_rect(Rect2(-hw + 3, -rows + 1, 2, 1), Color(1, 1, 1, 0.8))  # brilho molhado
+		if (anim / 20 + seed) % 3 == 0:
+			draw_rect(Rect2(hw - 4, -rows - 1, 1, 1), stem_c)  # uma bolha
+		return
+	# o chapéu: cúpula (o toco é uma prateleira achatada; o da mola, gordo)
+	var ch := 6.0
+	var CW := W + 4.0
+	match kind:
+		"stump":
+			ch = 4.0
+			CW = W + 2.0
+		"spring":
+			ch = 5.0
+			CW = W + 2.0 + squash * 0.7
+		"hang":
+			ch = 7.0
+	ch = minf(ch, Hs)
+	var sw := maxf(3.0, roundf(W * (0.6 if kind == "stump" else (0.3 if kind == "hang" else 0.42))))
+	var top := -Hs
+	# o talo
+	var st_h := Hs - ch + 1.0
+	if st_h > 0.0:
+		draw_rect(Rect2(-floorf(sw / 2.0), top + ch - 1.0, sw, st_h), stem_c)
+		draw_rect(Rect2(-floorf(sw / 2.0) + sw - 1.0, top + ch - 1.0, 1, st_h), stem_c.darkened(0.2))
+		draw_rect(Rect2(-floorf(sw / 2.0), top + ch - 1.0, sw, 1), gill.darkened(0.1))   # a sombra do chapéu
+		if kind == "wall" or kind == "gap" or kind == "hang":
+			var ry := roundf(top + ch + st_h * 0.3)
+			draw_rect(Rect2(-floorf(sw / 2.0) - 1.0, ry, sw + 2.0, 1), stem_c.darkened(0.12))   # o anel
 		if kind == "spring":
-			for q in int(cap.size.x / 5.0):
-				draw_rect(Rect2(cap.position + Vector2(2 + q * 5, 2), Vector2(2, 2)), Color(1, 1, 1, 0.8))
-		if w["age"] > WALL_LIFE - 60 and (anim / 4) % 2 == 0:
-			draw_rect(r, Color(0, 0, 0, 0.25))
+			# setinhas: sobe e vira
+			draw_rect(Rect2(-1, top + ch + 1.0, 1, 2), gill)
+			draw_rect(Rect2(1, top + ch + 1.0, 1, 2), gill)
+	# o pé (micélio)
+	draw_rect(Rect2(-floorf(sw / 2.0) - 2.0, -1.0, sw + 4.0, 1), Color("d9cfe6").darkened(0.15))
+	draw_rect(Rect2(-floorf(sw / 2.0) - 3.0, -1.0, 1, 1), Color("d9cfe6").darkened(0.3))
+	draw_rect(Rect2(floorf(sw / 2.0) + 2.0, -1.0, 1, 1), Color("d9cfe6").darkened(0.3))
+	# o chapéu
+	for i in int(ch):
+		var f := 1.0 if kind == "stump" and i > 0 else sqrt(clampf(1.0 - pow(1.0 - float(i + 1) / ch, 2.0), 0.0, 1.0))
+		var wi := maxf(2.0, roundf(CW * (0.45 + 0.55 * f)))
+		var y := top + i
+		var c := cap
+		if i == 0:
+			c = cap.lightened(0.25)
+		elif i == int(ch) - 1:
+			c = gill   # as lamelas
+		draw_rect(Rect2(-floorf(wi / 2.0), y, wi, 1), c)
+		if i > 0 and i < int(ch) - 1:
+			draw_rect(Rect2(-floorf(wi / 2.0), y, 1, 1), cap.lightened(0.2))
+			draw_rect(Rect2(-floorf(wi / 2.0) + wi - 1.0, y, 1, 1), cap.darkened(0.2))
+	# as pintas
+	var ns := 2 if CW < 14.0 else 3
+	for q in ns:
+		var sx := float((seed >> (q * 4)) % int(maxf(CW - 6.0, 1.0))) - floorf(CW / 2.0) + 3.0
+		var sy := top + 1.0 + float((seed >> (q * 4 + 2)) % maxi(int(ch) - 2, 1))
+		draw_rect(Rect2(sx, sy, 2 if q == 0 else 1, 1), spot)
+	if kind == "hang":
+		# fios de micélio pendurados na borda do chapéu
+		for q in 3:
+			var hx := -floorf(CW / 2.0) + 2.0 + q * floorf((CW - 4.0) / 2.0)
+			draw_rect(Rect2(hx, top - 1.0 - (q % 2), 1, 1 + (q % 2)), Color(spot, 0.6))
+	if kind == "spring":
+		# pulsa: um brilho que corre por cima do chapéu
+		var pulse := 0.5 + 0.5 * sin(anim * 0.2)
+		var gw := roundf(CW * 0.45)
+		draw_rect(Rect2(-floorf(gw / 2.0), top - 1.0, gw, 1), Color(C_GRAV, 0.25 + 0.5 * pulse))
 
 
 ## Quanto do corpo marombado aparece (0 = o caramujinho; 1 = o Senzi), na revelação e na morte.
@@ -900,7 +1035,9 @@ func _draw_snail(base: Transform2D) -> void:
 	var h := BODY.y / 2.0
 	if bulk <= 0.0:
 		# o caramujinho: minúsculo (como os de enfeite)
-		draw_set_transform_matrix(base * Transform2D(ang, (pos - n * (h - 3.0) * (1.0 if _stuck() else 0.0)).round()) * Transform2D(0.0, Vector2(flip, 1), 0.0, Vector2.ZERO))
+		# no chão: grudado, a meia altura do caminho; solto (morto), embaixo do corpo caído
+		var ground := pos - n * (h - 3.0) if _stuck() else pos + Vector2(0, body_rect().size.y / 2.0 - 3.0)
+		draw_set_transform_matrix(base * Transform2D(ang, ground.round()) * Transform2D(0.0, Vector2(flip, 1), 0.0, Vector2.ZERO))
 		var crawl := 0.5 + 0.5 * sin(anim * 0.08)
 		draw_rect(Rect2(-3, 1, 6 + crawl, 2), C_SKIN)
 		draw_circle(Vector2(-0.5, 0), 2.5, C_SHELL)

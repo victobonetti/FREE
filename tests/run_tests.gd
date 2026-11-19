@@ -3431,71 +3431,82 @@ func test_senzi() -> void:
 	var dd: float = m.pos.distance_to(m._rabbit_c())
 	check(dd > 120.0, "o coelho vai parar do outro lado (%.0f px dele)" % dd)
 	check(m.walls.is_empty(), "quebrando o muro no caminho")
-	# os tipos de cogumelo (D112)
+	# encurralado perto da parede: o soco manda para a parede adjacente, nunca para o lado do Senzi
+	m = _senzi()
+	while m.state != "berserk":
+		tick()
+	var inn2: Rect2 = m._inner()
+	room.rabbit.pos = Vector2i(int(inn2.end.x) - 30, int(inn2.end.y) - 12)
+	m.pos = m._pt_of(m._u_floor(inn2.end.x - 70.0))
+	var pd: Vector2 = m._punch_dir()
+	check(pd == Vector2(0, -1), "perto da parede, o soco vai para o teto (%s)" % pd)
+	room.rabbit.pos = Vector2i(int(inn2.position.x) + 60, int(inn2.end.y) - 12)
+	m.pos = m._pt_of(m._u_floor(inn2.position.x + 20.0))
+	check(m._punch_dir() == Vector2(1, 0), "com espaço, vai reto, para longe dele")
+	# reinício depois de uma morte: a revelação curta começa no caminho, não enterrada no chão
+	m = _senzi()
+	check(absf(m.pos.y - m._path().end.y) < 0.5, "ao reiniciar, o Senzi nasce de pé no chão (centro a %.0f do caminho)" % (m.pos.y - m._path().end.y))
+	# morto: o caramujinho fica no chão
+	m.energy = 0.01
+	while m.state != "berserk":
+		tick()
+	idle(2)
+	idle(m.DIE_FRAMES + 30)
+	check(m.state == "dead" and absf(m.pos.y + m.body_rect().size.y / 2.0 - m._inner().end.y) < 1.0, "morto, ele fica no chão (não flutua)")
+	# os cogumelos (D112): padrões fixos por terço, com aviso antes de brotar
 	m = _senzi()
 	while m.state != "berserk":
 		tick()
 	var fl := int(m._inner().end.y)
-	var shapes := {}
-	m.rng.seed = 7
 	room.rabbit.pos = Vector2i(int(m._inner().get_center().x), fl - 12)
 	m.pos = m._pt_of(m._u_floor(m._inner().position.x + 30.0))
-	for i in 400:
-		m.walls.clear()
-		m.energy = m.ENERGY * 0.1   # último terço: todos os tipos
-		m._spawn_wall()
-		for sw in m.walls:
-			shapes[sw["kind"]] = true
-	check(shapes.size() == 7, "brotam os 7 tipos de cogumelo (%s)" % ", ".join(shapes.keys()))
-	m.energy = m.ENERGY
-	var hang_ok := true
-	var gap_ok := true
-	for i in 300:
-		m.walls.clear()
-		m.energy = m.ENERGY * 0.5
-		m._spawn_wall()
-		var gaps: Array = []
-		for sw in m.walls:
-			var r: Rect2i = sw["rect"]
-			if sw["kind"] == "hang" and fl - r.end.y < m.HANG_CLEAR:
-				hang_ok = false
-			if sw["kind"] == "gap":
-				gaps.append(r)
-		if gaps.size() == 2:
-			var lo: Rect2i = gaps[0] if gaps[0].position.y > gaps[1].position.y else gaps[1]
-			var hi: Rect2i = gaps[1] if lo == gaps[0] else gaps[0]
-			var hole := lo.position.y - hi.end.y
-			if hole < 16 or hole > 18 or fl - hi.end.y > 30 + 12:
-				gap_ok = false
-	m.energy = m.ENERGY
-	check(hang_ok, "o pendurado deixa o vão para o coelho passar por baixo")
-	check(gap_ok, "a fenda deixa um buraco de 16 a 18 px, ao alcance do pulo")
-	# a mola joga o coelho para o alto
+	var kinds := {}
+	var seqs := []
+	for ph in 3:
+		var seq := []
+		m.wave_i = 0
+		for i in 8:
+			m.walls.clear()
+			m.energy = m.ENERGY * (0.9 - 0.33 * ph)
+			m._spawn_wave()
+			var ks := []
+			for sw in m.walls:
+				kinds[sw["kind"]] = true
+				ks.append("%s@%d" % [sw["kind"], Rect2i(sw["rect"]).position.x])
+			seq.append(",".join(ks))
+		seqs.append(seq)
+		check(seq.slice(0, 4) == seq.slice(4, 8), "terço %d: as ondas se repetem na mesma ordem e lugar" % (ph + 1))
+	check(kinds.size() == 6, "brotam os 6 tipos (%s)" % ", ".join(kinds.keys()))
 	m.walls.clear()
-	var rr: Rect2i = room.rabbit.rect
-	var spot := Rect2i(int(m._inner().position.x) + 20, fl - 8, 12, 8)
+	m.energy = m.ENERGY * 0.5
+	m.wave_i = 0
+	m._spawn_wave()   # a fenda
+	var gaps: Array = []
+	for sw in m.walls:
+		if sw["kind"] == "gap":
+			gaps.append(Rect2i(sw["rect"]))
+	check(gaps.size() == 2, "a fenda: um de cima e um de baixo")
+	if gaps.size() == 2:
+		var lo: Rect2i = gaps[0] if gaps[0].position.y > gaps[1].position.y else gaps[1]
+		var hi: Rect2i = gaps[1] if lo == gaps[0] else gaps[0]
+		check(lo.position.y - hi.end.y == m.GAP_HOLE and fl - hi.end.y <= 30 + 12, "com um buraco de %d px ao alcance do pulo" % m.GAP_HOLE)
+	check(not room.solid_static(Rect2i(m.walls[0]["rect"]).grow(-1)), "durante o aviso, o cogumelo ainda não é sólido")
+	for i in m.SPROUT_WARN + 2:
+		m._age_shrooms()
+	check(room.solid_static(Rect2i(m.walls[0]["rect"]).grow(-1)), "depois de brotar, é")
+	m.energy = m.ENERGY
+	# a mola joga o coelho e vira a gravidade
+	m.walls.clear()
+	var spot := Rect2i(int(m._inner().position.x) + 60, fl - 7, 14, 7)
 	room.rabbit.pos = Vector2i(spot.position.x, spot.position.y - 12)
 	room.rabbit.vel = Vector2.ZERO
 	m.pos = m._pt_of(m._u_floor(m._inner().end.x - 30.0))
-	m.walls.append({"rect": spot, "n": Vector2(0, -1), "age": 20, "kind": "spring", "gid": 1, "k": 0.0})
-	var vmin := 0.0
-	for i in 6:
-		tick()
-		vmin = minf(vmin, room.rabbit.vel.y)
-	check(vmin < -250.0, "a mola joga o coelho alto (%.0f)" % vmin)
-	# o da gravidade vira a sala de ponta-cabeça
-	idle(60)
-	m.walls.clear()
-	room.invuln = 0
 	var o0: int = room.orientation
-	fl = int(m._inner().end.y)
-	spot = Rect2i(int(m._inner().position.x) + 20, fl - 8, 12, 8)
-	room.rabbit.pos = Vector2i(spot.position.x, spot.position.y - 12)
-	room.rabbit.vel = Vector2.ZERO
-	m.pos = m._pt_of(m._u_floor(m._inner().end.x - 30.0))
-	m.walls.append({"rect": spot, "n": Vector2(0, -1), "age": 20, "kind": "grav", "gid": 2, "k": 0.0})
-	idle(4)
-	check(posmod(room.orientation - o0, 4) == 2, "pisou no da gravidade: a sala vira de ponta-cabeça")
+	m.walls.append({"rect": spot, "n": Vector2(0, -1), "age": 20, "kind": "spring", "gid": 1, "k": 0.0, "seed": 1})
+	idle(3)
+	check(posmod(room.orientation - o0, 4) == 2, "pisou na mola: a gravidade vira (a sala de ponta-cabeça)")
+	check(room.rabbit.vel.y > 100.0, "e o coelho sai disparado para o lado de lá (%.0f)" % room.rabbit.vel.y)
+	idle(90)
 	# o grudento prende o Senzi
 	idle(60)
 	m.walls.clear()
