@@ -1,0 +1,85 @@
+{
+	"frame": [
+		96,
+		96
+	],
+	"ground": 93,
+	"anims": {
+		"run": {
+			"row": 0,
+			"frames": 8
+		},
+		"idle": {
+			"row": 1,
+			"frames": 4
+		},
+		"flex": {
+			"row": 2,
+			"frames": 6
+		},
+		"throw": {
+			"row": 3,
+			"frames": 4
+		},
+		"die": {
+			"row": 4,
+			"frames": 4
+		},
+		"leap": {
+			"row": 5,
+			"frames": 3
+		},
+		"punch": {
+			"row": 6,
+			"frames": 4
+		},
+		"tired": {
+			"row": 7,
+			"frames": 4
+		},
+		"hold": {
+			"row": 8,
+			"frames": 4
+		},
+		"inject": {
+			"row": 9,
+			"frames": 12
+		},
+		"guard": {
+			"row": 10,
+			"frames": 4
+		},
+		"walk": {
+			"row": 11,
+			"frames": 6
+		},
+		"block": {
+			"row": 12,
+			"frames": 2
+		},
+		"hit": {
+			"row": 13,
+			"frames": 2
+		},
+		"upper": {
+			"row": 14,
+			"frames": 4
+		},
+		"sweep": {
+			"row": 15,
+			"frames": 3
+		},
+		"spit": {
+			"row": 16,
+			"frames": 3
+		},
+		"grab": {
+			"row": 17,
+			"frames": 4
+		}
+	},
+	"hand_up": [
+		49.3,
+		18.0
+	]
+}

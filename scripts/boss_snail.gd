@@ -20,6 +20,8 @@ const BODY := Vector2(30, 46)        # ao longo da superfície × para fora dela
 # A arte (D112): folha de sprites desenhada quadro a quadro por tools/art/senzi_sprites.py.
 # (load, e não preload: sem a arte importada, o script ainda carrega e a sala funciona)
 var sheet: Texture2D = load("res://art/senzi.png")
+# a degradação (D115): a cada coração perdido, uma folha mais derretida
+var sheets: Array = [sheet, load("res://art/senzi_2.png"), load("res://art/senzi_3.png")]
 const FRAME := Vector2(96, 96)
 const FEET := 94.0                   # a linha dos pés no quadro
 const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4], "leap": [5, 3], "punch": [6, 4],
@@ -48,7 +50,6 @@ const G_END := 200
 const BOLT_FRAMES := 14
 const RING_FRAMES := 720             # 12 s de coelhão
 const DEFLATE_FRAMES := 48
-const H_HP_HEART := 30.0             # vida do coelho por coração (3 jabs do Senzi)
 const S_HP_HEART := 60.0             # vida do Senzi por coração (12 jabs do coelho)
 const S_HP_MAX := 180.0
 const H_WALK := 78.0
@@ -145,6 +146,9 @@ const R_ROAR := 114
 const LEAP_EVERY := 170
 const LEAP_WARN := 30
 const LEAP_FRAMES := 30
+const LEAP_LAND := 22.0              # o raio da queda (só a queda fere; no ar ele passa por cima)
+const RING_LEAP_WARN := 26           # no ringue: o aviso (agacha, a marca no chão) antes de pular
+const TIME_PER_DMG := 6              # transformado, o golpe do Senzi tira tempo do coelhão: quadros por ponto de dano
 const LEAP_HIGH := 58.0              # altura da cambalhota
 const PUNCH_REACH := 40.0            # alcance do soco, à frente do centro dele
 const PUNCH_WIND := 8                # quadros carregando o soco (dá para escapar)
@@ -219,8 +223,8 @@ var h_jab_hit := false
 var h_cd := 0
 var h_stun := 0
 var h_block := false
-var h_hp := 90.0
 var ring_t := 0
+var h_time_lost := 0           # o tempo de coelhão que os golpes do Senzi já tiraram (quadros)
 var act := ""                  # a ação do Senzi no ringue
 var act_i := 0
 var act_t := 0
@@ -464,6 +468,7 @@ func step(r) -> void:
 	t += 1
 	room.invuln = maxi(room.invuln - 1, 0)
 	_update_debris()
+	_melt_drips()
 	bolt_t = maxi(bolt_t - 1, 0)
 	if win_deflate and hero_on and (state == "dying" or state == "dead") and t >= 60:
 		# ganhou: o coelhão desincha e o coelho volta
@@ -521,20 +526,20 @@ func step(r) -> void:
 				state = "leap"
 				t = 0
 				leap_from = pos
-				var ahead := 1.0 if room.rabbit.facing > 0 else -1.0
-				leap_to = _pt_of(_u_floor(_rabbit_c().x + ahead * 44.0))
 				r.sfx.emit("gatsby_dash")
 		"leap":
 			var k := clampf(float(t) / LEAP_FRAMES, 0.0, 1.0)
 			pos = leap_from.lerp(leap_to, k) + Vector2(0, -sin(k * PI) * LEAP_HIGH)
-			_hit_rabbit()
 			_smash_walls()
 			if t >= LEAP_FRAMES:
 				pos = leap_to
 				state = "berserk"
 				t = 0
-				r.shake = maxf(r.shake, 3.0)
+				r.shake = maxf(r.shake, 4.0)
 				r.sfx.emit("slam")
+				# só a queda fere: em cima da marca
+				if r.invuln == 0 and absf(_rabbit_c().x - leap_to.x) < LEAP_LAND and _rabbit_c().y > _inner().end.y - 24.0:
+					r.kill()
 		"punch":
 			_punch()
 		"grabbed":
@@ -677,6 +682,8 @@ func _berserk() -> void:
 			state = "leap_warn"
 			t = 0
 			flash = LEAP_WARN
+			# o lugar da queda é marcado já no aviso (no chão, onde o coelho está agora): dá para sair dali
+			leap_to = _pt_of(_u_floor(_rabbit_c().x))
 	if ph >= 2:
 		bell_t += 1
 		if bell_t >= BELL_EVERY:
@@ -1084,6 +1091,15 @@ func _draw() -> void:
 	_wall_base = base
 	_draw_walls()
 	_draw_debris(base)
+	if state == "leap_warn" or state == "leap" or (state == "ring" and act == "leap" and s_stun == 0):
+		# a marca da queda, no chão: pulsa vermelha
+		var fl := _inner().end.y
+		var pulse := 0.5 + 0.5 * sin(anim * 0.4)
+		var cx := roundf(leap_to.x)
+		draw_rect(Rect2(cx - LEAP_LAND, fl - 2.0, LEAP_LAND * 2.0, 2.0), Color(0, 0, 0, 0.5))
+		draw_rect(Rect2(cx - LEAP_LAND, fl - 3.0, LEAP_LAND * 2.0, 1.0), Color(1.0, 0.25, 0.3, 0.35 + 0.45 * pulse))
+		draw_rect(Rect2(cx - LEAP_LAND, fl - 7.0, 1.0, 5.0), Color(1.0, 0.25, 0.3, 0.6))
+		draw_rect(Rect2(cx + LEAP_LAND - 1.0, fl - 7.0, 1.0, 5.0), Color(1.0, 0.25, 0.3, 0.6))
 	for b in bells:
 		draw_set_transform_matrix(base * Transform2D(b["age"] * 0.3, (b["pos"] as Vector2).round()))
 		draw_rect(Rect2(-5, -1, 10, 2), Color("6a6d75"))
@@ -1362,7 +1378,7 @@ func _draw_snail(base: Transform2D) -> void:
 						fr = 0 if act_t <= wind else (1 if act_t <= wind + 4 else (2 if act_t <= wind + 8 else 3))
 					"leap":
 						anim_name = "leap"
-						fr = 1 + (anim / 4) % 2
+						fr = 0 if act_t <= RING_LEAP_WARN else 1 + (anim / 4) % 2
 					"upper":
 						anim_name = "upper"
 						fr = 0 if act_t <= UPPER_WIND else (1 if act_t <= UPPER_WIND + 5 else (2 if act_t <= UPPER_WIND + 11 else 3))
@@ -1406,13 +1422,14 @@ func _draw_snail(base: Transform2D) -> void:
 	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO))
 	var src := Rect2(Vector2(fr, row) * FRAME, FRAME)
 	var hd := body_rect().size.y / 2.0 if (state == "dying" or state == "dead") else h
-	if state == "leap" or (state == "ring" and act == "leap" and s_stun == 0):
+	if state == "leap" or (state == "ring" and act == "leap" and s_stun == 0 and act_t > RING_LEAP_WARN):
 		# a cambalhota: uma volta inteira, para a frente, em torno da bola encolhida
-		var k := clampf(float(t if state == "leap" else act_t) / LEAP_FRAMES, 0.0, 1.0)
+		var k := clampf(float(t if state == "leap" else act_t - RING_LEAP_WARN) / LEAP_FRAMES, 0.0, 1.0)
 		var c := Vector2(TUCK.x, hd + TUCK.y)
 		draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO)
 			* Transform2D(0.0, c) * Transform2D(k * TAU, Vector2.ZERO) * Transform2D(0.0, -c))
-	draw_texture_rect_region(sheet, Rect2(Vector2(-FRAME.x / 2.0, hd - FEET), FRAME), src, mod)
+	var sh: Texture2D = sheets[_phase()] if sheets[_phase()] != null else sheet
+	draw_texture_rect_region(sh, Rect2(Vector2(-FRAME.x / 2.0, hd - FEET), FRAME), src, mod)
 	draw_set_transform_matrix(base)
 	if state == "hold":
 		_draw_syringe(base * Transform2D(ang, syringe_pos().round()), clampf(float(t) / 10.0, 0.0, 1.0), 2.0)
@@ -1559,7 +1576,6 @@ func _ring_begin() -> void:
 	state = "ring"
 	t = 0
 	ring_t = RING_FRAMES
-	h_hp = float(lives) * H_HP_HEART
 	h_vx = 0.0
 	h_vy = 0.0
 	h_jab = -1
@@ -1578,10 +1594,6 @@ func _ring_begin() -> void:
 ## O coração de cada um: um por terço da barra.
 func _s_hearts() -> int:
 	return clampi(ceili(s_hp / S_HP_HEART - 0.001), 0, 3)
-
-
-func _h_hearts() -> int:
-	return clampi(ceili(h_hp / H_HP_HEART - 0.001), 0, 3)
 
 
 func _ring() -> void:
@@ -1813,17 +1825,24 @@ func _s_act() -> void:
 				act = ""
 		"leap":
 			# a cambalhota por cima, caindo no coelho (dá para defender)
+			# o aviso: agacha, pisca e a marca aparece no chão (onde o coelho está agora); então pula
 			if act_t == 1:
 				leap_from = pos
 				leap_to = Vector2(clampf(hx, _inner().position.x + 14.0, _inner().end.x - 14.0), pos.y)
+				room.sfx.emit("lock_on")
+			if act_t <= RING_LEAP_WARN:
+				if act_t % 6 == 0:
+					flash = 3
+				return
+			if act_t == RING_LEAP_WARN + 1:
 				room.sfx.emit("gatsby_dash")
-			var k := clampf(float(act_t) / LEAP_FRAMES, 0.0, 1.0)
+			var k := clampf(float(act_t - RING_LEAP_WARN) / LEAP_FRAMES, 0.0, 1.0)
 			pos = leap_from.lerp(leap_to, k) + Vector2(0, -sin(k * PI) * LEAP_HIGH)
-			if act_t == LEAP_FRAMES:
+			if act_t == RING_LEAP_WARN + LEAP_FRAMES:
 				pos = leap_to
 				room.shake = maxf(room.shake, 4.0)
 				room.sfx.emit("slam")
-				if absf(hx - pos.x) < 30.0:
+				if absf(hx - pos.x) < LEAP_LAND:
 					_hit_hero(SLEAP_DMG, false)
 				act = ""
 
@@ -1886,15 +1905,18 @@ func _hit_senzi(dmg: float, kind := "jab") -> void:
 
 
 func _hit_hero(dmg: float, unblockable: bool, knock := Vector2.INF) -> void:
+	# transformado, o coelho não perde coração: o golpe tira tempo do coelhão
 	var sd := signf(hx - pos.x) if hx != pos.x else 1.0
 	if h_block and not unblockable:
-		h_hp -= dmg * 0.2
+		ring_t -= int(dmg * TIME_PER_DMG * 0.2)
+		h_time_lost += int(dmg * TIME_PER_DMG * 0.2)
 		room.sfx.emit("plate_on")
 		hitstop = 2
 		h_vx = sd * 80.0
 		_spark(Vector2(hx - sd * 10.0, hy - 50.0), Color("cfe8ff"))
 	else:
-		h_hp -= dmg
+		ring_t -= int(dmg * TIME_PER_DMG)
+		h_time_lost += int(dmg * TIME_PER_DMG)
 		h_stun = H_STUN if not unblockable else H_STUN * 2
 		h_vx = sd * (260.0 if unblockable else 110.0)
 		h_vy = -150.0 if unblockable else 0.0
@@ -1909,15 +1931,16 @@ func _hit_hero(dmg: float, unblockable: bool, knock := Vector2.INF) -> void:
 		room.impact.emit(1.5 if not unblockable else 4.0)
 		room.sfx.emit("death" if unblockable else "crunch")
 		_spark(Vector2(hx - sd * 10.0, hy - 50.0), Color(1, 0.7, 0.7))
-	lives = maxi(_h_hearts(), 0)
-	if h_hp <= 0.0:
-		# nocaute: a fase recomeça do começo
-		hero_on = false
-		room.rabbit_hidden = false
-		room.input_lock = false
-		room.invuln = 0
-		lives = 1
-		room.kill()
+		# o tempo voando: faíscas verdes saindo do coelhão
+		for i in 6:
+			room.particles.append({"pos": Vector2(hx, hy - 40.0), "vel": Vector2(rng.randf_range(-60, 60), rng.randf_range(-90, -20)),
+				"life": rng.randi_range(12, 22), "col": C_JUICE, "grav": 120.0})
+	ring_t = maxi(ring_t, 1)
+
+
+## O dano que o coelhão já tomou, em pontos (o tempo que perdeu, dividido pelo preço do ponto).
+func taken_dmg() -> float:
+	return float(h_time_lost) / TIME_PER_DMG
 
 
 func _spark(at: Vector2, col: Color) -> void:
@@ -1946,7 +1969,6 @@ func _deflate() -> void:
 		r.rabbit.pos = Vector2i(int(hx) - 6, int(_inner().end.y) - 12)
 		r.rabbit.vel = Vector2.ZERO
 		r.invuln = INVULN
-		lives = maxi(_h_hearts(), 1)
 		syringe_taken = false
 		pos = _pt_of(_u_floor(pos.x))
 		energy = ENERGY
@@ -2057,8 +2079,9 @@ func _draw_bolt(base: Transform2D) -> void:
 		draw_set_transform_matrix(base)
 
 
-## As barras da luta: a do coelho à esquerda, a do Senzi à direita, cada uma em três terços (um
-## coração por terço); no meio, o tempo do coelhão, esvaziando verde.
+## As barras da luta: à esquerda, o tempo do coelhão (verde, esvaziando; os golpes do Senzi tiram
+## tempo, não coração), com os corações do coelho embaixo, que no ringue não caem; à direita, a vida do
+## Senzi, em três terços (um coração por terço).
 func _draw_ring_hud() -> void:
 	var y := -86.0
 	var bw := 116.0
@@ -2066,26 +2089,27 @@ func _draw_ring_hud() -> void:
 	var rb := Rect2(150 - bw, y, bw, 8)
 	for b in [lb, rb]:
 		draw_rect((b as Rect2).grow(1.0), Color(0.05, 0.05, 0.08, 0.85))
-	var hk := clampf(h_hp / (3.0 * H_HP_HEART), 0.0, 1.0)
-	var sk := clampf(s_hp / S_HP_MAX, 0.0, 1.0)
-	var hcol := Color(1, 1, 1) if hud_hit > 0 and (hud_hit / 3) % 2 == 0 else Color("efeadf")
-	var scol := Color(1, 1, 1) if bar_hit > 0 and (bar_hit / 3) % 2 == 0 else C_ENERGY
-	draw_rect(Rect2(lb.position, Vector2(bw * hk, 8)), hcol)
-	draw_rect(Rect2(rb.end.x - bw * sk, rb.position.y, bw * sk, 8), scol)
-	for b in [lb, rb]:
-		for q in [1.0 / 3.0, 2.0 / 3.0]:
-			draw_rect(Rect2((b as Rect2).position + Vector2(bw * q, 0), Vector2(1, 8)), Color(0.05, 0.05, 0.08, 0.9))
-		draw_rect((b as Rect2).grow(1.0), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
-	for i in 3:
-		_draw_heart(Vector2(-150 + i * 10, y + 11), i < _h_hearts())
-		_draw_heart(Vector2(143 - i * 10, y + 11), i < _s_hearts(), C_ENERGY)
-	# o tempo
 	var tk := clampf(float(ring_t) / RING_FRAMES, 0.0, 1.0) if state == "ring" else (1.0 if state == "grabbed" else 0.0)
-	var tw := 52.0
-	draw_rect(Rect2(-tw / 2.0 - 1, y - 1, tw + 2, 10), Color(0.05, 0.05, 0.08, 0.85))
-	var tc := C_JUICE if ring_t >= 180 or (ring_t / 6) % 2 == 0 else Color(1, 1, 1)
-	draw_rect(Rect2(-tw * tk / 2.0, y, tw * tk, 8), tc)
-	draw_rect(Rect2(-tw / 2.0 - 1, y - 1, tw + 2, 10), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
+	var sk := clampf(s_hp / S_HP_MAX, 0.0, 1.0)
+	var tc := C_JUICE
+	if hud_hit > 0 and (hud_hit / 3) % 2 == 0:
+		tc = Color(1, 1, 1)
+	elif state == "ring" and ring_t < 180 and (ring_t / 6) % 2 == 0:
+		tc = Color(1, 1, 1)
+	var scol := Color(1, 1, 1) if bar_hit > 0 and (bar_hit / 3) % 2 == 0 else C_ENERGY
+	draw_rect(Rect2(lb.position, Vector2(bw * tk, 8)), tc)
+	draw_rect(Rect2(lb.position, Vector2(bw * tk, 2)), tc.lightened(0.4))
+	draw_rect(Rect2(rb.end.x - bw * sk, rb.position.y, bw * sk, 8), scol)
+	for q in [1.0 / 3.0, 2.0 / 3.0]:
+		draw_rect(Rect2(rb.position + Vector2(bw * q, 0), Vector2(1, 8)), Color(0.05, 0.05, 0.08, 0.9))
+	for b in [lb, rb]:
+		draw_rect((b as Rect2).grow(1.0), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
+	_draw_syringe(Transform2D(0.0, Vector2(-158, y + 4)), 1.0, 0.6)
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+	for i in LIVES:
+		_draw_heart(Vector2(-150 + i * 10, y + 11), i < lives)
+	for i in 3:
+		_draw_heart(Vector2(143 - i * 10, y + 11), i < _s_hearts(), C_ENERGY)
 
 
 # ---------------------------------------------------------------- os cogumelos quebrados
@@ -2235,7 +2259,8 @@ func _update_spits() -> void:
 		var hit := Rect2(hx - 10.0, hy - 64.0, 20.0, 64.0).has_point(p)
 		if hit and grabbed_t < 0:
 			if h_block:
-				h_hp -= 1.0
+				ring_t = maxi(ring_t - TIME_PER_DMG, 1)
+				h_time_lost += TIME_PER_DMG
 				room.sfx.emit("plate_on")
 				_spark(p, C_GOO)
 			else:
@@ -2256,3 +2281,26 @@ func _splash(p: Vector2) -> void:
 		var a := rng.randf_range(PI, TAU)
 		room.particles.append({"pos": p, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(30.0, 110.0),
 			"life": rng.randi_range(12, 24), "col": C_GOO if i % 2 else C_SKIN, "grav": 300.0})
+
+
+## A degradação em jogo: quanto mais corações ele perdeu, mais gosma pinga dele (e mais grossa), e
+## no ringue fica a poça embaixo.
+const C_MELT := [Color("d7cdb8"), Color("bfc39a"), Color("a6b27c")]
+
+
+func _melt_drips() -> void:
+	var ph := _phase()
+	if ph == 0 or not (fighting() or state == "deflate"):
+		return
+	var every := 14 if ph == 1 else 6
+	if anim % every != 0:
+		return
+	var up := _up()
+	var side := Vector2(-up.y, up.x)
+	var at := pos + side * rng.randf_range(-12.0, 12.0) - up * rng.randf_range(-6.0, 14.0)
+	room.particles.append({"pos": at, "vel": Vector2(rng.randf_range(-6, 6), rng.randf_range(0, 20)),
+		"life": rng.randi_range(30, 55), "col": C_MELT[ph] if rng.randf() < 0.6 else C_GOO, "grav": 260.0})
+	if ph == 2 and rng.randf() < 0.5:
+		# um naco que cai
+		room.particles.append({"pos": at, "vel": Vector2(rng.randf_range(-20, 20), -rng.randf_range(10, 40)),
+			"life": rng.randi_range(25, 40), "col": C_MELT[2].darkened(0.2), "grav": 400.0})

@@ -3535,11 +3535,36 @@ func test_senzi() -> void:
 	m = _senzi()
 	while m.state != "berserk":
 		tick()
+	# o pulo da perseguição: a marca da queda aparece no aviso; saindo dela, ele não acerta
+	m = _senzi()
+	while m.state != "berserk":
+		tick()
+	var lfl: float = m._inner().end.y
+	room.rabbit.pos = Vector2i(int(m._inner().get_center().x), int(lfl) - 12)
+	m.pos = m._pt_of(m._u_floor(m._inner().position.x + 30.0))
+	m.state = "leap_warn"
+	m.t = 0
+	m.leap_to = m._pt_of(m._u_floor(m._rabbit_c().x))
+	var mark: float = m.leap_to.x
+	var lv0: int = m.lives
+	for i in m.LEAP_WARN + m.LEAP_FRAMES + 4:
+		tick({"move": 1.0})   # sai correndo da marca
+	check(m.lives == lv0 and absf(m._rabbit_c().x - mark) > m.LEAP_LAND, "o pulo: saindo da marca, ele cai e não acerta")
+	idle(80)
+	room.invuln = 0
+	m.state = "leap_warn"
+	m.t = 0
+	m.leap_to = m._pt_of(m._u_floor(m._rabbit_c().x))
+	for i in m.LEAP_WARN + m.LEAP_FRAMES + 4:
+		tick()
+	check(m.lives < lv0, "parado em cima da marca, a queda acerta")
 	# as fases da perseguição seguem a vida dele (não a energia)
 	m.energy = m.ENERGY * 0.2
 	check(m._phase() == 0, "gastar energia não muda a fase")
 	m.s_hp = 100.0
 	check(m._phase() == 1 and m._speed(m._phase()) > m._speed(0), "com 2 corações, a fase 2: mais rápido")
+	check(m.sheets.size() == 3 and m.sheets.all(func(x): return x != null) and m.sheets[0] != m.sheets[2],
+		"uma folha de sprites por fase: ele fica mais gosmento a cada coração perdido")
 	m.s_hp = m.S_HP_MAX
 	m.energy = m.ENERGY
 	# sem energia: para cansado, ergue a seringa e, se ninguém pega, se injeta e volta com tudo (D113)
@@ -3587,21 +3612,21 @@ func test_senzi() -> void:
 	m.act_t = 0
 	m.s_hit_done = false
 	m.hx = m.pos.x - 30.0
-	var h0: float = m.h_hp
+	var h0: float = (90.0 - m.taken_dmg())
 	for i in m.SJAB_WIND + 6:
 		tick({"move": -1.0 if m.hx < m.pos.x else 1.0})
 		m.hx = m.pos.x - 30.0
-	check(m.h_hp < h0 and m.h_hp > h0 - m.SJAB_DMG * 0.5, "andando para trás, o coelho defende o jab (%.0f -> %.0f)" % [h0, m.h_hp])
+	check((90.0 - m.taken_dmg()) < h0 and (90.0 - m.taken_dmg()) > h0 - m.SJAB_DMG * 0.5, "andando para trás, o coelho defende o jab (%.0f -> %.0f)" % [h0, (90.0 - m.taken_dmg())])
 	# o carregado não dá para defender
 	idle(30)
 	m.act = "charge"
 	m.act_t = 0
 	m.s_hit_done = false
-	h0 = m.h_hp
+	h0 = (90.0 - m.taken_dmg())
 	for i in m.SCHARGE_WIND + 8:
 		tick({"move": -1.0 if m.hx < m.pos.x else 1.0})
 		m.hx = m.pos.x - 30.0
-	check(m.h_hp <= h0 - m.SCHARGE_DMG + 0.1, "o soco carregado passa pela defesa (%.0f -> %.0f)" % [h0, m.h_hp])
+	check((90.0 - m.taken_dmg()) <= h0 - m.SCHARGE_DMG + 0.1, "o soco carregado passa pela defesa (%.0f -> %.0f)" % [h0, (90.0 - m.taken_dmg())])
 	# os golpes novos do Senzi
 	var rfl2: float = m._inner().end.y
 	var setup := func(act_name: String, gap_px: float) -> void:
@@ -3616,39 +3641,39 @@ func test_senzi() -> void:
 		m.hy = rfl2
 		m.h_vx = 0.0
 		m.h_vy = 0.0
-		m.h_hp = 90.0
+		m.h_time_lost = 0
 		m.h_jab = -1
 		m.ring_t = m.RING_FRAMES   # (os testes são longos: o ringue não acaba no meio)
 	idle(30)
 	setup.call("upper", 28.0)
 	for i in m.UPPER_WIND + 4:
 		tick()
-	check(m.h_hp <= 90.0 - m.UPPER_DMG + 0.1 and m.h_vy < -100.0, "o gancho joga o coelho para o alto (vy %.0f)" % m.h_vy)
+	check((90.0 - m.taken_dmg()) <= 90.0 - m.UPPER_DMG + 0.1 and m.h_vy < -100.0, "o gancho joga o coelho para o alto (vy %.0f)" % m.h_vy)
 	idle(60)
 	setup.call("sweep", 40.0)
 	for i in m.SWEEP_WIND + 5:
 		tick({"move": -1.0})
 		m.hx = m.pos.x - 40.0
-	check(m.h_hp <= 90.0 - m.SWEEP_DMG + 0.1, "a rasteira passa pela defesa")
+	check((90.0 - m.taken_dmg()) <= 90.0 - m.SWEEP_DMG + 0.1, "a rasteira passa pela defesa")
 	idle(60)
 	setup.call("sweep", 40.0)
 	for i in m.SWEEP_WIND + 6:
 		tick({"jump": i == m.SWEEP_WIND - 6})
 		m.hx = m.pos.x - 40.0
-	check(m.h_hp >= 90.0 - 0.1, "pulando, a rasteira passa por baixo")
+	check((90.0 - m.taken_dmg()) >= 90.0 - 0.1, "pulando, a rasteira passa por baixo")
 	idle(60)
 	setup.call("grab", 26.0)
 	var side0 := signf(m.hx - m.pos.x)
 	for i in m.GRAB_WIND + m.GRAB_HOLD + 40:
 		tick({"move": -1.0})
-	check(m.h_hp <= 90.0 - m.GRAB_DMG + 0.1 and signf(m.hx - m.pos.x) != side0, "o agarrão pega mesmo defendendo e arremessa por cima, para trás dele")
+	check((90.0 - m.taken_dmg()) <= 90.0 - m.GRAB_DMG + 0.1 and signf(m.hx - m.pos.x) != side0, "o agarrão pega mesmo defendendo e arremessa por cima, para trás dele")
 	idle(60)
 	setup.call("spit", 120.0)
 	m.pos.x = m._inner().end.x - 30.0
 	m.hx = m.pos.x - 120.0
 	for i in 70:
 		tick()
-	check(m.h_hp < 90.0 and m.h_slow > 0, "o cuspe acerta de longe e deixa o coelho lento na gosma")
+	check((90.0 - m.taken_dmg()) < 90.0 and m.h_slow > 0, "o cuspe acerta de longe e deixa o coelho lento na gosma")
 	idle(120)
 	setup.call("guard", 30.0)
 	m.h_cd = 0
@@ -3656,19 +3681,26 @@ func test_senzi() -> void:
 	for i in m.HJAB_HIT + 2:
 		tick()
 	check(m.act == "upper", "defendendo um jab, ele contra-ataca com o gancho")
+	# a cambalhota do ringue: aviso com a marca no chão; saindo da marca, escapa
+	idle(60)
+	setup.call("leap", 30.0)
+	var t0: float = m.taken_dmg()
+	for i in m.RING_LEAP_WARN + m.LEAP_FRAMES + 2:
+		tick({"move": -1.0})
+	check(m.taken_dmg() <= t0 + 0.01, "a cambalhota no ringue: dá para sair da marca durante o aviso")
 	# agachado: o jab dele passa por cima; defendendo agachado, segura a rasteira
 	idle(60)
 	setup.call("jab", 30.0)
 	for i in m.SJAB_WIND + 6:
 		tick({"climb": 1.0})
 		m.hx = m.pos.x - 30.0
-	check(m.h_hp >= 90.0 - 0.1 and m.h_crouch, "agachado, o jab dele passa por cima")
+	check((90.0 - m.taken_dmg()) >= 90.0 - 0.1 and m.h_crouch, "agachado, o jab dele passa por cima")
 	idle(60)
 	setup.call("sweep", 40.0)
 	for i in m.SWEEP_WIND + 6:
 		tick({"climb": 1.0, "move": -1.0})
 		m.hx = m.pos.x - 40.0
-	check(m.h_hp > 90.0 - m.SWEEP_DMG * 0.5, "defendendo agachado, segura a rasteira (%.0f)" % m.h_hp)
+	check((90.0 - m.taken_dmg()) > 90.0 - m.SWEEP_DMG * 0.5, "defendendo agachado, segura a rasteira (%.0f)" % (90.0 - m.taken_dmg()))
 	# o gancho de baixo para cima (agachado + giro esquerdo) joga o Senzi para o alto
 	idle(60)
 	setup.call("retreat", 30.0)
@@ -3692,7 +3724,7 @@ func test_senzi() -> void:
 	check(m.s_hp <= l0 - 3.0, "a rasteira do coelho passa pela defesa em pé dele (%.1f -> %.1f)" % [l0, m.s_hp])
 	# o tempo acaba: o coelhão desincha, a perseguição volta, e a vida perdida do Senzi fica perdida
 	var shp: float = m.s_hp
-	m.h_hp = 90.0
+	m.h_time_lost = 0
 	m.ring_t = 2
 	idle(3 + m.DEFLATE_FRAMES + 2)
 	check(not m.hero_on and not room.rabbit_hidden and room.allow_rotate and m.energy >= m.ENERGY - 1.0,
@@ -3760,7 +3792,9 @@ func test_senzi() -> void:
 	room.rabbit.pos = Vector2i(sr.get_center()) - Vector2i(6, 6)
 	tick()
 	idle(m.G_END + 2)
-	m.h_hp = 1.0
+	# transformado, o coelho não perde coração: o golpe tira tempo do coelhão
+	var lv: int = m.lives
+	m.ring_t = 200
 	m.act = "jab"
 	m.act_t = 0
 	m.s_hit_done = false
@@ -3768,7 +3802,8 @@ func test_senzi() -> void:
 	for i in m.SJAB_WIND + 6:
 		tick()
 		m.hx = m.pos.x - 30.0
-	check(room.state == "dead", "nocaute no coelho: ele morre e a fase recomeça")
+	check(m.lives == lv and room.state == "play" and m.ring_t < 200 - m.SJAB_WIND - 6 - m.SJAB_DMG * m.TIME_PER_DMG + 8,
+		"transformado, o golpe dele tira tempo do coelhão, não coração (%d quadros)" % m.ring_t)
 
 
 ## Um bot que só foge: gira a sala quando ele chega perto, e pula os muros. As vidas do coelho são
@@ -3818,7 +3853,7 @@ func test_senzi_bot() -> void:
 				mv = -toward
 			elif dist < m.HKICK_REACH - 6.0 and m.h_jab < 0 and m.h_cd == 0:
 				r = 1    # chute (alcança mais e passa pela defesa)
-			m.h_hp = 90.0
+			m.h_time_lost = 0
 		elif m.fighting() and not room.rotating and room.rot_lock == 0 and m.pos.distance_to(m._rabbit_c()) < 70.0:
 			r = 1
 		if m.state != "hold":

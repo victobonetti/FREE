@@ -21,6 +21,9 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 FW, FH = 96, 96
 GROUND = 93
 
+# O derretimento (D115): 0 com 3 corações, 1 com 2, 2 com 1. A cada fase ele fica mais gosmento: mais
+# calombudo e inchado, escorrendo mais e mais grosso, a carne mais molhada e esverdeada, com manchas.
+MELT = 0
 GOO = (215, 205, 184, 255)       # a carne dos caramujos de enfeite (d7cdb8)
 GOO_D = (172, 160, 140, 255)     # embaixo das partes
 GOO_B = (150, 139, 122, 255)     # os membros de trás
@@ -79,7 +82,8 @@ class Canvas:
         out = []
         for i in range(n + 1):
             t = i / n
-            r = (r0 + (r1 - r0) * t) * (1.0 + self.rng.uniform(-wob, wob)) * self.pump
+            w2 = wob + 0.14 * MELT
+            r = (r0 + (r1 - r0) * t) * (1.0 + self.rng.uniform(-w2, w2)) * self.pump * (1.0 + 0.07 * MELT)
             q = lerp(p0, p1, t)
             j = self.rng.uniform(-0.5, 0.5, 2)
             out.append(("c", (q[0] + j[0], q[1] + j[1], max(0.8, r))))
@@ -87,6 +91,15 @@ class Canvas:
 
     def part(self, shapes, base, dark, drip=True):
         """Cor chapada; a borda de baixo um tom mais escura (a gosma pesa para baixo)."""
+        if drip and MELT > 0:
+            # a gosma cede: bolsas penduradas embaixo das partes
+            m0 = self._mask(shapes)
+            ys, xs = np.nonzero(m0 & ~self._shift(m0, 0, -1))
+            extra = []
+            for _ in range(min(len(xs), 2 + 3 * MELT)):
+                k = int(self.rng.integers(len(xs)))
+                extra.append(("c", (float(xs[k]), float(ys[k]) + 0.5 + self.rng.uniform(0.0, 1.2 * MELT), 1.0 + 0.6 * MELT + self.rng.uniform(0, 0.8))))
+            shapes = list(shapes) + extra
         m = self._mask(shapes)
         if not m.any():
             return m
@@ -114,12 +127,14 @@ class Canvas:
         cand = [b for b in self.bottoms if b[1] < ground - 3]
         if not cand:
             return
-        for _ in range(n):
+        for _ in range(int(n * (1.0 + 1.3 * MELT))):
             x, y, base, dark = cand[int(self.rng.integers(len(cand)))]
-            ln = int(self.rng.integers(2, 6))
+            ln = int(self.rng.integers(2, 6 + 4 * MELT))
             for k in range(1, ln + 1):
                 self.px(x + wind * k, y + k, dark if k == ln else base)
-            if self.rng.random() < 0.5:
+                if MELT >= 2 and k < ln - 1 and self.rng.random() < 0.5:
+                    self.px(x + wind * k + 1, y + k, base)   # fios grossos
+            if self.rng.random() < 0.5 + 0.2 * MELT:
                 g = y + ln + int(self.rng.integers(2, 5))
                 if g < ground:
                     self.px(x + wind * ln, g, base)
@@ -212,9 +227,30 @@ def draw_syringe(cv, hand, ang, liquid):
     cv.line(add(back, side, -2.5), add(back, side, 2.5), GLASS_D, 1)  # as abas
 
 
+def melt_pal():
+    """A carne derretendo: mais molhada e esverdeada a cada fase."""
+    def mix(c, tgt, k):
+        return tuple(int(round(c[i] + (tgt[i] - c[i]) * k)) for i in range(3)) + (255,)
+    k = (0.0, 0.28, 0.55)[MELT]
+    return (mix(GOO, (196, 204, 160), k), mix(GOO_D, (138, 150, 110), k), mix(GOO_B, (130, 142, 104), k), mix(GOO_B_D, (100, 112, 80), k))
+
+
+def rot_spots(cv, n, base, dark):
+    """Manchas: a carne apodrecendo (pontos escuros e brilhos de gosma pela silhueta)."""
+    sil = (cv.img[:, :, 3] > 0) & (cv.img[:, :, 0] == base[0]) & (cv.img[:, :, 1] == base[1])
+    ys, xs = np.nonzero(sil)
+    for _ in range(n):
+        if not len(xs):
+            return
+        k = int(cv.rng.integers(len(xs)))
+        cv.px(xs[k], ys[k], dark)
+        if cv.rng.random() < 0.5:
+            cv.px(xs[k] + 1, ys[k], dark)
+
+
 def draw_senzi(p):
     cv = Canvas(p.get("seed", 0))
-    C0, C1, C2, C3 = (FUR, FUR_D, FUR_B, FUR_B_D) if p.get("rabbit") else (GOO, GOO_D, GOO_B, GOO_B_D)
+    C0, C1, C2, C3 = (FUR, FUR_D, FUR_B, FUR_B_D) if p.get("rabbit") else melt_pal()
     cv.pump = p.get("pump", 1.0)
     hip = p["hip"]
     tilt = p["tilt"]          # inclinação do tronco: 0 em pé; ~0.85 na corrida
@@ -324,7 +360,9 @@ def draw_senzi(p):
         draw_syringe(cv, p["_hand"], p["_fore"] + sa if sa is not None else p["_fore"], sl)
     if not p.get("rabbit"):
         cv.goo(p.get("goo", 8), wind=p.get("wind", 0.0))
-        cv.wet(4)
+        if MELT > 0:
+            rot_spots(cv, 10 * MELT, C0, C1)
+        cv.wet(4 + 5 * MELT, C0)
     return cv.img
 
 
@@ -661,7 +699,11 @@ def build(anims, name):
 
 
 def main():
-    build(ANIMS, "senzi")
+    global MELT
+    for m, name in ((0, "senzi"), (1, "senzi_2"), (2, "senzi_3")):
+        MELT = m
+        build(ANIMS, name)
+    MELT = 0
     build(RABBIT_ANIMS, "coelhao")
 
 
