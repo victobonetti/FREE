@@ -3574,6 +3574,23 @@ func test_senzi() -> void:
 	for i in m.LEAP_WARN + m.LEAP_FRAMES + 4:
 		tick()
 	check(m.lives < lv0, "parado em cima da marca, a queda acerta")
+	# girando a sala no aviso do pulo, o alvo continua no chão, no mesmo lugar
+	idle(80)
+	room.invuln = 0
+	m.state = "leap_warn"
+	m.t = 0
+	m.leap_to = m._pt_of(m._u_floor(m._rabbit_c().x))
+	var lx: float = m.leap_to.x
+	wait_rot_ready()
+	tick({"rotate": 1})
+	while room.rotating:
+		tick()
+	tick()
+	check(absf(m.leap_to.y - m._path().end.y) < 0.5 and absf(m.leap_to.x - clampf(lx, m._path().position.x, m._path().end.x)) < 0.5,
+		"girando no aviso, o alvo do pulo continua no chão, no mesmo lugar")
+	m = _senzi()
+	while m.state != "berserk":
+		tick()
 	# as fases da perseguição seguem a vida dele (não a energia)
 	m.energy = m.ENERGY * 0.2
 	check(m._phase() == 0, "gastar energia não muda a fase")
