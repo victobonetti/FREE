@@ -54,11 +54,11 @@ const H_JUMP := 230.0
 const HJAB_HIT := 4                  # o jab do coelho: quadro em que acerta, total, alcance, dano
 const HJAB_TOTAL := 13
 const HJAB_REACH := 40.0
-const HJAB_DMG := 8.0
+const HJAB_DMG := 6.0
 const HKICK_HIT := 9                 # o chute (giro direito): mais lento, mais longe, mais forte, e quebra a defesa
 const HKICK_TOTAL := 24
 const HKICK_REACH := 54.0
-const HKICK_DMG := 9.0
+const HKICK_DMG := 7.0
 const S_STUN := 12                   # quadros sem agir depois de apanhar
 const H_STUN := 16
 const S_WALK := 46.0
@@ -208,6 +208,8 @@ var s_hp := S_HP_MAX           # a vida do Senzi no ringue (fica perdida entre o
 var hitstop := 0
 var bolt_t := 0
 var win_deflate := false
+var debris: Array = []         # os pedaços dos cogumelos quebrados, voando (px da sala)
+var splats: Array = []         # os que voam para a tela e grudam no vidro (px da tela)
 
 
 static func replay_state() -> Dictionary:
@@ -224,6 +226,8 @@ func on_reset(r) -> void:
 	rng.seed = 20261119
 	walls.clear()
 	bells.clear()
+	debris.clear()
+	splats.clear()
 	vel = Vector2.ZERO
 	flash = 0
 	hud_hit = 0
@@ -266,6 +270,9 @@ func on_rotate(r, d: int) -> void:
 	for w in walls:
 		w["rect"] = r._rot_rect(w["rect"], d)
 		w["n"] = _rv(w["n"], d)
+	for db in debris:
+		db["pos"] = r._rot_point(db["pos"], d)
+		db["vel"] = _rv(db["vel"], d)
 	for b in bells:
 		b["pos"] = r._rot_point(b["pos"], d)
 		b["vel"] = _rv(b["vel"], d)
@@ -426,6 +433,7 @@ func step(r) -> void:
 		return
 	t += 1
 	room.invuln = maxi(room.invuln - 1, 0)
+	_update_debris()
 	bolt_t = maxi(bolt_t - 1, 0)
 	if win_deflate and hero_on and (state == "dying" or state == "dead") and t >= 60:
 		# ganhou: o coelhão desincha e o coelho volta
@@ -737,13 +745,8 @@ func _update_fly() -> void:
 	var keep: Array = []
 	for w in walls:
 		if w["age"] >= 0 and rr.intersects(Rect2(w["rect"])):
+			_shatter(w, room.rabbit.vel.normalized() if room.rabbit.vel.length() > 1.0 else Vector2(1, 0))
 			room.shake = maxf(room.shake, 7.0)
-			room.impact.emit(2.0)
-			room.sfx.emit("crunch")
-			var c := Rect2(w["rect"]).get_center()
-			for i in 16:
-				room.particles.append({"pos": c, "vel": Vector2(rng.randf_range(-140, 140), -rng.randf_range(20, 160)),
-					"life": rng.randi_range(14, 28), "col": Color("9b6bc4") if i % 2 else Color("cfc6d8"), "grav": 300.0})
 		else:
 			keep.append(w)
 	walls = keep
@@ -765,13 +768,7 @@ func _smash_walls() -> void:
 		if w["age"] >= 0 and br.intersects(Rect2(w["rect"])):
 			energy -= float(COST.get(w["kind"], 30.0))
 			bar_hit = 14
-			room.shake = maxf(room.shake, 2.5)
-			room.sfx.emit("crunch")
-			var c := Rect2(w["rect"]).get_center()
-			var cols := _shroom_cols(w["kind"])
-			for i in 10:
-				room.particles.append({"pos": c, "vel": Vector2(rng.randf_range(-90, 90), -rng.randf_range(20, 110)),
-					"life": rng.randi_range(12, 24), "col": cols[0] if i % 2 else cols[1], "grav": 300.0})
+			_shatter(w, _ahead() if _stuck() else Vector2(dir, 0))
 			if w["kind"] == "sticky":
 				glued = true
 		else:
@@ -1056,6 +1053,7 @@ func _draw() -> void:
 	draw_set_transform_matrix(base)
 	_wall_base = base
 	_draw_walls()
+	_draw_debris(base)
 	for b in bells:
 		draw_set_transform_matrix(base * Transform2D(b["age"] * 0.3, (b["pos"] as Vector2).round()))
 		draw_rect(Rect2(-5, -1, 10, 2), Color("6a6d75"))
@@ -1394,6 +1392,7 @@ func _draw_syringe(xf: Transform2D, k: float, size := 1.0) -> void:
 
 
 func _draw_hud() -> void:
+	_draw_splats()
 	if pop_flash > 0:
 		draw_rect(Rect2(-200, -120, 400, 240), Color(1, 1, 1, 0.12 * pop_flash))
 	if hero_on and state in ["grabbed", "ring", "deflate"]:
@@ -1909,3 +1908,138 @@ func _draw_ring_hud() -> void:
 	var tc := C_JUICE if ring_t >= 180 or (ring_t / 6) % 2 == 0 else Color(1, 1, 1)
 	draw_rect(Rect2(-tw * tk / 2.0, y, tw * tk, 8), tc)
 	draw_rect(Rect2(-tw / 2.0 - 1, y - 1, tw + 2, 10), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
+
+
+# ---------------------------------------------------------------- os cogumelos quebrados
+
+## Quebrou um cogumelo: ele explode em pedaços (do chapéu, do talo, as pintas, o pé de micélio), que voam
+## para todo lado, para a frente de quem quebrou, girando, quicando no chão; e uns voam para a tela e
+## batem no vidro. O tremor e o baque vêm junto.
+func _shatter(w: Dictionary, push: Vector2) -> void:
+	var r := Rect2(w["rect"])
+	var n: Vector2 = w["n"]
+	var cols := _shroom_cols(w["kind"])
+	var area := r.size.x * r.size.y
+	var count := clampi(int(area / 14.0), 10, 26)
+	for i in count:
+		var at := Vector2(rng.randf_range(r.position.x, r.end.x), rng.randf_range(r.position.y, r.end.y))
+		var kind := rng.randi() % 4   # 0 chapéu, 1 talo, 2 pinta, 3 micélio
+		var col: Color = cols[0] if kind == 0 else (cols[1] if kind == 1 else (cols[3] if kind == 2 else Color("d9cfe6")))
+		var sz := Vector2(rng.randi_range(3, 7), rng.randi_range(2, 4)) if kind == 0 else Vector2(rng.randi_range(2, 3), rng.randi_range(3, 6))
+		if kind >= 2:
+			sz = Vector2(2, 2)
+		var v := push * rng.randf_range(80.0, 300.0) + n * rng.randf_range(60.0, 260.0) + Vector2(rng.randf_range(-120, 120), rng.randf_range(-120, 40))
+		debris.append({"pos": at, "vel": v, "rot": rng.randf() * TAU, "spin": rng.randf_range(-0.5, 0.5), "size": sz,
+			"col": col, "dark": Color(cols[2]), "life": rng.randi_range(70, 120), "age": 0, "bounces": 0})
+	# os que vêm para a tela: saem do lugar do cogumelo, crescendo (cada vez mais perto), e batem no vidro
+	var scr: Vector2 = Transform2D(room.view_angle, Vector2.ZERO) * (r.get_center() - room.cam)
+	for i in (2 if area > 120.0 else 1):
+		var to := Vector2(rng.randf_range(-130.0, 130.0), rng.randf_range(-70.0, 60.0))
+		splats.append({"from": scr, "to": to, "t": 0, "rot": rng.randf() * TAU, "spin": rng.randf_range(-0.3, 0.3),
+			"col": Color(cols[0]), "spot": Color(cols[3]), "dark": Color(cols[2]), "seed": rng.randi(), "slide": 0.0})
+	room.shake = maxf(room.shake, 4.0 + minf(area / 80.0, 3.0))
+	room.impact.emit(1.5 + minf(area / 200.0, 1.5))
+	room.sfx.emit("crunch")
+	room.particles.append({"pos": r.get_center(), "vel": Vector2.ZERO, "life": 10, "col": Color(cols[0], 0.8), "grav": 0.0, "ring": 4.0})
+
+
+func _update_debris() -> void:
+	if debris.is_empty() and splats.is_empty():
+		return
+	var inn := _inner()
+	var keep: Array = []
+	for db in debris:
+		db["age"] += 1
+		db["vel"].y += 520.0 / 60.0
+		db["vel"].x *= 0.995
+		db["pos"] += db["vel"] / 60.0
+		db["rot"] += db["spin"]
+		var p: Vector2 = db["pos"]
+		if p.y > inn.end.y - 1.0:
+			p.y = inn.end.y - 1.0
+			if db["vel"].y > 40.0 and db["bounces"] < 3:
+				db["vel"] = Vector2(db["vel"].x * 0.6, -db["vel"].y * 0.38)
+				db["spin"] *= 0.6
+				db["bounces"] += 1
+			else:
+				db["vel"] = Vector2(db["vel"].x * 0.8, 0.0)
+				db["spin"] *= 0.8
+		if p.y < inn.position.y + 1.0:
+			p.y = inn.position.y + 1.0
+			db["vel"].y = absf(db["vel"].y) * 0.4
+		if p.x < inn.position.x + 1.0 or p.x > inn.end.x - 1.0:
+			p.x = clampf(p.x, inn.position.x + 1.0, inn.end.x - 1.0)
+			db["vel"].x = -db["vel"].x * 0.5
+		db["pos"] = p
+		if db["age"] < db["life"]:
+			keep.append(db)
+	debris = keep
+	var ks: Array = []
+	for sp in splats:
+		sp["t"] += 1
+		sp["rot"] += sp["spin"] * (1.0 if sp["t"] < SPLAT_FLY else 0.0)
+		if sp["t"] >= SPLAT_FLY:
+			sp["slide"] += 0.25   # escorrendo pelo vidro
+		if sp["t"] < SPLAT_FLY + SPLAT_STAY:
+			ks.append(sp)
+		if sp["t"] == SPLAT_FLY:
+			room.sfx.emit("slam")
+			room.shake = maxf(room.shake, 3.0)
+	splats = ks
+
+
+func _draw_debris(base: Transform2D) -> void:
+	for db in debris:
+		var a := clampf(float(db["life"] - db["age"]) / 20.0, 0.0, 1.0)
+		var sz: Vector2 = db["size"]
+		draw_set_transform_matrix(base * Transform2D(db["rot"], (db["pos"] as Vector2).round()))
+		draw_rect(Rect2(-sz / 2.0, sz), Color(db["col"], a))
+		draw_rect(Rect2(Vector2(-sz.x / 2.0, sz.y / 2.0 - 1.0), Vector2(sz.x, 1)), Color(db["dark"], a))
+	draw_set_transform_matrix(base)
+
+
+const SPLAT_FLY := 22        # quadros voando para a tela
+const SPLAT_STAY := 70       # grudado no vidro, escorrendo
+
+
+## Os pedaços que vêm para a tela: crescem em perspectiva (de longe para perto), girando, e batem no
+## vidro; grudados, achatados e grandes, escorrem e somem.
+func _draw_splats() -> void:
+	for sp in splats:
+		var t2: int = sp["t"]
+		var k := clampf(float(t2) / SPLAT_FLY, 0.0, 1.0)
+		var at: Vector2 = (sp["from"] as Vector2).lerp(sp["to"], k * k)
+		var sc := lerpf(1.0, 5.0, k * k * k)
+		var a := 1.0
+		var rot: float = sp["rot"]
+		if t2 >= SPLAT_FLY:
+			var st := float(t2 - SPLAT_FLY)
+			at.y += float(sp["slide"]) * st * 0.08
+			a = clampf(1.0 - st / SPLAT_STAY, 0.0, 1.0) * 0.9
+			sc = 5.0 + minf(st * 0.04, 0.5)
+		draw_set_transform_matrix(Transform2D(rot, at.round()) * Transform2D(0.0, Vector2(sc, sc * (0.75 if t2 >= SPLAT_FLY else 1.0)), 0.0, Vector2.ZERO))
+		var col: Color = sp["col"]
+		var seed: int = sp["seed"]
+		# o pedaço: um naco de chapéu em cúpula, com a borda de baixo quebrada, lamelas e pintas
+		var rows := [4, 6, 8, 8, 8, 7]
+		for ri in rows.size():
+			var wi: int = rows[ri]
+			var x0 := -wi / 2
+			var c := col.lightened(0.25) if ri == 0 else col
+			draw_rect(Rect2(x0, -3 + ri, wi, 1), Color(c, a))
+			if ri > 0 and ri < rows.size() - 1:
+				draw_rect(Rect2(x0, -3 + ri, 1, 1), Color(col.lightened(0.18), a))
+				draw_rect(Rect2(x0 + wi - 1, -3 + ri, 1, 1), Color(col.darkened(0.2), a))
+		# a borda quebrada: lamelas em dente
+		for q in 4:
+			var bx := -4 + q * 2 + ((seed >> q) & 1)
+			draw_rect(Rect2(bx, 3, 1, 1 + ((seed >> (q + 4)) & 1)), Color(sp["dark"], a))
+		draw_rect(Rect2(-2 + seed % 3, -1, 2, 1), Color(sp["spot"], a))
+		draw_rect(Rect2(1 + (seed >> 2) % 2, 1, 1, 1), Color(sp["spot"], a))
+		draw_rect(Rect2(-3, 0, 1, 1), Color(sp["spot"], a * 0.8))
+		if t2 >= SPLAT_FLY:
+			# o rastro escorrendo
+			var dl := minf(float(t2 - SPLAT_FLY) * 0.06, 3.0)
+			draw_rect(Rect2(-2, 4, 1, dl), Color(sp["dark"], a * 0.8))
+			draw_rect(Rect2(1, 4, 1, dl * 0.6), Color(sp["dark"], a * 0.8))
+	draw_set_transform_matrix(Transform2D.IDENTITY)
