@@ -83,20 +83,29 @@ class Canvas:
             o |= self._shift(m, dx, dy)
         return o
 
-    def part(self, draw_fn, base, dark=None, light=None, ink=True, shade=2):
-        """Uma parte: contorno de nanquim em volta, a cor e, recortadas nela, a sombra (embaixo e à
-        direita) e a luz (em cima e à esquerda)."""
+    def part(self, draw_fn, base, dark=None, light=None, ink=False, shade=2, sep=None):
+        """Uma parte: a cor e, recortadas nela, a sombra (embaixo e à direita) e a luz (em cima e à
+        esquerda). Sem contorno por parte (o nanquim vai só em volta da silhueta, no fim); `sep` é
+        uma linha fina de separação em volta (para um membro na frente de outro)."""
         m = self._mask(draw_fn)
         if not m.any():
             return m
         if ink:
             self.img[self._dilate(m) & ~m] = INK
+        elif sep is not None:
+            ring = self._dilate(m) & ~m & (self.img[:, :, 3] > 0)
+            self.img[ring] = sep
         self.img[m] = base
         if dark is not None:
             self.img[m & ~self._shift(m, -shade, -shade)] = dark
         if light is not None:
             self.img[m & ~self._shift(m, 1, 1)] = light
         return m
+
+    def outline(self):
+        """O nanquim: um contorno só, em volta da silhueta inteira."""
+        sil = self.img[:, :, 3] > 0
+        self.img[self._dilate(sil) & ~sil] = INK
 
     def line(self, p0, p1, col, w=1):
         im = Image.fromarray(self.img, "RGBA")
@@ -142,19 +151,32 @@ def polar(ang, ln):
 
 # ---------------------------------------------------------------- o boneco
 
+def rot(v, a):
+    """Gira o vetor (x, y) de tela por `a` rad (positivo: o alto vai para a frente, para a direita)."""
+    c, s_ = math.cos(a), math.sin(a)
+    return (v[0] * c - v[1] * s_, v[0] * s_ + v[1] * c)
+
+
+SEP = SKIN_D     # a linha fina que separa um membro do que está atrás dele
+
+
 def draw_senzi(pose):
     cv = Canvas()
     hip = pose["hip"]
-    lean = pose.get("lean", 0.0)
+    tilt = pose.get("tilt", 0.0)          # inclinação do tronco (a corrida de sprint: para a frente)
     breath = pose.get("breath", 0.0)
-    chest = add(hip, (lean * 6.0, -17.0 - breath))
-    sh_w = 13.0
-    sh_l = add(chest, (-sh_w, -1))
-    sh_r = add(chest, (sh_w, -1))
-    head = add(chest, (2.0 + lean * 3.0 + pose.get("head_dx", 0.0), -11.0 + pose.get("head_dy", 0.0)))
+
+    def U(dx, dy):
+        return add(hip, rot((dx, dy), tilt))
+
+    chest = U(0, -17.0 - breath)
+    sh_l = U(-12.0, -18.0 - breath)
+    sh_r = U(12.0, -18.0 - breath)
+    head = U(2.5 + pose.get("head_dx", 0.0), -29.0 + pose.get("head_dy", 0.0))
+    head = add(head, (pose.get("head_fwd", 0.0), 0))
 
     # a concha nas costas, atrás de tudo
-    shell_c = add(chest, (-11.0, 4.0 + pose.get("shell_dy", 0.0)))
+    shell_c = U(-11.0, -13.0 + pose.get("shell_dy", 0.0))
     cv.part(ell(shell_c, 13, 13), SHELL, SHELL_D, SHELL_L, shade=3)
     pts = []
     for i in range(40):
@@ -162,108 +184,105 @@ def draw_senzi(pose):
         r = 11.5 - i * 0.27
         pts.append((shell_c[0] + math.cos(a) * r, shell_c[1] + math.sin(a) * r))
     for i in range(len(pts) - 1):
-        cv.line(pts[i], pts[i + 1], INK, 1)
+        cv.line(pts[i], pts[i + 1], SHELL_D, 1)
 
     # as fitas da faixa, esvoaçando atrás da cabeça
     flap = pose.get("flap", 0.0)
     tail0 = add(head, (-6, -4))
-    cv.part(poly([tail0, add(tail0, (-7, -1 + flap)), add(tail0, (-8, 2 + flap)), add(tail0, (0, 2))]), BAND, BAND_D)
+    cv.part(poly([tail0, add(tail0, (-8, -2 + flap)), add(tail0, (-9, 2 + flap)), add(tail0, (0, 2))]), BAND, BAND_D)
 
-    # o braço de trás (atrás do tronco)
-    def arm(sh, a):
-        elbow = add(sh, polar(a["up"], 10.0))
-        fist = add(elbow, polar(a["fore"], 9.0))
-        bic = a.get("bic", 1.0)
-        cv.part(cap(sh, elbow, 5.0, 4.4), SKIN, SKIN_D, SKIN_L)
+    def arm(sh, a, front):
+        up_a = a["up"] + tilt * a.get("follow", 1.0)
+        fore_a = a["fore"] + tilt * a.get("follow", 1.0)
+        elbow = add(sh, polar(up_a, 10.5))
+        fist = add(elbow, polar(fore_a, 9.5))
+        sep = SEP if front else None
+        dk = SKIN_D
+        base = SKIN if front else SKIN_D
+        lt = SKIN_L if front else None
+        cv.part(cap(sh, elbow, 5.4, 4.6), base, dk, lt, sep=sep)
+        # o bíceps: volume no lado de dentro do braço, sem contorno (só a luz)
         mid = add(sh, (elbow[0] - sh[0], elbow[1] - sh[1]), 0.5)
-        # o bíceps: do lado de dentro do cotovelo
         nx, ny = -(elbow[1] - sh[1]), elbow[0] - sh[0]
         ln = math.hypot(nx, ny) or 1.0
         side = a.get("bic_side", 1.0)
-        bc = add(mid, (nx / ln * 2.6 * side, ny / ln * 2.6 * side))
-        cv.part(ell(bc, 5.2 * bic, 4.4 * bic), SKIN, SKIN_D, SKIN_L)
-        cv.part(cap(elbow, fist, 4.4, 3.6), SKIN, SKIN_D, SKIN_L)
-        fore_m = add(elbow, (fist[0] - elbow[0], fist[1] - elbow[1]), 0.4)
-        cv.part(ell(fore_m, 4.0, 3.6), SKIN, SKIN_D, SKIN_L)
-        cv.part(ell(fist, 4.4, 4.0), SKIN, SKIN_D, SKIN_L)
-        cv.line(add(fist, (-2, -1)), add(fist, (2, -1)), INK)   # nós dos dedos
-        if a.get("vein", True):
-            cv.line(add(bc, (-2, 1)), add(bc, (0, -1)), SKIN_D)
-            cv.line(add(bc, (0, -1)), add(bc, (2, 0)), SKIN_D)
+        bc = add(mid, (nx / ln * 2.0 * side, ny / ln * 2.0 * side))
+        cv.part(ell(bc, 4.8 * a.get("bic", 1.0), 4.0 * a.get("bic", 1.0)), base, dk, lt)
+        cv.part(cap(elbow, fist, 4.6, 3.8), base, dk, lt, sep=sep)
+        cv.part(ell(fist, 4.2, 3.9), base, dk, lt, sep=sep)
+        if front:
+            cv.line(add(fist, (-1.5, -1.5)), add(fist, (1.5, -1.5)), SKIN_D)   # nós dos dedos
 
-    arm(sh_l, pose["arm_back"])
-
-    # pernas (a de trás primeiro)
-    def leg(hp, lg, dark_side=False):
-        knee = add(hp, polar(lg["thigh"], 11.0))
-        foot = add(knee, polar(lg["calf"], 11.0))
-        base = SKIN_D if dark_side else SKIN
-        cv.part(cap(hp, knee, 5.6, 4.4), base, SKIN_D, None if dark_side else SKIN_L)
-        q = add(hp, (knee[0] - hp[0], knee[1] - hp[1]), 0.45)
-        cv.part(ell(add(q, (1.5, 0)), 4.6, 5.0), base, SKIN_D, None if dark_side else SKIN_L)
-        cv.part(cap(knee, foot, 4.0, 3.0), base, SKIN_D, None if dark_side else SKIN_L)
-        c2 = add(knee, (foot[0] - knee[0], foot[1] - knee[1]), 0.3)
-        cv.part(ell(add(c2, (-1.2, 0)), 3.4, 4.0), base, SKIN_D, None if dark_side else SKIN_L)
-        # o pé: uma sola de caramujo, larga
-        cv.part(ell(add(foot, (2.5, 1.0)), 5.5, 2.4), SKIN_D, INK)
+    def leg(hp, lg, front):
+        knee = add(hp, polar(lg["thigh"], 11.5))
+        foot = add(knee, polar(lg["calf"], 11.5))
+        base = SKIN if front else SKIN_D
+        lt = SKIN_L if front else None
+        sep = SEP if front else None
+        cv.part(cap(hp, knee, 6.0, 4.6), base, SKIN_D, lt, sep=sep)
+        cv.part(cap(knee, foot, 4.4, 3.0), base, SKIN_D, lt, sep=sep)
+        # a panturrilha (volume atrás da canela)
+        c2 = add(knee, (foot[0] - knee[0], foot[1] - knee[1]), 0.32)
+        cv.part(ell(add(c2, (-1.4, 0)), 3.4, 4.2), base, SKIN_D, lt)
+        # o pé: sola de caramujo, apontando para a frente
+        ang = lg.get("foot", 0.0)
+        cv.part(poly([add(foot, (-3, -2)), add(foot, rot((6.5, -1.5), ang)), add(foot, rot((6.5, 1.5), ang)), add(foot, (-3, 2))]), SKIN_D, None, None, sep=sep)
         return foot
 
-    hip_b = add(hip, (-4.0, 0))
-    hip_f = add(hip, (4.0, 0))
-    leg(hip_b, pose["leg_back"], dark_side=True)
+    # o braço e a perna de trás
+    arm(sh_l, pose["arm_back"], False)
+    leg(U(-3.5, 0), pose["leg_back"], False)
 
     # o tronco em V: cintura fina, ombros largos; o trapézio subindo até o pescoço
-    waist_l = add(hip, (-6.0, -2.0))
-    waist_r = add(hip, (6.0, -2.0))
-    cv.part(poly([waist_l, add(sh_l, (1, -2)), add(head, (-4, 5)), add(head, (4, 5)), add(sh_r, (-1, -2)), waist_r]), SKIN, SKIN_D, SKIN_L, shade=2)
-    # deltoides
-    cv.part(ell(sh_l, 6.4, 6.0), SKIN, SKIN_D, SKIN_L)
-    # peitoral: duas placas
-    pec_y = chest[1] + 2.0
-    for dx in (-5.4, 5.4):
-        cv.part(ell((chest[0] + dx, pec_y + breath * 0.3), 6.0, 4.6), SKIN, SKIN_D, SKIN_L)
-    # abdômen: seis gomos
+    torso = [U(-6, -2), U(-12, -19 - breath), U(-4, -24 - breath), U(5, -24 - breath), U(12, -19 - breath), U(6, -2)]
+    cv.part(poly(torso), SKIN, SKIN_D, SKIN_L, shade=2)
+    # peitoral: luz em cima, sombra embaixo, e a divisão (linha fina)
+    for dx in (-5.0, 5.0):
+        pc = U(dx, -15.5 - breath * 0.7)
+        cv.part(ell(pc, 5.6, 3.8), SKIN, SKIN_D, SKIN_L, shade=1)
+    cv.line(U(0, -18 - breath), U(0, -3), SKIN_D)
+    cv.line(U(-9, -12.5), U(-1, -11.5), SKIN_D)
+    cv.line(U(9, -12.5), U(1, -11.5), SKIN_D)
+    # abdômen: só as linhas dos gomos (sem bolinhas)
     for row in range(3):
-        y = pec_y + 7.0 + row * 3.6
-        for dx in (-2.4, 2.4):
-            cv.part(ell((chest[0] + dx + lean * (1 - row) * 0.5, y), 2.2, 1.6), SKIN, SKIN_D, SKIN_L, shade=1)
-    # serrátil
-    for i in range(3):
-        y = pec_y + 5.0 + i * 2.4
-        cv.line((chest[0] - 9.0 + i * 0.6, y), (chest[0] - 6.6 + i * 0.6, y + 1), INK)
+        y = -9.0 + row * 2.6
+        cv.line(U(-3.5, y), U(3.5, y), SKIN_D)
+    # oblíquo e serrátil
+    cv.line(U(-7, -12), U(-5, -4), SKIN_D)
     # o short de academia
-    cv.part(poly([add(hip, (-8, -3)), add(hip, (8, -3)), add(hip, (9, 4)), add(hip, (1, 5)), add(hip, (0, 2)), add(hip, (-1, 5)), add(hip, (-9, 4))]), SHORTS, SHORTS_D)
-    cv.line(add(hip, (-8, -2)), add(hip, (8, -2)), BAND_D)
+    cv.part(poly([U(-8, -3), U(8, -3), U(9, 4), U(1, 5), U(0, 2), U(-1, 5), U(-9, 4)]), SHORTS, SHORTS_D)
+    cv.line(U(-8, -2), U(8, -2), BAND_D)
 
-    leg(hip_f, pose["leg_front"])
-    cv.part(ell(sh_r, 6.6, 6.2), SKIN, SKIN_D, SKIN_L)
+    # a perna da frente
+    leg(U(3.5, 0), pose["leg_front"], True)
+    # deltoide da frente
+    cv.part(ell(sh_r, 6.2, 5.6), SKIN, SKIN_D, SKIN_L)
 
     # a cabeça: pequena, queixo quadrado, faixa vermelha, olhos nas antenas
-    cv.part(poly([add(head, (-4, 2)), add(head, (5, 2)), add(head, (5, 8)), add(head, (-4, 8))]), SKIN, SKIN_D, SKIN_L)
-    cv.part(ell(head, 7.0, 6.6), SKIN, SKIN_D, SKIN_L)
-    cv.part(poly([add(head, (0, 2)), add(head, (8, 1)), add(head, (8, 7)), add(head, (1, 7))]), SKIN, SKIN_D)   # o queixo quadrado
+    cv.part(poly([add(head, (-4, 2)), add(head, (5, 2)), add(head, (6, 9)), add(head, (-3, 9))]), SKIN, SKIN_D, SKIN_L)
+    cv.part(ell(head, 6.6, 6.2), SKIN, SKIN_D, SKIN_L)
+    cv.part(poly([add(head, (0, 2)), add(head, (8, 1)), add(head, (8, 7)), add(head, (1, 7))]), SKIN, SKIN_D)
     cv.part(poly([add(head, (-7, -5)), add(head, (7, -6)), add(head, (7, -3)), add(head, (-7, -2))]), BAND, BAND_D)
     face = pose.get("face", "angry")
     stalk = pose.get("stalk", 0.0)
+    sweep = pose.get("stalk_back", 0.0)   # na corrida, as antenas vão para trás com o vento
     for k, (ex, ln) in enumerate(((-1.5, 9.0), (2.5, 10.0))):
         base_p = add(head, (ex, -7))
-        tip = add(base_p, (1.5 + stalk * (1 if k else -1), -ln + abs(stalk)))
-        cv.line(base_p, tip, INK, 3)
-        cv.line(base_p, tip, SKIN_D if k == 0 else SKIN, 1)
-        cv.part(ell(tip, 2.6, 2.6), EYE, (210, 205, 200, 255))
+        tip = add(base_p, (1.5 + stalk * (1 if k else -1) - sweep, -ln + abs(stalk) + abs(sweep) * 0.4))
+        cv.line(base_p, tip, SKIN_D if k == 0 else SKIN, 2)
+        cv.part(ell(tip, 2.5, 2.5), EYE, (210, 205, 200, 255))
         if face == "tired":
-            cv.px(add(tip, (0, 0)), INK)
+            cv.px(tip, INK)
             cv.px(add(tip, (1, -1)), INK)
             cv.px(add(tip, (-1, 1)), INK)
         elif face == "pain":
             cv.line(add(tip, (-1, -1)), add(tip, (1, 1)), INK)
             cv.line(add(tip, (-1, 1)), add(tip, (1, -1)), INK)
         else:
-            cv.part(ell(add(tip, (1, 0)), 1.0, 1.0), PUPIL, ink=False)
-    # sobrancelha e boca
+            cv.part(ell(add(tip, (1, 0)), 1.0, 1.0), PUPIL)
     if face in ("angry", "throw"):
         cv.line(add(head, (0, -1)), add(head, (5, 1)), INK, 1)
-        cv.line(add(head, (1, 4)), add(head, (6, 3)), INK, 1)
+        cv.line(add(head, (2, 4)), add(head, (6, 3)), INK, 1)
     elif face == "roar":
         cv.line(add(head, (0, -2)), add(head, (5, 0)), INK, 1)
         cv.part(poly([add(head, (1, 2)), add(head, (7, 2)), add(head, (6, 7)), add(head, (2, 7))]), MOUTH)
@@ -273,13 +292,13 @@ def draw_senzi(pose):
         cv.part(ell(add(head, (4, 4)), 2.0, 2.5), MOUTH)
     elif face == "tired":
         cv.part(ell(add(head, (4, 4)), 2.0, 1.8), MOUTH)
-        cv.part(ell(add(head, (5, 6)), 1.4, 1.6), TONGUE, ink=False)
+        cv.part(ell(add(head, (5, 6)), 1.4, 1.6), TONGUE)
 
     # o braço da frente (por cima de tudo)
-    arm(sh_r, pose["arm_front"])
-
-    for s in pose.get("sweat", []):
-        cv.part(ell(add(head, s), 1.0, 1.6), SWEAT)
+    arm(sh_r, pose["arm_front"], True)
+    for sw in pose.get("sweat", []):
+        cv.part(ell(add(head, sw), 1.0, 1.6), SWEAT)
+    cv.outline()
     return cv.img
 
 
@@ -288,37 +307,50 @@ def draw_senzi(pose):
 def stand_hip(leg_b, leg_f, base_x=40.0, dy=0.0):
     """O quadril na altura em que o pé mais baixo encosta no chão."""
     def low(lg):
-        return math.cos(lg["thigh"]) * 11.0 + math.cos(lg["calf"]) * 11.0 + 2.0
+        return math.cos(lg["thigh"]) * 11.5 + math.cos(lg["calf"]) * 11.5 + 2.0
     drop = max(low(leg_b), low(leg_f))
     return (base_x, GROUND - drop + dy)
 
 
+# O ciclo de sprint, pose a pose (ângulos a partir da vertical, positivo = para a frente): a perna A;
+# a B é a mesma com meio ciclo de atraso.
+RUN_LEG = [
+    (0.65, 0.25),    # 0 contato: o pé da frente pousa à frente
+    (0.30, -0.05),   # 1 apoio: o peso desce
+    (0.00, -0.15),   # 2 passagem: a perna debaixo do corpo
+    (-0.55, -0.55),  # 3 impulso
+    (-0.85, -1.35),  # 4 saída: a perna esticada atrás, o pé no ar
+    (-0.25, -2.05),  # 5 recuperação: o calcanhar sobe
+    (0.95, -0.45),   # 6 joelho alto
+    (1.15, 0.45),    # 7 alcance: a canela abre para a frente
+]
+RUN_HIP = [0.0, 1.2, 0.8, -0.6, -2.0, -2.2, -1.0, -0.2]   # sobe no voo, desce no apoio
+
+
 def run_pose(i, n=8):
-    a = 2 * math.pi * i / n
-    legs = []
-    for k in (0, 1):
-        s = math.sin(a + k * math.pi)
-        c = math.cos(a + k * math.pi)
-        thigh = -s * 0.75 + 0.1
-        lift = max(0.0, c) * 1.1
-        calf = thigh + lift + (0.15 if s < 0 else 0.0)
-        legs.append({"thigh": thigh, "calf": calf})
-    hip = stand_hip(legs[0], legs[1], dy=-abs(math.sin(a)) * 1.5)
+    """Sprint: tronco inclinado para a frente, joelho alto, a perna de trás esticada no impulso, os
+    braços bombeando em arco grande (o punho da frente sobe até a altura do rosto)."""
+    la = RUN_LEG[i % 8]
+    lb = RUN_LEG[(i + 4) % 8]
+    legs = [{"thigh": la[0], "calf": la[1], "foot": -0.2}, {"thigh": lb[0], "calf": lb[1], "foot": -0.2}]
+    # o pé de apoio no chão: o mais baixo dos dois, menos nos quadros de voo
+    hip = stand_hip(legs[0], legs[1], base_x=38.0, dy=RUN_HIP[i % 8] + (2.0 if i % 4 in (0, 1) else 0.0))
+    a = 2 * math.pi * i / 8
     arms = []
     for k in (0, 1):
-        s = math.sin(a + k * math.pi)
-        arms.append({"up": s * 0.9 + 0.15, "fore": s * 0.9 + 2.1, "bic": 1.0})
-    return {"hip": hip, "lean": 0.6, "breath": 0.0, "leg_back": legs[0], "leg_front": legs[1],
-            "arm_back": arms[1], "arm_front": arms[0], "face": "angry", "flap": math.sin(a * 2) * 2,
-            "stalk": math.sin(a * 2) * 1.0, "shell_dy": math.sin(a * 2) * 0.6}
+        s_ = math.sin(a + k * math.pi)        # oposto à perna do mesmo lado
+        arms.append({"up": -s_ * 1.0 + 0.15, "fore": -s_ * 0.9 + 2.0 + max(0.0, -s_) * 0.5, "bic": 1.0, "follow": 0.5})
+    return {"hip": hip, "tilt": 0.42, "breath": 0.0, "leg_back": legs[1], "leg_front": legs[0],
+            "arm_back": arms[0], "arm_front": arms[1], "face": "angry", "flap": math.sin(a * 2) * 2 - 1,
+            "stalk": 0.0, "stalk_back": 3.0 + math.sin(a * 2), "head_fwd": 1.0, "shell_dy": math.sin(a * 2) * 0.6}
 
 
 def idle_pose(i, n=4):
     b = math.sin(2 * math.pi * i / n)
     legs = [{"thigh": 0.28, "calf": 0.05}, {"thigh": -0.28, "calf": -0.05}]
     hip = stand_hip(legs[0], legs[1])
-    return {"hip": hip, "lean": 0.0, "breath": b * 0.8, "leg_back": legs[0], "leg_front": legs[1],
-            "arm_back": {"up": -0.35, "fore": 0.25, "bic": 1.0 + b * 0.03}, "arm_front": {"up": 0.35, "fore": -0.25, "bic": 1.0 + b * 0.03},
+    return {"hip": hip, "tilt": 0.05, "breath": b * 0.8, "leg_back": legs[0], "leg_front": legs[1],
+            "arm_back": {"up": -0.3, "fore": 0.2}, "arm_front": {"up": 0.3, "fore": -0.2},
             "face": "angry", "flap": b, "stalk": b * 0.5}
 
 
@@ -328,7 +360,7 @@ def flex_pose(i, n=6):
     legs = [{"thigh": 0.35, "calf": 0.1}, {"thigh": -0.35, "calf": -0.1}]
     hip = stand_hip(legs[0], legs[1])
     up = 1.9 * k
-    return {"hip": hip, "lean": 0.0, "breath": 1.2 * k, "leg_back": legs[0], "leg_front": legs[1],
+    return {"hip": hip, "tilt": 0.0, "breath": 1.2 * k, "leg_back": legs[0], "leg_front": legs[1],
             "arm_back": {"up": -0.3 - up * 0.85, "fore": -0.3 - up * 1.55, "bic": 1.0 + 0.3 * k + pulse, "bic_side": -1.0},
             "arm_front": {"up": 0.3 + up * 0.85, "fore": 0.3 + up * 1.55, "bic": 1.0 + 0.3 * k + pulse},
             "face": "roar" if i >= 2 else "angry", "flap": 2.0 * k, "stalk": 1.5 * k}
@@ -336,17 +368,18 @@ def flex_pose(i, n=6):
 
 def throw_pose(i, n=4):
     w = [-1.0, -1.6, 0.6, 1.4][i]
-    legs = [{"thigh": 0.4, "calf": 0.2}, {"thigh": -0.45, "calf": -0.15}]
+    legs = [{"thigh": 0.5, "calf": 0.25}, {"thigh": -0.5, "calf": -0.15}]
     hip = stand_hip(legs[0], legs[1])
-    return {"hip": hip, "lean": 0.3 * (w > 0), "breath": 0.0, "leg_back": legs[0], "leg_front": legs[1],
-            "arm_back": {"up": -0.4, "fore": 0.4}, "arm_front": {"up": math.pi - 0.3 * w if w < 0 else 1.2 + w * 0.3, "fore": math.pi - 0.5 * w if w < 0 else 1.4 + w * 0.2, "bic": 1.15},
+    return {"hip": hip, "tilt": -0.15 if w < 0 else 0.3, "breath": 0.0, "leg_back": legs[0], "leg_front": legs[1],
+            "arm_back": {"up": -0.4, "fore": 0.4},
+            "arm_front": {"up": math.pi - 0.3 * w if w < 0 else 1.2 + w * 0.3, "fore": math.pi - 0.5 * w if w < 0 else 1.4 + w * 0.2, "bic": 1.15, "follow": 0.0},
             "face": "throw", "flap": w}
 
 
 def hurt_pose(i, n=2):
     legs = [{"thigh": 0.5, "calf": 0.3}, {"thigh": -0.2, "calf": 0.4}]
     hip = stand_hip(legs[0], legs[1])
-    return {"hip": hip, "lean": -0.6, "breath": 1.0, "leg_back": legs[0], "leg_front": legs[1],
+    return {"hip": hip, "tilt": -0.35, "breath": 1.0, "leg_back": legs[0], "leg_front": legs[1],
             "arm_back": {"up": -1.6 - i * 0.2, "fore": -2.2}, "arm_front": {"up": 1.6 + i * 0.2, "fore": 2.2},
             "face": "pain", "head_dx": -2.0, "flap": -2.0 + i * 3}
 
@@ -355,8 +388,8 @@ def tired_pose(i, n=4):
     b = math.sin(2 * math.pi * i / n)
     legs = [{"thigh": 0.6, "calf": 0.2}, {"thigh": -0.5, "calf": -0.2}]
     hip = stand_hip(legs[0], legs[1])
-    return {"hip": hip, "lean": 0.0, "breath": 1.5 + b * 1.4, "leg_back": legs[0], "leg_front": legs[1],
-            "arm_back": {"up": -1.4, "fore": -1.2, "vein": False}, "arm_front": {"up": 1.4, "fore": 1.2, "vein": False},
+    return {"hip": hip, "tilt": 0.0, "breath": 1.5 + b * 1.4, "leg_back": legs[0], "leg_front": legs[1],
+            "arm_back": {"up": -1.4, "fore": -1.2}, "arm_front": {"up": 1.4, "fore": 1.2},
             "face": "tired", "flap": 0.0, "stalk": 2.0, "head_dy": 1.0,
             "sweat": [(-8, -6 + i), (8, -4 + (i + 2) % 4)] if i % 2 == 0 else [(-9, -3)]}
 
@@ -365,7 +398,7 @@ def fly_pose(i, n=4):
     a = 2 * math.pi * i / n
     legs = [{"thigh": 0.9 + math.sin(a) * 0.4, "calf": 0.3}, {"thigh": -0.9 - math.sin(a) * 0.4, "calf": -0.4}]
     hip = (40.0, 52.0)
-    return {"hip": hip, "lean": 0.0, "breath": 1.0, "leg_back": legs[0], "leg_front": legs[1],
+    return {"hip": hip, "tilt": 0.0, "breath": 1.0, "leg_back": legs[0], "leg_front": legs[1],
             "arm_back": {"up": -2.2 + math.sin(a) * 0.5, "fore": -2.6}, "arm_front": {"up": 2.2 - math.sin(a + 1) * 0.5, "fore": 2.6},
             "face": "pain", "flap": math.sin(a * 2) * 3}
 

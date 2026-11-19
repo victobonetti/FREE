@@ -488,9 +488,12 @@ func _spawn_wall() -> void:
 	var away := signf(rc.x - pos.x)
 	if away == 0.0:
 		away = 1.0
-	var x := rc.x + away * 38.0
-	x = clampf(x, inn.position.x + 10.0, inn.end.x - 10.0 - WALL_SIZE.x)
-	var r := Rect2i(int(x), int(inn.end.y - WALL_SIZE.y), int(WALL_SIZE.x), int(WALL_SIZE.y))
+	# tamanho sorteado (D112): de um degrau baixo a quase o pulo inteiro, para não dar para decorar
+	var ww := rng.randi_range(9, 16)
+	var wh := rng.randi_range(10, 26)
+	var x := rc.x + away * rng.randf_range(30.0, 52.0)
+	x = clampf(x, inn.position.x + 10.0, inn.end.x - 10.0 - ww)
+	var r := Rect2i(int(x), int(inn.end.y - wh), ww, wh)
 	if Rect2(r).grow(3.0).intersects(Rect2(room.rabbit.rect)) or Rect2(r).grow(6.0).intersects(body_rect()):
 		return
 	for w in walls:
