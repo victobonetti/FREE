@@ -18,7 +18,8 @@ const LIVES := 3
 const INVULN := 60
 const BODY := Vector2(30, 46)        # ao longo da superfície × para fora dela (alto: o coelho não pula por cima)
 # A arte (D112): folha de sprites desenhada quadro a quadro por tools/art/senzi_sprites.py.
-const SHEET := preload("res://art/senzi.png")
+# (load, e não preload: sem a arte importada, o script ainda carrega e a sala funciona)
+var sheet: Texture2D = load("res://art/senzi.png")
 const FRAME := Vector2(96, 96)
 const FEET := 94.0                   # a linha dos pés no quadro
 const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4], "leap": [5, 3], "punch": [6, 4]}
@@ -753,6 +754,9 @@ func _draw_snail(base: Transform2D) -> void:
 		"dying", "dead":
 			anim_name = "die"
 			fr = clampi(t / 10, 0, 3) if state == "dying" else 3
+	if sheet == null:
+		draw_set_transform_matrix(base)
+		return
 	var row: int = ANIM[anim_name][0]
 	var white := (flash > 0 and (flash / 3) % 2 == 0)
 	var mod := Color(1.0, 0.55, 0.55) if white else Color(1, 1, 1)
@@ -765,7 +769,7 @@ func _draw_snail(base: Transform2D) -> void:
 		var c := Vector2(TUCK.x, hd + TUCK.y)
 		draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO)
 			* Transform2D(0.0, c) * Transform2D(k * TAU, Vector2.ZERO) * Transform2D(0.0, -c))
-	draw_texture_rect_region(SHEET, Rect2(Vector2(-FRAME.x / 2.0, hd - FEET), FRAME), src, mod)
+	draw_texture_rect_region(sheet, Rect2(Vector2(-FRAME.x / 2.0, hd - FEET), FRAME), src, mod)
 	draw_set_transform_matrix(base)
 
 

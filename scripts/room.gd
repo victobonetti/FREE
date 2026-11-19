@@ -408,7 +408,12 @@ func setup(room_def: Dictionary) -> void:
 	rot_lock_max = reload_frames
 	limiter_frames = seconds_to_frames(float(room_def.get("limiter_time", DEFAULT_LIMITER)))
 	for path in room_def.get("actors", []):
-		var a: Node = load(path).new()
+		# um ator que não carrega (script com erro, arte ainda não importada) não derruba a sala
+		var sc = load(path)
+		if sc == null or not sc.can_instantiate():
+			push_warning("ator não carregou: %s" % path)
+			continue
+		var a: Node = sc.new()
 		add_child(a)
 		actors.append(a)
 	reset()
@@ -3522,6 +3527,8 @@ func _tri_points(r: Rect2i, facing: int, pts: Array) -> PackedVector2Array:
 
 
 func _draw() -> void:
+	if tiles.size() < gw * gh:
+		return   # ainda sem setup
 	var jitter := Vector2.ZERO
 	if shake > 0.0:
 		jitter = Vector2(roundf(randf_range(-shake, shake)), roundf(randf_range(-shake, shake)))
