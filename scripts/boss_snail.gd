@@ -29,7 +29,17 @@ const SPEED := [62.0, 76.0, 90.0]    # px/s, por terço da barra gasto
 const TURN_DELAY := [34, 22, 14]     # quadros para dar meia-volta quando o coelho passa por ele
 const ENERGY := 300.0
 const DRAIN := [3.0, 3.5, 4.0]       # energia por segundo, só de correr
-const WALL_COST := 30.0              # energia por muro quebrado
+# Os cogumelos que brotam (D112): tipo -> energia que ele perde ao quebrar.
+#   toco (baixo e largo), muro (alto), pendurado (do teto: o coelho passa por baixo), fenda (de cima e
+#   de baixo, só um buraco), gravidade (pisou, a sala vira de ponta-cabeça), mola (joga o coelho alto)
+#   e grudento (gosma: ele fica preso um tempo).
+const COST := {"stump": 20.0, "wall": 30.0, "hang": 30.0, "gap": 25.0, "grav": 20.0, "spring": 20.0, "sticky": 40.0}
+const KINDS := [["stump", "wall", "hang"], ["stump", "wall", "hang", "gap", "spring", "sticky"],
+	["stump", "wall", "hang", "gap", "spring", "sticky", "grav"]]
+const GAP_H := [16, 18]              # o buraco da fenda (o coelho tem 12)
+const HANG_CLEAR := 18               # o vão embaixo do pendurado
+const SPRING_POWER := 300.0          # como o cogumelo-mola do ato 3
+const STICK_FRAMES := 60             # preso na gosma
 const WALL_EVERY := [105, 92, 80]    # quadros entre dois muros
 const WALL_MAX := 3
 const WALL_LIFE := 600
@@ -56,6 +66,8 @@ const DIE_FRAMES := 150
 const C_SKIN := Color("d7cdb8")
 const C_MUSCLE := Color("e9e3d4")
 const C_GOO := Color("aca08c")
+const C_GRAV := Color("7fe0d0")       # o cogumelo da gravidade (verde-água, pulsando)
+const C_SPRING := Color("f0a05a")
 const C_SHELL := Color("8a5f9e")
 const C_SHELL_DARK := Color("5e3f70")
 const C_SHELL_LINE := Color("c9a6dd")
@@ -76,7 +88,9 @@ var dir := 1.0                 # sentido no contorno (+1 / -1)
 var turn_t := 0
 var lives := LIVES
 var energy := ENERGY
-var walls: Array = []          # {"rect": Rect2i, "n": Vector2 (normal da face onde nasceu), "age"}
+var walls: Array = []          # {"rect": Rect2i, "n": Vector2 (normal da face onde nasceu), "age", "kind", "gid", "k"}
+var last_kind := ""
+var gid_next := 0
 var bells: Array = []          # {"pos", "vel", "age", "bounced"}
 var wall_t := 0
 var leap_t := 0
@@ -271,7 +285,7 @@ func body_rect() -> Rect2:
 
 
 func _stuck() -> bool:
-	return state in ["berserk", "rage", "leap_warn", "punch", "lurk", "reveal"]
+	return state in ["berserk", "rage", "leap_warn", "punch", "glued", "lurk", "reveal"]
 
 
 func _rabbit_c() -> Vector2:
@@ -279,7 +293,7 @@ func _rabbit_c() -> Vector2:
 
 
 func fighting() -> bool:
-	return state in ["berserk", "rage", "leap_warn", "leap", "punch"]
+	return state in ["berserk", "rage", "leap_warn", "leap", "punch", "glued"]
 
 
 ## O terço da barra em que ele está: 0 (cheia), 1, 2 (o fim).
@@ -303,6 +317,7 @@ func step(r) -> void:
 	room.invuln = maxi(room.invuln - 1, 0)
 	_update_bells()
 	_update_fly()
+	_rabbit_on_shrooms()
 	match state:
 		"lurk":
 			# um caramujo um pouco maior, passeando devagar
@@ -362,6 +377,14 @@ func step(r) -> void:
 				r.sfx.emit("slam")
 		"punch":
 			_punch()
+		"glued":
+			# preso na gosma do cogumelo grudento: se debate
+			if t % 8 == 0:
+				r.particles.append({"pos": pos + Vector2(rng.randf_range(-10, 10), rng.randf_range(-6, 18)), "vel": Vector2(0, rng.randf_range(10, 30)),
+					"life": 30, "col": C_GOO, "grav": 40.0})
+			if t >= STICK_FRAMES:
+				state = "berserk"
+				t = 0
 		"rage":
 			# passou de um terço da barra: para, flexiona e ruge; volta mais rápido
 			_hit_rabbit()
@@ -431,6 +454,7 @@ func _berserk() -> void:
 		_spawn_wall()
 	for w in walls:
 		w["age"] += 1
+		w["k"] = maxf(float(w.get("k", 0.0)) - 0.1, 0.0)
 	walls = walls.filter(func(w): return w["age"] < WALL_LIFE)
 	# truques
 	if ph >= 1:
@@ -541,42 +565,141 @@ func _hit_rabbit() -> void:
 func _smash_walls() -> void:
 	var br := body_rect()
 	var keep: Array = []
+	var glued := false
 	for w in walls:
 		if br.intersects(Rect2(w["rect"])):
-			energy -= WALL_COST
+			energy -= float(COST.get(w["kind"], 30.0))
 			bar_hit = 14
 			room.shake = maxf(room.shake, 2.5)
 			room.sfx.emit("crunch")
 			var c := Rect2(w["rect"]).get_center()
+			var cols := _shroom_cols(w["kind"])
 			for i in 10:
 				room.particles.append({"pos": c, "vel": Vector2(rng.randf_range(-90, 90), -rng.randf_range(20, 110)),
-					"life": rng.randi_range(12, 24), "col": Color("9b6bc4") if i % 2 else Color("cfc6d8"), "grav": 300.0})
+					"life": rng.randi_range(12, 24), "col": cols[0] if i % 2 else cols[1], "grav": 300.0})
+			if w["kind"] == "sticky":
+				glued = true
 		else:
 			keep.append(w)
 	walls = keep
+	if glued and state == "berserk":
+		state = "glued"
+		t = 0
+		flash = 10
+		room.sfx.emit("steam_burst")
 
 
-## Um muro de cogumelo brota no chão de agora, no caminho de fuga do coelho.
+## O coelho pisando num cogumelo: a mola joga ele alto; o da gravidade vira a sala de ponta-cabeça.
+func _rabbit_on_shrooms() -> void:
+	var rb = room.rabbit
+	if not rb.on_ground or fly_t > 0 or room.state != "play":
+		return
+	var feet := Rect2(rb.rect.position.x, rb.rect.end.y, rb.rect.size.x, 1)
+	for w in walls:
+		if not feet.intersects(Rect2(w["rect"])):
+			continue
+		if w["kind"] == "spring":
+			w["k"] = 1.0
+			rb.vel.y = -SPRING_POWER
+			rb.launched = true
+			rb.var_jump = 0
+			rb.on_ground = false
+			rb.coyote = 0
+			rb.jumping = true
+			rb.squash = Vector2(0.7, 1.35)
+			room.sfx.emit("spring")
+			return
+		if w["kind"] == "grav" and not room.rotating:
+			walls.erase(w)
+			room.sfx.emit("limiter")
+			room.shake = maxf(room.shake, 4.0)
+			for i in 14:
+				var a := rng.randf() * TAU
+				room.particles.append({"pos": Rect2(w["rect"]).get_center(), "vel": Vector2(cos(a), sin(a)) * rng.randf_range(30, 120),
+					"life": rng.randi_range(12, 24), "col": C_GRAV, "grav": 0.0})
+			_flip180()
+			return
+
+
+## A gravidade vira: a sala gira 180° de uma vez (como o limitador desfazendo dois giros).
+func _flip180() -> void:
+	room.pending_rot = 0
+	room._rotate_logic(1)
+	room._rotate_logic(1)
+	room.rotating = true
+	room.rot_frame = 0
+	room.rot_len = room.ROT_FRAMES * 3 / 2
+	room.rot_from = -PI
+	room.view_angle = room.rot_from
+	room.rot_lock_max = room.reload_frames
+	room.rot_lock = room.rot_lock_max
+
+
+## Um cogumelo brota no caminho de fuga do coelho: o tipo sorteado entre os do terço da barra (nunca
+## dois iguais seguidos; o da gravidade, um por vez e raro), o tamanho também.
 func _spawn_wall() -> void:
 	if walls.size() >= WALL_MAX:
+		return
+	var pool: Array = (KINDS[_phase()] as Array).duplicate()
+	pool.erase(last_kind)
+	var kind: String = pool[rng.randi() % pool.size()]
+	if kind == "grav" and (rng.randf() < 0.6 or walls.any(func(w): return w["kind"] == "grav")):
+		kind = "wall"
+	if kind == "gap" and walls.size() > WALL_MAX - 2:
 		return
 	var inn := _inner()
 	var rc := _rabbit_c()
 	var away := signf(rc.x - pos.x)
 	if away == 0.0:
 		away = 1.0
-	# tamanho sorteado (D112): de um degrau baixo a quase o pulo inteiro, para não dar para decorar
-	var ww := rng.randi_range(9, 16)
-	var wh := rng.randi_range(10, 26)
-	var x := rc.x + away * rng.randf_range(30.0, 52.0)
-	x = clampf(x, inn.position.x + 10.0, inn.end.x - 10.0 - ww)
-	var r := Rect2i(int(x), int(inn.end.y - wh), ww, wh)
-	if Rect2(r).grow(3.0).intersects(Rect2(room.rabbit.rect)) or Rect2(r).grow(6.0).intersects(body_rect()):
-		return
-	for w in walls:
-		if Rect2(w["rect"]).grow(8.0).intersects(Rect2(r)):
+	var fl := int(inn.end.y)
+	var ce := int(inn.position.y)
+	var rects: Array = []   # [rect, n]
+	var ww := 12
+	match kind:
+		"stump":
+			ww = rng.randi_range(16, 28)
+		"wall":
+			ww = rng.randi_range(9, 14)
+		"hang":
+			ww = rng.randi_range(10, 16)
+		"gap":
+			ww = rng.randi_range(10, 13)
+		"sticky":
+			ww = rng.randi_range(14, 20)
+	var x := int(clampf(rc.x + away * rng.randf_range(30.0, 52.0), inn.position.x + 10.0, inn.end.x - 10.0 - ww))
+	match kind:
+		"stump":
+			var h := rng.randi_range(8, 12)
+			rects.append([Rect2i(x, fl - h, ww, h), Vector2(0, -1)])
+		"wall":
+			var h := rng.randi_range(18, 28)
+			rects.append([Rect2i(x, fl - h, ww, h), Vector2(0, -1)])
+		"hang":
+			var bottom := fl - HANG_CLEAR - rng.randi_range(0, 4)
+			rects.append([Rect2i(x, ce, ww, bottom - ce), Vector2(0, 1)])
+		"gap":
+			var hb := rng.randi_range(6, 14)
+			var g := rng.randi_range(GAP_H[0], GAP_H[1])
+			rects.append([Rect2i(x, fl - hb, ww, hb), Vector2(0, -1)])
+			var top_end := fl - hb - g
+			rects.append([Rect2i(x, ce, ww, top_end - ce), Vector2(0, 1)])
+		"grav", "spring":
+			rects.append([Rect2i(x, fl - 8, ww, 8), Vector2(0, -1)])
+		"sticky":
+			var h := rng.randi_range(10, 16)
+			rects.append([Rect2i(x, fl - h, ww, h), Vector2(0, -1)])
+	for rr in rects:
+		var r: Rect2i = rr[0]
+		if Rect2(r).grow(3.0).intersects(Rect2(room.rabbit.rect)) or Rect2(r).grow(6.0).intersects(body_rect()):
 			return
-	walls.append({"rect": r, "n": Vector2(0, -1), "age": 0})
+		for w in walls:
+			if Rect2(w["rect"]).grow(8.0).intersects(Rect2(r)):
+				return
+	gid_next += 1
+	for rr in rects:
+		walls.append({"rect": rr[0], "n": rr[1], "age": 0, "kind": kind, "gid": gid_next, "k": 0.0})
+	last_kind = kind
 	room.sfx.emit("plate_on")
 
 
@@ -675,25 +798,67 @@ func _draw() -> void:
 	_draw_hud()
 
 
+## Chapéu e talo de cada tipo: [chapéu, talo].
+func _shroom_cols(kind: String) -> Array:
+	match kind:
+		"grav":
+			return [C_GRAV, Color("d9f5ef")]
+		"spring":
+			return [C_SPRING, Color("f3dcc4")]
+		"sticky":
+			return [C_SKIN, C_GOO]
+	return [Color("9b6bc4"), Color("cfc6d8")]
+
+
 func _draw_walls() -> void:
 	for w in walls:
 		var r := Rect2(w["rect"])
 		var k := clampf(float(w["age"]) / 10.0, 0.0, 1.0)
 		var n: Vector2 = w["n"]
+		var kind: String = w["kind"]
+		var cols := _shroom_cols(kind)
+		if kind == "sticky":
+			# um monte de gosma, mole, escorrendo
+			var gr := Rect2(r.position + r.size * (1.0 - k) * Vector2(0.0, 1.0) * maxf(-n.y, 0.0), r.size * Vector2(1.0, k) if absf(n.y) > 0.5 else r.size * Vector2(k, 1.0))
+			var wob := sin(anim * 0.15 + r.position.x) * 1.0
+			draw_rect(gr.grow_individual(-1.0, -1.0 + wob, -1.0, 0.0), C_SKIN)
+			draw_rect(Rect2(gr.position + Vector2(2, 1 - wob), Vector2(gr.size.x - 4, 2)), C_MUSCLE)
+			draw_rect(Rect2(gr.position.x, gr.end.y - 3, gr.size.x, 3), C_GOO)
+			for q in 3:
+				var dx := fposmod(r.position.x * 7.0 + q * 5.0, maxf(gr.size.x - 2.0, 1.0))
+				var dl := 2.0 + fposmod(anim * 0.05 + q * 1.7, 3.0)
+				draw_rect(Rect2(gr.position.x + 1.0 + dx, gr.position.y + 2.0, 1, dl), C_GOO)
+			continue
 		var stem := r
 		var cap := r
+		var squash := float(w.get("k", 0.0)) * 3.0
 		if absf(n.y) > 0.5:
-			var hh := r.size.y * k
+			var hh := r.size.y * k - (squash if n.y < 0 else 0.0)
+			var ch := minf(6.0, r.size.y)
 			stem = Rect2(r.position.x + 3, r.end.y - hh if n.y < 0 else r.position.y, r.size.x - 6, hh)
-			cap = Rect2(r.position.x - 2, (r.end.y - hh) if n.y < 0 else (r.position.y + hh - 6), r.size.x + 4, 6)
+			cap = Rect2(r.position.x - 2, (r.end.y - hh) if n.y < 0 else (r.position.y + hh - ch), r.size.x + 4, ch)
 		else:
 			var ww := r.size.x * k
+			var cw := minf(6.0, r.size.x)
 			stem = Rect2(r.end.x - ww if n.x < 0 else r.position.x, r.position.y + 3, ww, r.size.y - 6)
-			cap = Rect2((r.end.x - ww) if n.x < 0 else (r.position.x + ww - 6), r.position.y - 2, 6, r.size.y + 4)
-		draw_rect(stem, Color("cfc6d8"))
-		draw_rect(Rect2(stem.position, Vector2(2, stem.size.y)), Color("a99fb4"))
-		draw_rect(cap, Color("9b6bc4"))
-		draw_rect(Rect2(cap.position, Vector2(cap.size.x, 1)), Color("c9a6dd"))
+			cap = Rect2((r.end.x - ww) if n.x < 0 else (r.position.x + ww - cw), r.position.y - 2, cw, r.size.y + 4)
+		draw_rect(stem, cols[1])
+		draw_rect(Rect2(stem.position, Vector2(2, stem.size.y)), Color(cols[1]).darkened(0.18))
+		var cc: Color = cols[0]
+		if kind == "grav":
+			var pulse := 0.5 + 0.5 * sin(anim * 0.2)
+			draw_rect(cap.grow(2.0), Color(C_GRAV, 0.15 + 0.2 * pulse))
+			cc = C_GRAV.lerp(Color.WHITE, 0.3 * pulse)
+		draw_rect(cap, cc)
+		draw_rect(Rect2(cap.position, Vector2(cap.size.x, 1)), cc.lightened(0.35))
+		if kind == "grav":
+			# duas setas pequenas: para cima e para baixo
+			var c := cap.get_center()
+			draw_rect(Rect2(c + Vector2(-3, -2), Vector2(1, 3)), Color(1, 1, 1, 0.9))
+			draw_rect(Rect2(c + Vector2(2, -1), Vector2(1, 3)), Color(1, 1, 1, 0.9))
+		if kind == "spring":
+			for q in int(cap.size.x / 5.0):
+				draw_rect(Rect2(cap.position + Vector2(2 + q * 5, 2), Vector2(2, 2)), Color(1, 1, 1, 0.8))
 		if w["age"] > WALL_LIFE - 60 and (anim / 4) % 2 == 0:
 			draw_rect(r, Color(0, 0, 0, 0.25))
 
@@ -770,6 +935,9 @@ func _draw_snail(base: Transform2D) -> void:
 		"punch":
 			anim_name = "punch"
 			fr = 0 if t < PUNCH_WIND else (1 if t < PUNCH_WIND + 5 else (2 if t < PUNCH_WIND + 14 else 3))
+		"glued":
+			anim_name = "idle"
+			fr = (anim / 3) % 4
 		"rage":
 			anim_name = "flex"
 			fr = mini(t / 4, 2) if t < 8 else 2 + (t / 5) % 4

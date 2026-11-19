@@ -3399,13 +3399,13 @@ func test_senzi() -> void:
 	var e0: float = m.energy
 	idle(60)
 	check(m.energy < e0 and m.energy > e0 - 6.0, "a energia cai devagar com o tempo (%.1f -> %.1f)" % [e0, m.energy])
-	m.walls.append({"rect": Rect2i(m.body_rect()), "n": Vector2(0, -1), "age": 0})
+	m.walls.append({"rect": Rect2i(m.body_rect()), "n": Vector2(0, -1), "age": 0, "kind": "wall", "gid": 0, "k": 0.0})
 	var e1: float = m.energy
 	tick()
 	check(m.walls.is_empty() and m.energy < e1 - 10.0, "quebrar um muro gasta bem mais (%.1f -> %.1f)" % [e1, m.energy])
 	# muros são sólidos para o coelho
 	var w := Rect2i(100, 100, 12, 20)
-	m.walls.append({"rect": w, "n": Vector2(0, -1), "age": 0})
+	m.walls.append({"rect": w, "n": Vector2(0, -1), "age": 0, "kind": "wall", "gid": 0, "k": 0.0})
 	check(room.solid_static(Rect2i(104, 104, 4, 4)), "o muro de cogumelo é sólido para o coelho")
 	m.walls.clear()
 	# alcançou o coelho: o soco joga ele longe, quebrando os muros no caminho
@@ -3417,7 +3417,7 @@ func test_senzi() -> void:
 	room.rabbit.pos = Vector2i(int(m.pos.x) + 18, int(m._inner().end.y) - 12)
 	room.rabbit.vel = Vector2.ZERO
 	var wall := Rect2i(int(m.pos.x) + 70, int(m._inner().end.y) - 20, 12, 20)
-	m.walls.append({"rect": wall, "n": Vector2(0, -1), "age": 0})
+	m.walls.append({"rect": wall, "n": Vector2(0, -1), "age": 0, "kind": "wall", "gid": 0, "k": 0.0})
 	var x0: int = room.rabbit.pos.x
 	var n2 := 0
 	while m.state != "punch" and n2 < 30:
@@ -3431,6 +3431,84 @@ func test_senzi() -> void:
 	var dd: float = m.pos.distance_to(m._rabbit_c())
 	check(dd > 120.0, "o coelho vai parar do outro lado (%.0f px dele)" % dd)
 	check(m.walls.is_empty(), "quebrando o muro no caminho")
+	# os tipos de cogumelo (D112)
+	m = _senzi()
+	while m.state != "berserk":
+		tick()
+	var fl := int(m._inner().end.y)
+	var shapes := {}
+	m.rng.seed = 7
+	room.rabbit.pos = Vector2i(int(m._inner().get_center().x), fl - 12)
+	m.pos = m._pt_of(m._u_floor(m._inner().position.x + 30.0))
+	for i in 400:
+		m.walls.clear()
+		m.energy = m.ENERGY * 0.1   # último terço: todos os tipos
+		m._spawn_wall()
+		for sw in m.walls:
+			shapes[sw["kind"]] = true
+	check(shapes.size() == 7, "brotam os 7 tipos de cogumelo (%s)" % ", ".join(shapes.keys()))
+	m.energy = m.ENERGY
+	var hang_ok := true
+	var gap_ok := true
+	for i in 300:
+		m.walls.clear()
+		m.energy = m.ENERGY * 0.5
+		m._spawn_wall()
+		var gaps: Array = []
+		for sw in m.walls:
+			var r: Rect2i = sw["rect"]
+			if sw["kind"] == "hang" and fl - r.end.y < m.HANG_CLEAR:
+				hang_ok = false
+			if sw["kind"] == "gap":
+				gaps.append(r)
+		if gaps.size() == 2:
+			var lo: Rect2i = gaps[0] if gaps[0].position.y > gaps[1].position.y else gaps[1]
+			var hi: Rect2i = gaps[1] if lo == gaps[0] else gaps[0]
+			var hole := lo.position.y - hi.end.y
+			if hole < 16 or hole > 18 or fl - hi.end.y > 30 + 12:
+				gap_ok = false
+	m.energy = m.ENERGY
+	check(hang_ok, "o pendurado deixa o vão para o coelho passar por baixo")
+	check(gap_ok, "a fenda deixa um buraco de 16 a 18 px, ao alcance do pulo")
+	# a mola joga o coelho para o alto
+	m.walls.clear()
+	var rr: Rect2i = room.rabbit.rect
+	var spot := Rect2i(int(m._inner().position.x) + 20, fl - 8, 12, 8)
+	room.rabbit.pos = Vector2i(spot.position.x, spot.position.y - 12)
+	room.rabbit.vel = Vector2.ZERO
+	m.pos = m._pt_of(m._u_floor(m._inner().end.x - 30.0))
+	m.walls.append({"rect": spot, "n": Vector2(0, -1), "age": 20, "kind": "spring", "gid": 1, "k": 0.0})
+	var vmin := 0.0
+	for i in 6:
+		tick()
+		vmin = minf(vmin, room.rabbit.vel.y)
+	check(vmin < -250.0, "a mola joga o coelho alto (%.0f)" % vmin)
+	# o da gravidade vira a sala de ponta-cabeça
+	idle(60)
+	m.walls.clear()
+	room.invuln = 0
+	var o0: int = room.orientation
+	fl = int(m._inner().end.y)
+	spot = Rect2i(int(m._inner().position.x) + 20, fl - 8, 12, 8)
+	room.rabbit.pos = Vector2i(spot.position.x, spot.position.y - 12)
+	room.rabbit.vel = Vector2.ZERO
+	m.pos = m._pt_of(m._u_floor(m._inner().end.x - 30.0))
+	m.walls.append({"rect": spot, "n": Vector2(0, -1), "age": 20, "kind": "grav", "gid": 2, "k": 0.0})
+	idle(4)
+	check(posmod(room.orientation - o0, 4) == 2, "pisou no da gravidade: a sala vira de ponta-cabeça")
+	# o grudento prende o Senzi
+	idle(60)
+	m.walls.clear()
+	m.state = "berserk"
+	var e2: float = m.energy
+	m.walls.append({"rect": Rect2i(m.body_rect()), "n": Vector2(0, -1), "age": 20, "kind": "sticky", "gid": 3, "k": 0.0})
+	m._smash_walls()
+	check(m.state == "glued" and m.energy <= e2 - 39.0, "o grudento prende o Senzi e gasta mais energia")
+	idle(m.STICK_FRAMES + 2)
+	check(m.state == "berserk", "e ele se solta")
+	m = _senzi()
+	while m.state != "berserk":
+		tick()
 	# a cada terço da barra: mais rápido (com uma pausa de raiva)
 	m.energy = m.ENERGY * 0.66
 	tick()
