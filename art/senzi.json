@@ -44,6 +44,22 @@
 		"inject": {
 			"row": 9,
 			"frames": 12
+		},
+		"guard": {
+			"row": 10,
+			"frames": 4
+		},
+		"walk": {
+			"row": 11,
+			"frames": 6
+		},
+		"block": {
+			"row": 12,
+			"frames": 2
+		},
+		"hit": {
+			"row": 13,
+			"frames": 2
 		}
 	},
 	"hand_up": [

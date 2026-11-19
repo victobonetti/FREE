@@ -23,7 +23,7 @@ var sheet: Texture2D = load("res://art/senzi.png")
 const FRAME := Vector2(96, 96)
 const FEET := 94.0                   # a linha dos pés no quadro
 const ANIM := {"run": [0, 8], "idle": [1, 4], "flex": [2, 6], "throw": [3, 4], "die": [4, 4], "leap": [5, 3], "punch": [6, 4],
-	"tired": [7, 4], "hold": [8, 4], "inject": [9, 12]}
+	"tired": [7, 4], "hold": [8, 4], "inject": [9, 12], "guard": [10, 4], "walk": [11, 6], "block": [12, 2], "hit": [13, 2]}
 # O plot twist (D113): sem energia, ele para, ergue a seringa verde e se injeta (a energia volta toda).
 # O coelho pode pegá-la enquanto ela flutua acima da mão aberta.
 const TIRED_FRAMES := 50             # para, ofegando
@@ -34,6 +34,42 @@ const INJECT_FRAMES := 8 * INJ_FAST + 4 * INJ_PUMP
 const HAND_UP := Vector2(49.3, 18.0) # a mão aberta no quadro "hold" (art/senzi.json, hand_up)
 const SYRINGE_FLOAT := 20.0          # quanto a seringa flutua acima da mão
 const DOSE_SPEED := 0.1              # cada dose: 10% mais rápido
+# O ringue (D114): o coelho pega a seringa e vira o coelhão por 12 s.
+const HERO_SHEET := "res://art/coelhao.png"
+const HERO_ANIM := {"guard": [0, 4], "walk": [1, 6], "jab": [2, 4], "block": [3, 2], "hit": [4, 2], "jump": [5, 2],
+	"flex": [6, 6], "die": [7, 4]}
+const G_UNROT := 20                  # a transformação: quando a sala volta ao normal
+const G_BOLT := 100                  # o raio
+const G_POPS := [112, 128, 144]      # os três estouros do coelhão crescendo
+const G_ROAR := 168
+const G_END := 200
+const BOLT_FRAMES := 14
+const RING_FRAMES := 720             # 12 s de coelhão
+const DEFLATE_FRAMES := 48
+const H_HP_HEART := 30.0             # vida do coelho por coração (3 jabs do Senzi)
+const S_HP_HEART := 60.0             # vida do Senzi por coração (12 jabs do coelho)
+const S_HP_MAX := 180.0
+const H_WALK := 78.0
+const H_JUMP := 230.0
+const HJAB_HIT := 4                  # o jab do coelho: quadro em que acerta, total, alcance, dano
+const HJAB_TOTAL := 13
+const HJAB_REACH := 40.0
+const HJAB_DMG := 5.0
+const S_STUN := 12                   # quadros sem agir depois de apanhar
+const H_STUN := 16
+const S_WALK := 46.0
+const S_RANGE := 38.0
+const SJAB_WIND := 12                # o jab do Senzi: o aviso (dá para defender)
+const SJAB_REACH := 40.0
+const SJAB_DMG := 10.0
+const SCHARGE_WIND := 32             # o soco carregado: pisca e grunhe; não dá para defender (recue ou pule)
+const SCHARGE_DMG := 20.0
+const SLEAP_DMG := 15.0
+const RING_PATTERNS := [
+	["approach", "jab", "jab", "retreat", "guard"],                       # 3 corações
+	["approach", "jab", "jab", "charge", "retreat"],                      # 2
+	["approach", "jab", "leap", "jab", "jab", "charge", "guard"],         # 1
+]
 const TUCK := Vector2(8, -33)        # o centro da bola encolhida, a partir dos pés (o eixo da cambalhota)
 const STRIDE := 5.0                  # px corridos por quadro da corrida
 const SPEED := [62.0, 76.0, 90.0]    # px/s, por terço da barra gasto
@@ -142,6 +178,31 @@ var throw_t := 0               # quadros da animação de arremesso do haltere
 var fly_t := 0                 # o coelho voando do soco
 var doses := 0                 # quantas vezes ele se injetou
 var syringe_taken := false     # o coelho pegou a seringa
+var hero_sheet: Texture2D = load(HERO_SHEET)
+var hero_on := false           # o coelhão em cena (o coelho da sala, escondido)
+var hx := 0.0                  # os pés do coelhão (px da sala)
+var hy := 0.0
+var h_vx := 0.0
+var h_vy := 0.0
+var h_face := 1.0
+var h_jab := -1                # quadro do jab (-1: sem jab)
+var h_jab_hit := false
+var h_cd := 0
+var h_stun := 0
+var h_block := false
+var h_hp := 90.0
+var ring_t := 0
+var act := ""                  # a ação do Senzi no ringue
+var act_i := 0
+var act_t := 0
+var s_stun := 0
+var s_push := 0.0
+var s_block := false
+var s_hit_done := false
+var s_hp := S_HP_MAX           # a vida do Senzi no ringue (fica perdida entre os ringues)
+var hitstop := 0
+var bolt_t := 0
+var win_deflate := false
 
 
 static func replay_state() -> Dictionary:
@@ -169,6 +230,11 @@ func on_reset(r) -> void:
 	phase = 0
 	doses = 0
 	syringe_taken = false
+	hero_on = false
+	win_deflate = false
+	hitstop = 0
+	bolt_t = 0
+	s_hp = S_HP_MAX
 	lives = LIVES
 	energy = ENERGY
 	wall_t = 0
@@ -355,6 +421,15 @@ func step(r) -> void:
 		return
 	t += 1
 	room.invuln = maxi(room.invuln - 1, 0)
+	bolt_t = maxi(bolt_t - 1, 0)
+	if win_deflate and hero_on and (state == "dying" or state == "dead") and t >= 60:
+		# ganhou: o coelhão desincha e o coelho volta
+		hero_on = false
+		r.rabbit_hidden = false
+		r.input_lock = false
+		r.cam_focus = null
+		r.rabbit.pos = Vector2i(int(hx) - 6, int(_inner().end.y) - 12)
+		r.rabbit.vel = Vector2.ZERO
 	_update_bells()
 	_update_fly()
 	if fighting():
@@ -419,6 +494,12 @@ func step(r) -> void:
 				r.sfx.emit("slam")
 		"punch":
 			_punch()
+		"grabbed":
+			_grabbed()
+		"ring":
+			_ring()
+		"deflate":
+			_deflate()
 		"glued":
 			# preso na gosma do cogumelo grudento: se debate
 			if t % 8 == 0:
@@ -862,7 +943,7 @@ func _take_syringe() -> void:
 		room.particles.append({"pos": c, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(30.0, 140.0),
 			"life": rng.randi_range(12, 26), "col": C_JUICE if i % 2 else Color(1, 1, 1), "grav": 0.0})
 	room.particles.append({"pos": c, "vel": Vector2.ZERO, "life": 12, "col": C_JUICE, "grav": 0.0, "ring": 5.0})
-	_die()
+	_start_grab()
 
 
 func _die() -> void:
@@ -957,6 +1038,10 @@ func _draw() -> void:
 		draw_rect(Rect2(-6, -3, 3, 1), Color("8a8d95"))
 		draw_rect(Rect2(3, -3, 3, 1), Color("8a8d95"))
 	_draw_snail(base)
+	if hero_on:
+		_draw_hero(base)
+	if bolt_t > 0:
+		_draw_bolt(base)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 	_draw_hud()
 
@@ -1187,6 +1272,33 @@ func _draw_snail(base: Transform2D) -> void:
 		"glued":
 			anim_name = "idle"
 			fr = (anim / 3) % 4
+		"grabbed":
+			anim_name = "hit" if t < G_BOLT else ("flex" if t >= G_ROAR else "guard")
+			fr = (anim / 6) % 2 if t < G_BOLT else (mini((t - G_ROAR) / 4, 5) if t >= G_ROAR else (anim / 9) % 4)
+		"deflate":
+			anim_name = "guard"
+			fr = (anim / 9) % 4
+		"ring":
+			anim_name = "guard"
+			fr = (anim / 9) % 4
+			if s_stun > 0 and not s_block:
+				anim_name = "hit"
+				fr = 0 if s_stun > S_STUN / 2 else 1
+			else:
+				match act:
+					"approach", "retreat":
+						anim_name = "walk"
+						fr = int(run_dist / 4.0) % 6
+					"guard":
+						anim_name = "block"
+						fr = 0
+					"jab", "charge":
+						var wind := SJAB_WIND if act == "jab" else SCHARGE_WIND
+						anim_name = "punch"
+						fr = 0 if act_t <= wind else (1 if act_t <= wind + 4 else (2 if act_t <= wind + 8 else 3))
+					"leap":
+						anim_name = "leap"
+						fr = 1 + (anim / 4) % 2
 		"tired":
 			anim_name = "tired"
 			fr = (anim / 7) % 4
@@ -1218,9 +1330,9 @@ func _draw_snail(base: Transform2D) -> void:
 	draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO))
 	var src := Rect2(Vector2(fr, row) * FRAME, FRAME)
 	var hd := body_rect().size.y / 2.0 if (state == "dying" or state == "dead") else h
-	if state == "leap":
+	if state == "leap" or (state == "ring" and act == "leap" and s_stun == 0):
 		# a cambalhota: uma volta inteira, para a frente, em torno da bola encolhida
-		var k := clampf(float(t) / LEAP_FRAMES, 0.0, 1.0)
+		var k := clampf(float(t if state == "leap" else act_t) / LEAP_FRAMES, 0.0, 1.0)
 		var c := Vector2(TUCK.x, hd + TUCK.y)
 		draw_set_transform_matrix(base * Transform2D(ang, pos.round()) * Transform2D(0.0, Vector2(sc * flip, sc), 0.0, Vector2.ZERO)
 			* Transform2D(0.0, c) * Transform2D(k * TAU, Vector2.ZERO) * Transform2D(0.0, -c))
@@ -1258,6 +1370,10 @@ func _draw_syringe(xf: Transform2D, k: float, size := 1.0) -> void:
 func _draw_hud() -> void:
 	if pop_flash > 0:
 		draw_rect(Rect2(-200, -120, 400, 240), Color(1, 1, 1, 0.12 * pop_flash))
+	if hero_on and state in ["grabbed", "ring", "deflate"]:
+		if state != "grabbed" or t >= G_ROAR:
+			_draw_ring_hud()
+		return
 	if state == "lurk" or state == "reveal" or state == "dead":
 		return
 	var y := -89.0
@@ -1291,3 +1407,468 @@ func _draw_heart(q: Vector2, full: bool) -> void:
 	draw_rect(Rect2(q + Vector2(1, 3), Vector2(5, 1)), c)
 	draw_rect(Rect2(q + Vector2(2, 4), Vector2(3, 1)), c)
 	draw_rect(Rect2(q + Vector2(3, 5), Vector2(1, 1)), c)
+
+
+# ================================================================ o ringue (D114)
+# O coelho pega a seringa e se injeta: a gravidade volta ao normal, cai um raio nele e ele vira o
+# coelhão. Por 12 s é uma luta 2D: os dois no chão, de frente um para o outro; o coelho anda, pula,
+# defende andando para trás e dá jab (os dois botões de giro). Cada um tem uma barra de vida em três
+# terços (um coração por terço). Nocaute no Senzi: ele cai. Acabou o tempo: o coelhão desincha e a
+# perseguição recomeça (a vida perdida do Senzi fica perdida).
+
+## A transformação: congela, a sala volta ao normal (ele se solta e cai), o raio, os estouros, o rugido.
+func _start_grab() -> void:
+	state = "grabbed"
+	t = 0
+	walls.clear()
+	bells.clear()
+	fly_t = 0
+	vel = Vector2.ZERO
+	room.input_lock = true
+	room.allow_rotate = false
+	room.pending_rot = 0
+	room.shake = maxf(room.shake, 3.0)
+	room.sfx.emit("gate_open")
+
+
+func _grabbed() -> void:
+	var r = room
+	if t == G_UNROT:
+		# a gravidade volta ao normal: a sala gira de volta à orientação de antes de tudo
+		var o := posmod(int(r.orientation), 4)
+		if o != 0 and not r.rotating:
+			var d := -1 if o == 1 else 1
+			var k := 2 if o == 2 else 1
+			for i in k:
+				r._rotate_logic(d)
+			r.rotating = true
+			r.rot_frame = 0
+			r.rot_len = r.ROT_FRAMES * 2
+			r.rot_from = -d * k * PI / 2.0
+			r.view_angle = r.rot_from
+			r.sfx.emit("limiter")
+	if t > G_UNROT:
+		_fall()   # solto, cai no chão
+	if t == G_BOLT:
+		var rb = r.rabbit
+		hx = float(rb.pos.x) + 6.0
+		hy = float(rb.pos.y) + 12.0
+		h_face = signf(pos.x - hx) if pos.x != hx else 1.0
+		bolt_t = BOLT_FRAMES
+		r.shake = 9.0
+		r.impact.emit(5.0)
+		r.sfx.emit("blast")
+		r.rabbit_hidden = true
+		hero_on = true
+		for i in 24:
+			var a := rng.randf() * TAU
+			r.particles.append({"pos": Vector2(hx, hy - 6.0), "vel": Vector2(cos(a), sin(a)) * rng.randf_range(40.0, 180.0),
+				"life": rng.randi_range(10, 24), "col": Color("fff6a0") if i % 2 else Color(1, 1, 1), "grav": 60.0})
+	if t in G_POPS:
+		var k := G_POPS.find(t)
+		pop_flash = 8
+		r.shake = maxf(r.shake, 4.0 + 2.0 * k)
+		r.impact.emit(1.5 + 0.8 * k)
+		r.sfx.emit("blast" if k == 2 else "slam")
+	if t == G_ROAR:
+		r.sfx.emit("gatsby_dash")
+	if hero_on:
+		r.cam_focus = Vector2((hx + pos.x) / 2.0, hy - 40.0)
+	if t >= G_END:
+		_ring_begin()
+
+
+func _ring_begin() -> void:
+	state = "ring"
+	t = 0
+	ring_t = RING_FRAMES
+	h_hp = float(lives) * H_HP_HEART
+	h_vx = 0.0
+	h_vy = 0.0
+	h_jab = -1
+	h_stun = 0
+	act_i = 0
+	act = ""
+	act_t = 0
+	s_stun = 0
+	pos.y = _inner().end.y - BODY.y / 2.0
+	room.input_lock = true
+	room.allow_rotate = false
+
+
+## O coração de cada um: um por terço da barra.
+func _s_hearts() -> int:
+	return clampi(ceili(s_hp / S_HP_HEART - 0.001), 0, 3)
+
+
+func _h_hearts() -> int:
+	return clampi(ceili(h_hp / H_HP_HEART - 0.001), 0, 3)
+
+
+func _ring() -> void:
+	var r = room
+	if hitstop > 0:
+		hitstop -= 1
+		return
+	ring_t -= 1
+	if ring_t <= 0:
+		_ring_end()
+		return
+	if ring_t == 180:
+		r.sfx.emit("lock_on")   # 3 s: o efeito está acabando
+	var inn := _inner()
+	var fl := inn.end.y
+	var lo := inn.position.x + 14.0
+	var hi := inn.end.x - 14.0
+	var sx := pos.x
+	# ---- o coelhão
+	var inp: Dictionary = r.raw_inp
+	var mv := float(inp.get("move", 0.0))
+	h_face = 1.0 if sx >= hx else -1.0
+	h_block = false
+	h_stun = maxi(h_stun - 1, 0)
+	if h_stun > 0:
+		h_vx = move_toward(h_vx, 0.0, 12.0)
+		h_jab = -1
+	else:
+		if int(inp.get("rotate", 0)) != 0 and h_jab < 0 and h_cd == 0:
+			h_jab = 0
+			h_cd = HJAB_TOTAL + 2
+			r.sfx.emit("thump")
+		var ground := hy >= fl - 0.5
+		var back := absf(mv) > 0.2 and signf(mv) == -h_face
+		h_block = back and ground and h_jab < 0
+		var spd := H_WALK * (0.6 if h_block else 1.0)
+		h_vx = mv * spd if h_jab < 0 or not ground else move_toward(h_vx, 0.0, 20.0)
+		if bool(inp.get("jump", false)) and ground and h_jab < 0:
+			h_vy = -H_JUMP
+			r.sfx.emit("jump")
+	h_cd = maxi(h_cd - 1, 0)
+	h_vy += GRAV / 60.0
+	hx += h_vx / 60.0
+	hy = minf(hy + h_vy / 60.0, fl)
+	if hy >= fl:
+		h_vy = 0.0
+	if h_jab >= 0:
+		h_jab += 1
+		if h_jab >= HJAB_HIT and h_jab < HJAB_HIT + 3 and not h_jab_hit:
+			if absf(sx - hx) < HJAB_REACH and s_air() < 20.0:
+				h_jab_hit = true
+				_hit_senzi(HJAB_DMG)
+		if h_jab >= HJAB_TOTAL:
+			h_jab = -1
+			h_jab_hit = false
+	# ---- o Senzi
+	s_stun = maxi(s_stun - 1, 0)
+	s_block = false
+	if s_stun > 0:
+		pos.x += s_push / 60.0
+		s_push = move_toward(s_push, 0.0, 8.0)
+	else:
+		_s_act()
+	# os corpos não se atravessam; as paredes seguram
+	var gap := 26.0
+	if absf(pos.x - hx) < gap and s_air() < 20.0 and hy > fl - 30.0:
+		var mid := (pos.x + hx) / 2.0
+		var sd := 1.0 if pos.x >= hx else -1.0
+		pos.x = mid + sd * gap / 2.0
+		hx = mid - sd * gap / 2.0
+	pos.x = clampf(pos.x, lo, hi)
+	hx = clampf(hx, lo, hi)
+	r.cam_focus = Vector2((hx + pos.x) / 2.0, fl - 40.0)
+	# o coelho da sala vai junto (escondido), para a porta e o resto do jogo saberem onde ele está
+	r.rabbit.pos = Vector2i(int(hx) - 6, int(fl) - 12)
+	r.rabbit.vel = Vector2.ZERO
+
+
+## A altura dele acima do chão (no pulo).
+func s_air() -> float:
+	return (_inner().end.y - BODY.y / 2.0) - pos.y
+
+
+## O Senzi no ringue segue um padrão por coração (como os cogumelos: dá para aprender).
+func _s_act() -> void:
+	var seq: Array = RING_PATTERNS[clampi(3 - _s_hearts(), 0, 2)]
+	if act == "":
+		act = seq[act_i % seq.size()]
+		act_i += 1
+		act_t = 0
+	act_t += 1
+	var dx := hx - pos.x
+	var dist := absf(dx)
+	var toward := signf(dx) if dx != 0.0 else 1.0
+	dir = toward
+	var spd := S_WALK * (1.0 + 0.15 * (3 - _s_hearts()))
+	match act:
+		"approach":
+			if dist > S_RANGE:
+				pos.x += toward * spd / 60.0
+				run_dist += spd / 60.0
+			if dist <= S_RANGE or act_t > 150:
+				act = ""
+		"retreat":
+			pos.x -= toward * spd * 0.8 / 60.0
+			run_dist += spd / 60.0
+			if act_t > 30:
+				act = ""
+		"guard":
+			s_block = true
+			if act_t > 40:
+				act = ""
+		"jab", "charge":
+			var wind := SJAB_WIND if act == "jab" else SCHARGE_WIND
+			if act_t == 1 and dist > S_RANGE + 8.0:
+				act = "approach"   # longe: chega antes
+				act_i -= 1
+				return
+			if act == "charge" and act_t % 6 == 0 and act_t < wind:
+				flash = 3
+				room.sfx.emit("lock_on")
+			if act == "charge" and act_t > wind and act_t <= wind + 6:
+				pos.x += toward * 7.0   # a investida
+			if act_t == wind + 1:
+				room.sfx.emit("blast" if act == "charge" else "thump")
+			if act_t >= wind + 1 and act_t <= wind + 4 and not s_hit_done:
+				var reach := SJAB_REACH + (24.0 if act == "charge" else 0.0)
+				if dist < reach and hy > _inner().end.y - 34.0:
+					s_hit_done = true
+					_hit_hero(SJAB_DMG if act == "jab" else SCHARGE_DMG, act == "charge")
+			if act_t >= wind + (14 if act == "jab" else 24):
+				act = ""
+				s_hit_done = false
+		"leap":
+			# a cambalhota por cima, caindo no coelho (dá para defender)
+			if act_t == 1:
+				leap_from = pos
+				leap_to = Vector2(clampf(hx, _inner().position.x + 14.0, _inner().end.x - 14.0), pos.y)
+				room.sfx.emit("gatsby_dash")
+			var k := clampf(float(act_t) / LEAP_FRAMES, 0.0, 1.0)
+			pos = leap_from.lerp(leap_to, k) + Vector2(0, -sin(k * PI) * LEAP_HIGH)
+			if act_t == LEAP_FRAMES:
+				pos = leap_to
+				room.shake = maxf(room.shake, 4.0)
+				room.sfx.emit("slam")
+				if absf(hx - pos.x) < 30.0:
+					_hit_hero(SLEAP_DMG, false)
+				act = ""
+
+
+func _hit_senzi(dmg: float) -> void:
+	var sd := signf(pos.x - hx) if pos.x != hx else 1.0
+	if s_block or (act in ["jab", "charge"] and act_t <= 2 and false):
+		s_hp -= dmg * 0.2
+		room.sfx.emit("plate_on")
+		hitstop = 2
+		_spark(Vector2(pos.x - sd * 12.0, pos.y - 10.0), Color("cfe8ff"))
+		s_push = sd * 60.0
+		s_stun = 4
+		return
+	var hearts0 := _s_hearts()
+	s_hp -= dmg
+	s_stun = S_STUN
+	s_push = sd * 90.0
+	act = ""
+	s_hit_done = false
+	hitstop = 4
+	flash = 6
+	bar_hit = 10
+	room.shake = maxf(room.shake, 2.5)
+	room.sfx.emit("crunch")
+	_spark(Vector2(pos.x - sd * 12.0, pos.y - 14.0), Color(1, 1, 1))
+	if _s_hearts() < hearts0:
+		room.shake = 6.0
+		room.impact.emit(3.0)
+		room.sfx.emit("blast")
+		act_i = 0
+	if s_hp <= 0.0:
+		_ring_win()
+
+
+func _hit_hero(dmg: float, unblockable: bool) -> void:
+	var sd := signf(hx - pos.x) if hx != pos.x else 1.0
+	if h_block and not unblockable:
+		h_hp -= dmg * 0.2
+		room.sfx.emit("plate_on")
+		hitstop = 2
+		h_vx = sd * 80.0
+		_spark(Vector2(hx - sd * 10.0, hy - 50.0), Color("cfe8ff"))
+	else:
+		h_hp -= dmg
+		h_stun = H_STUN if not unblockable else H_STUN * 2
+		h_vx = sd * (260.0 if unblockable else 110.0)
+		h_vy = -150.0 if unblockable else 0.0
+		h_jab = -1
+		hitstop = 4 if not unblockable else 8
+		hud_hit = 30
+		room.shake = maxf(room.shake, 3.0 if not unblockable else 8.0)
+		room.impact.emit(1.5 if not unblockable else 4.0)
+		room.sfx.emit("death" if unblockable else "crunch")
+		_spark(Vector2(hx - sd * 10.0, hy - 50.0), Color(1, 0.7, 0.7))
+	lives = maxi(_h_hearts(), 0)
+	if h_hp <= 0.0:
+		# nocaute: a fase recomeça do começo
+		hero_on = false
+		room.rabbit_hidden = false
+		room.input_lock = false
+		room.invuln = 0
+		lives = 1
+		room.kill()
+
+
+func _spark(at: Vector2, col: Color) -> void:
+	room.particles.append({"pos": at, "vel": Vector2.ZERO, "life": 8, "col": col, "grav": 0.0, "ring": 3.0})
+	for i in 8:
+		var a := rng.randf() * TAU
+		room.particles.append({"pos": at, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(40.0, 120.0),
+			"life": rng.randi_range(6, 12), "col": col, "grav": 0.0})
+
+
+## Acabou o tempo: o coelhão desincha e a perseguição recomeça.
+func _ring_end() -> void:
+	state = "deflate"
+	t = 0
+	room.sfx.emit("steam_burst")
+
+
+func _deflate() -> void:
+	if t >= DEFLATE_FRAMES:
+		hero_on = false
+		var r = room
+		r.rabbit_hidden = false
+		r.input_lock = false
+		r.cam_focus = null
+		r.allow_rotate = bool(r.def.get("rotate", true))
+		r.rabbit.pos = Vector2i(int(hx) - 6, int(_inner().end.y) - 12)
+		r.rabbit.vel = Vector2.ZERO
+		r.invuln = INVULN
+		lives = maxi(_h_hearts(), 1)
+		syringe_taken = false
+		pos = _pt_of(_u_floor(pos.x))
+		energy = ENERGY
+		phase = 0
+		wave_i = 0
+		wall_t = 0
+		state = "rage"   # ruge e volta a correr
+		t = 0
+		flash = 24
+
+
+## Nocaute no Senzi: ele cai (e murcha no caramujinho); o coelhão desincha e a porta abre.
+func _ring_win() -> void:
+	s_hp = 0.0
+	hitstop = 20
+	room.shake = 9.0
+	room.impact.emit(5.0)
+	room.sfx.emit("blast")
+	win_deflate = true
+	_die()
+
+
+# ---------------------------------------------------------------- o ringue: desenho
+
+func _draw_hero(base: Transform2D) -> void:
+	var sc := 1.0
+	var anim_name := "guard"
+	var fr := (anim / 9) % 4
+	match state:
+		"grabbed":
+			if t < G_POPS[0]:
+				# ainda o coelho, eletrizado
+				var tex: Texture2D = room._rabbit_tex("up", "stand", (anim / 2) % 2 == 0)
+				draw_set_transform_matrix(base * Transform2D(0.0, Vector2(hx, hy).round()) * Transform2D(0.0, Vector2(h_face, 1), 0.0, Vector2.ZERO))
+				draw_texture(tex, Vector2(-6, -12))
+				draw_set_transform_matrix(base)
+				return
+			sc = 0.45 if t < G_POPS[1] else (0.75 if t < G_POPS[2] else 1.0)
+			if t >= G_ROAR:
+				anim_name = "flex"
+				fr = mini((t - G_ROAR) / 4, 5)
+		"deflate":
+			sc = lerpf(1.0, 0.2, float(t) / DEFLATE_FRAMES)
+		"ring":
+			if h_stun > 0:
+				anim_name = "hit"
+				fr = 0 if h_stun > H_STUN / 2 else 1
+			elif h_jab >= 0:
+				anim_name = "jab"
+				fr = 0 if h_jab < HJAB_HIT else (1 if h_jab < HJAB_HIT + 3 else (2 if h_jab < HJAB_HIT + 6 else 3))
+			elif hy < _inner().end.y - 0.5:
+				anim_name = "jump"
+				fr = 0 if h_vy < 0.0 else 1
+			elif h_block:
+				anim_name = "block"
+				fr = (anim / 10) % 2
+			elif absf(h_vx) > 1.0:
+				anim_name = "walk"
+				fr = int(absf(hx) / 4.0) % 6
+		"dying", "dead":
+			anim_name = "flex"
+			fr = mini(t / 4, 5)
+			sc = 1.0 if t < 40 else lerpf(1.0, 0.2, clampf(float(t - 40) / 20.0, 0.0, 1.0))
+	if hero_sheet == null:
+		return
+	var mod := Color(1, 1, 1)
+	if state == "ring" and h_stun > 0 and (h_stun / 2) % 2 == 0:
+		mod = Color(1.0, 0.55, 0.55)
+	if state == "ring" and ring_t < 180 and (ring_t / 6) % 2 == 0:
+		mod = mod * Color(1.0, 1.15, 0.85)   # o efeito acabando: pisca verde
+	var row: int = HERO_ANIM[anim_name][0]
+	var src := Rect2(Vector2(fr, row) * FRAME, FRAME)
+	draw_set_transform_matrix(base * Transform2D(0.0, Vector2(hx, hy).round()) * Transform2D(0.0, Vector2(sc * h_face, sc), 0.0, Vector2.ZERO))
+	draw_texture_rect_region(hero_sheet, Rect2(Vector2(-FRAME.x / 2.0, -FEET), FRAME), src, mod)
+	draw_set_transform_matrix(base)
+
+
+## O raio: do teto até o coelho, em zigue-zague, branco por dentro.
+func _draw_bolt(base: Transform2D) -> void:
+	draw_set_transform_matrix(base)
+	var top := Vector2(hx, _inner().position.y)
+	var end := Vector2(hx, hy - 6.0)
+	var pts := PackedVector2Array()
+	var n := 9
+	var r2 := RandomNumberGenerator.new()
+	r2.seed = bolt_t / 3
+	for i in n + 1:
+		var k := float(i) / n
+		var q := top.lerp(end, k)
+		if i > 0 and i < n:
+			q.x += r2.randf_range(-9.0, 9.0)
+		pts.append(q.round())
+	draw_polyline(pts, Color("fff6a0", 0.6), 5.0)
+	draw_polyline(pts, Color(1, 1, 1), 2.0)
+	draw_circle(end, 10.0 * float(bolt_t) / BOLT_FRAMES, Color(1, 1, 0.8, 0.5))
+	if bolt_t > BOLT_FRAMES - 4:
+		draw_set_transform_matrix(Transform2D.IDENTITY)
+		draw_rect(Rect2(-200, -120, 400, 240), Color(1, 1, 1, 0.5))
+		draw_set_transform_matrix(base)
+
+
+## As barras da luta: a do coelho à esquerda, a do Senzi à direita, cada uma em três terços (um
+## coração por terço); no meio, o tempo do coelhão, esvaziando verde.
+func _draw_ring_hud() -> void:
+	var y := -86.0
+	var bw := 116.0
+	var lb := Rect2(-150, y, bw, 8)
+	var rb := Rect2(150 - bw, y, bw, 8)
+	for b in [lb, rb]:
+		draw_rect((b as Rect2).grow(1.0), Color(0.05, 0.05, 0.08, 0.85))
+	var hk := clampf(h_hp / (3.0 * H_HP_HEART), 0.0, 1.0)
+	var sk := clampf(s_hp / S_HP_MAX, 0.0, 1.0)
+	var hcol := Color(1, 1, 1) if hud_hit > 0 and (hud_hit / 3) % 2 == 0 else Color("efeadf")
+	var scol := Color(1, 1, 1) if bar_hit > 0 and (bar_hit / 3) % 2 == 0 else C_ENERGY
+	draw_rect(Rect2(lb.position, Vector2(bw * hk, 8)), hcol)
+	draw_rect(Rect2(rb.end.x - bw * sk, rb.position.y, bw * sk, 8), scol)
+	for b in [lb, rb]:
+		for q in [1.0 / 3.0, 2.0 / 3.0]:
+			draw_rect(Rect2((b as Rect2).position + Vector2(bw * q, 0), Vector2(1, 8)), Color(0.05, 0.05, 0.08, 0.9))
+		draw_rect((b as Rect2).grow(1.0), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)
+	for i in 3:
+		_draw_heart(Vector2(-150 + i * 10, y + 11), i < _h_hearts())
+		_draw_heart(Vector2(143 - i * 10, y + 11), i < _s_hearts())
+	# o tempo
+	var tk := clampf(float(ring_t) / RING_FRAMES, 0.0, 1.0) if state == "ring" else (1.0 if state == "grabbed" else 0.0)
+	var tw := 52.0
+	draw_rect(Rect2(-tw / 2.0 - 1, y - 1, tw + 2, 10), Color(0.05, 0.05, 0.08, 0.85))
+	var tc := C_JUICE if ring_t >= 180 or (ring_t / 6) % 2 == 0 else Color(1, 1, 1)
+	draw_rect(Rect2(-tw * tk / 2.0, y, tw * tk, 8), tc)
+	draw_rect(Rect2(-tw / 2.0 - 1, y - 1, tw + 2, 10), Color(0.89, 0.87, 0.81, 0.8), false, 1.0)

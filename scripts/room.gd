@@ -346,6 +346,8 @@ var rabbit
 # Para atores (o Gatsby): giro pedido por um ator, entrada travada e câmera presa numa cena.
 var actor_rot := 0
 var input_lock := false
+var raw_inp := {}              # os comandos do quadro, antes da trava (um ator pode lê-los: o ringue do Senzi, D114)
+var rabbit_hidden := false     # um ator desenha o coelho no lugar dele (o coelhão, D114)
 var cam_focus = null     # Vector2 (px da sala) ou null
 
 var state := "play"  # play | dead | won | done
@@ -481,6 +483,7 @@ func reset() -> void:
 	door_unlocked = false
 	actor_rot = 0
 	input_lock = false
+	rabbit_hidden = false
 	cam_focus = null
 	invuln = 0
 	view_angle = 0.0
@@ -2248,6 +2251,7 @@ func step(inp: Dictionary) -> void:
 	if state != "play":
 		return
 
+	raw_inp = inp
 	if input_lock:
 		inp = {}
 	rot_lock = maxi(rot_lock - 1, 0)
@@ -5499,6 +5503,8 @@ func _water_run(x: int, y0: int, y1: int, w: int, body: Color, top: Color) -> vo
 
 
 func _draw_rabbit(base: Transform2D) -> void:
+	if rabbit_hidden:
+		return
 	var fr := _rabbit_frame()
 	var pivot := Vector2(rabbit.pos.x + 6, rabbit.pos.y + 12)
 	var sc := Vector2(rabbit.squash.x * rabbit.facing, rabbit.squash.y)

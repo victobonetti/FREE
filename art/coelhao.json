@@ -1,0 +1,41 @@
+{
+	"frame": [
+		96,
+		96
+	],
+	"ground": 93,
+	"anims": {
+		"guard": {
+			"row": 0,
+			"frames": 4
+		},
+		"walk": {
+			"row": 1,
+			"frames": 6
+		},
+		"jab": {
+			"row": 2,
+			"frames": 4
+		},
+		"block": {
+			"row": 3,
+			"frames": 2
+		},
+		"hit": {
+			"row": 4,
+			"frames": 2
+		},
+		"jump": {
+			"row": 5,
+			"frames": 2
+		},
+		"flex": {
+			"row": 6,
+			"frames": 6
+		},
+		"die": {
+			"row": 7,
+			"frames": 4
+		}
+	}
+}

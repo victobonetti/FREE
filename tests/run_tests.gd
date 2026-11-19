@@ -3547,9 +3547,95 @@ func test_senzi() -> void:
 	room.rabbit.pos = Vector2i(sr.get_center()) - Vector2i(6, 6)
 	room.rabbit.vel = Vector2.ZERO
 	tick()
-	check(m.syringe_taken and m.state == "dying", "o coelho pega a seringa: sem a dose, ele desaba")
+	check(m.syringe_taken and m.state == "grabbed" and room.input_lock, "o coelho pega a seringa: a transformação começa")
+	idle(m.G_END + 2)
+	check(m.state == "ring" and m.hero_on and room.rabbit_hidden and room.orientation == 0 and not room.allow_rotate,
+		"a gravidade volta ao normal, cai o raio e começa o ringue (sem giro, o coelhão no lugar do coelho)")
+	# o jab do coelhão (os botões de giro)
+	var rfl: float = m._inner().end.y
+	m.pos.x = m._inner().get_center().x
+	m.hx = m.pos.x - 30.0
+	m.hy = rfl
+	m.act = "guard"
+	m.act_t = 999   # sai da defesa no próximo quadro
+	m.s_stun = 0
+	var s0: float = m.s_hp
+	tick({"rotate": 1})
+	for i in m.HJAB_TOTAL:
+		tick()
+	check(m.s_hp < s0, "o jab acerta o Senzi (%.0f -> %.0f)" % [s0, m.s_hp])
+	# defender: andar para trás
+	idle(30)
+	m.act = "jab"
+	m.act_t = 0
+	m.s_hit_done = false
+	m.hx = m.pos.x - 30.0
+	var h0: float = m.h_hp
+	for i in m.SJAB_WIND + 6:
+		tick({"move": -1.0 if m.hx < m.pos.x else 1.0})
+		m.hx = m.pos.x - 30.0
+	check(m.h_hp < h0 and m.h_hp > h0 - m.SJAB_DMG * 0.5, "andando para trás, o coelho defende o jab (%.0f -> %.0f)" % [h0, m.h_hp])
+	# o carregado não dá para defender
+	idle(30)
+	m.act = "charge"
+	m.act_t = 0
+	m.s_hit_done = false
+	h0 = m.h_hp
+	for i in m.SCHARGE_WIND + 8:
+		tick({"move": -1.0 if m.hx < m.pos.x else 1.0})
+		m.hx = m.pos.x - 30.0
+	check(m.h_hp <= h0 - m.SCHARGE_DMG + 0.1, "o soco carregado passa pela defesa (%.0f -> %.0f)" % [h0, m.h_hp])
+	# o tempo acaba: o coelhão desincha, a perseguição volta, e a vida perdida do Senzi fica perdida
+	var shp: float = m.s_hp
+	m.h_hp = 90.0
+	m.ring_t = 2
+	idle(3 + m.DEFLATE_FRAMES + 2)
+	check(not m.hero_on and not room.rabbit_hidden and room.allow_rotate and m.energy >= m.ENERGY - 1.0,
+		"acabou o tempo: o coelho desincha e a perseguição recomeça, com a energia dele cheia")
+	check(m.s_hp == shp and m.s_hp < m.S_HP_MAX, "e a vida que o Senzi perdeu no ringue continua perdida")
+	# nocaute no Senzi
+	while m.state != "berserk":
+		tick()
+	m.energy = 0.01
+	while m.state != "hold":
+		tick()
+	idle(5)
+	sr = m.syringe_rect()
+	room.rabbit.pos = Vector2i(sr.get_center()) - Vector2i(6, 6)
+	tick()
+	idle(m.G_END + 2)
+	check(m.state == "ring", "de novo o ringue (%s)" % m.state)
+	m.s_hp = 3.0
+	m.act = "guard"
+	m.act_t = 999
+	m.s_stun = 0
+	m.hx = m.pos.x - 30.0
+	m.hy = m._inner().end.y
+	tick({"rotate": 1})
+	for i in m.HJAB_TOTAL + 30:
+		tick()
+	check(m.state == "dying" or m.state == "dead", "nocaute: o Senzi cai")
 	idle(m.DIE_FRAMES + 5)
-	check(m.state == "dead" and room.door_unlocked, "e morre: a porta destrava")
+	check(m.state == "dead" and room.door_unlocked and not room.rabbit_hidden, "e morre: a porta destrava e o coelho volta ao normal")
+	# o coelho vai a nocaute no ringue: a fase recomeça
+	m = _senzi()
+	while m.state != "berserk":
+		tick()
+	m.energy = 0.01
+	idle(3 + m.TIRED_FRAMES + 30)
+	sr = m.syringe_rect()
+	room.rabbit.pos = Vector2i(sr.get_center()) - Vector2i(6, 6)
+	tick()
+	idle(m.G_END + 2)
+	m.h_hp = 1.0
+	m.act = "jab"
+	m.act_t = 0
+	m.s_hit_done = false
+	m.hx = m.pos.x - 30.0
+	for i in m.SJAB_WIND + 6:
+		tick()
+		m.hx = m.pos.x - 30.0
+	check(room.state == "dead", "nocaute no coelho: ele morre e a fase recomeça")
 
 
 ## Um bot que só foge: gira a sala quando ele chega perto, e pula os muros. As vidas do coelho são
@@ -3557,12 +3643,14 @@ func test_senzi() -> void:
 ## Um bot que foge até ele cansar e, na seringa, gira a sala para ficar acima dela e cai em cima
 ## (a seringa está no alto, fora do pulo: o giro deixa a mão dele de lado e o coelho cai até ela).
 func test_senzi_bot() -> void:
-	print("Senzi: fugir até ele cansar e pegar a seringa vence")
+	print("Senzi: fugir, pegar a seringa e vencer no ringue")
 	var m = _senzi()
 	var i := 0
 	var turned := false
 	var doses := 0
-	while m.state != "dead" and i < 40000:
+	var rings := 0
+	var was_ring := false
+	while m.state != "dead" and i < 200000:
 		var r := 0
 		var mv := signf(m._rabbit_c().x - m.pos.x)
 		var jump := i % 30 < 10
@@ -3585,14 +3673,30 @@ func test_senzi_bot() -> void:
 				turned = true
 			mv = clampf((sp.x - rc.x) / 6.0, -1.0, 1.0)
 			jump = rc.y > sp.y + 4.0 and absf(sp.x - rc.x) < 20.0
+		elif m.state == "ring":
+			# no ringue: chega perto e dá jab; defende o jab dele andando para trás; foge do carregado
+			var toward := signf(m.pos.x - m.hx)
+			var dist := absf(m.pos.x - m.hx)
+			mv = toward if dist > 34.0 else 0.0
+			jump = false
+			if m.act == "jab" and m.act_t < m.SJAB_WIND + 4:
+				mv = -toward
+			elif m.act == "charge" and m.act_t < m.SCHARGE_WIND + 8:
+				mv = -toward
+			elif dist < m.HJAB_REACH - 4.0 and m.h_jab < 0 and m.h_cd == 0:
+				r = 1
+			m.h_hp = 90.0
 		elif m.fighting() and not room.rotating and room.rot_lock == 0 and m.pos.distance_to(m._rabbit_c()) < 70.0:
 			r = 1
 		if m.state != "hold":
 			turned = false
 		doses = maxi(doses, m.doses)
+		if m.state == "ring" and not was_ring:
+			rings += 1
+		was_ring = m.state == "ring"
 		m.lives = m.LIVES
 		tick({"rotate": r, "move": mv, "jump": jump})
 		i += 1
-	print("  %d quadros (%.0f s), %d doses" % [i, i / 60.0, doses])
-	check(m.syringe_taken and m.state == "dead", "o coelho pega a seringa e o Senzi cai")
+	print("  %d quadros (%.0f s), %d doses, %d ringues" % [i, i / 60.0, doses, rings])
+	check(m.state == "dead", "o coelho pega a seringa, vence o ringue e o Senzi cai")
 	check(room.door_unlocked, "a porta destrava")

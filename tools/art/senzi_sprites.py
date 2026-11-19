@@ -36,6 +36,13 @@ GLASS_D = (60, 92, 84, 255)
 JUICE = (112, 255, 74, 255)
 JUICE_D = (40, 170, 40, 255)
 STEEL = (200, 204, 214, 255)
+# o coelhão (D114): o pelo branco do coelho, as orelhas rosadas, o olho vermelho
+FUR = (239, 234, 223, 255)
+FUR_D = (198, 192, 180, 255)
+FUR_B = (196, 190, 178, 255)
+FUR_B_D = (160, 154, 144, 255)
+EAR_IN = (240, 160, 176, 255)
+EYE = (226, 46, 64, 255)
 
 
 class Canvas:
@@ -118,8 +125,8 @@ class Canvas:
                     self.px(x + wind * ln, g, base)
                     self.px(x + wind * ln, g + 1, dark)
 
-    def wet(self, n):
-        sil = (self.img[:, :, 3] > 0) & (self.img[:, :, 0] == GOO[0])
+    def wet(self, n, base=GOO):
+        sil = (self.img[:, :, 3] > 0) & (self.img[:, :, 0] == base[0])
         ys, xs = np.nonzero(sil & self._shift(sil, 0, 1) & self._shift(sil, 1, 0))
         for _ in range(n):
             if len(xs):
@@ -207,6 +214,7 @@ def draw_syringe(cv, hand, ang, liquid):
 
 def draw_senzi(p):
     cv = Canvas(p.get("seed", 0))
+    C0, C1, C2, C3 = (FUR, FUR_D, FUR_B, FUR_B_D) if p.get("rabbit") else (GOO, GOO_D, GOO_B, GOO_B_D)
     cv.pump = p.get("pump", 1.0)
     hip = p["hip"]
     tilt = p["tilt"]          # inclinação do tronco: 0 em pé; ~0.85 na corrida
@@ -224,7 +232,7 @@ def draw_senzi(p):
         fa = lg[2] if len(lg) > 2 else 0.0
         toe = add(foot, rot((5.0, 0.0), fa))
         sh = cv.lump(hip, knee, 5.0, 3.4) + cv.lump(knee, foot, 3.2, 2.2) + cv.lump(add(foot, (-1.0, 0)), toe, 2.4, 1.8, n=3)
-        cv.part(sh, GOO if front else GOO_B, GOO_D if front else GOO_B_D)
+        cv.part(sh, C0 if front else C2, C1 if front else C3)
 
     def arm(a, sh, front):
         if isinstance(a, dict):   # {"at": ponto, "bend": ±1}: a mão vai até o ponto
@@ -242,7 +250,7 @@ def draw_senzi(p):
                 shp += cv.lump(f0, add(add(f0, d, 3.5), sd, k * 1.0), 1.1, 0.8, n=2, wob=0.1)
         else:
             shp.append(("c", (hand[0], hand[1], 2.6)))
-        cv.part(shp, GOO if front else GOO_B, GOO_D if front else GOO_B_D)
+        cv.part(shp, C0 if front else C2, C1 if front else C3)
         if front:
             p["_hand"] = hand
             p["_fore"] = a[1]
@@ -253,51 +261,70 @@ def draw_senzi(p):
     # o tronco: um saco mole, mais largo em cima, que escorre
     tor = cv.lump(U(0.0, 1.0), U(1.0, -TORSO + 2.0), 5.6, 6.4, wob=0.18)
     tor += [("c", add(U(-2.5, -1.0), (0, 0)) + (5.0,)), ("c", U(3.5, -TORSO + 5.0) + (5.0,))]
-    cv.part(tor, GOO, GOO_D)
+    cv.part(tor, C0, C1)
 
     leg(p["leg_f"], True)
 
-    # o pescoço de caramujo, calombudo
-    nd = p.get("neck", 0.0)
-    seg = [neck]
-    ang = tilt + 0.55 + nd
-    for i, ln in enumerate((5.0, 5.0, 4.5)):
-        a_ = ang + i * (0.18 + nd * 0.5)
-        seg.append(add(seg[-1], (math.sin(a_) * ln, -math.cos(a_) * ln)))
-    nk = []
-    for i in range(3):
-        nk += cv.lump(seg[i], seg[i + 1], 3.8 - i * 0.5, 3.3 - i * 0.5, n=3, wob=0.25)
-    tip = seg[-1]
-    nk.append(("c", (tip[0] + 1.2, tip[1] + 0.5, 3.0)))
-    cv.part(nk, GOO, GOO_D)
-    if p.get("face", "") == "roar":
-        m = add(tip, (3.6, 1.0))
-        for dx, dy in ((0, 0), (0, 1), (1, 0), (1, 1), (0, 2)):
-            cv.px(m[0] + dx, m[1] + dy, MOUTH)
-    # dois tentáculos moles (como os dos caramujos de enfeite, mas sem olhos)
-    sway = p.get("tent", 0.0)
-    for k, (ox, ln) in enumerate(((0.5, 7.0), (2.6, 8.5))):
-        q = [add(tip, (ox + 1.0, -1.5))]
-        a0 = 0.9 + k * 0.25 + sway
-        for j in range(1, 5):
-            a_ = a0 + j * (0.34 + p.get("droop", 0.0))
-            q.append(add(q[-1], (math.sin(a_) * ln / 4.0, -math.cos(a_) * ln / 4.0)))
-        for j in range(len(q) - 1):
-            cv.line(q[j], q[j + 1], GOO_D if k == 0 else GOO, 1)
-    # a concha: a mesma dos caramujos de enfeite, um pouco maior, de chapéu
-    hat = add(tip, (-1.0, -3.4))
-    cv.part([("c", (hat[0], hat[1], 4.3))], SHELL, SHELL, drip=False)
-    cv.part([("c", (hat[0] - 0.3, hat[1] + 0.3, 2.5))], SHELL_D, SHELL_D, drip=False)
-    cv.px(hat[0] - 0.5, hat[1] - 0.5, SHELL_L)
-    cv.px(hat[0] - 2.5, hat[1] - 2.5, SHELL_L)
+    if p.get("rabbit"):
+        # a cabeça do coelho: redonda, o focinho, o olho vermelho e as orelhas compridas para trás
+        nd = p.get("neck", 0.0)
+        hc = add(neck, rot((3.5, -6.0), tilt * 0.6 + nd))
+        cv.part([("c", (hc[0], hc[1], 5.6)), ("c", (hc[0] + 3.2, hc[1] + 1.6, 3.6))] + cv.lump(neck, hc, 3.6, 4.0, n=2, wob=0.05), C0, C1, drip=False)
+        cv.px(hc[0] + 6.6, hc[1] + 1.0, EAR_IN)                           # o nariz
+        cv.px(hc[0] + 2.2, hc[1] - 1.2, EYE)
+        cv.px(hc[0] + 2.2, hc[1] - 0.2, EYE)
+        ea = p.get("ears", 0.0)
+        for k, (ox, ln) in enumerate(((-1.5, 15.0), (1.0, 16.0))):
+            e0 = add(hc, (ox, -4.0))
+            a_ = -0.55 + tilt * 0.4 + ea + k * 0.22
+            e1 = add(e0, (math.sin(a_) * ln, -math.cos(a_) * ln))
+            cv.part(cv.lump(e0, e1, 2.4, 1.6, n=5, wob=0.06), C0 if k == 1 else C2, C1 if k == 1 else C3, drip=False)
+            if k == 1:
+                cv.line(lerp(e0, e1, 0.25), lerp(e0, e1, 0.85), EAR_IN, 1)
+        tip = hc
+    else:
+        # o pescoço de caramujo, calombudo
+        nd = p.get("neck", 0.0)
+        seg = [neck]
+        ang = tilt + 0.55 + nd
+        for i, ln in enumerate((5.0, 5.0, 4.5)):
+            a_ = ang + i * (0.18 + nd * 0.5)
+            seg.append(add(seg[-1], (math.sin(a_) * ln, -math.cos(a_) * ln)))
+        nk = []
+        for i in range(3):
+            nk += cv.lump(seg[i], seg[i + 1], 3.8 - i * 0.5, 3.3 - i * 0.5, n=3, wob=0.25)
+        tip = seg[-1]
+        nk.append(("c", (tip[0] + 1.2, tip[1] + 0.5, 3.0)))
+        cv.part(nk, C0, C1)
+        if p.get("face", "") == "roar":
+            m = add(tip, (3.6, 1.0))
+            for dx, dy in ((0, 0), (0, 1), (1, 0), (1, 1), (0, 2)):
+                cv.px(m[0] + dx, m[1] + dy, MOUTH)
+        # dois tentáculos moles (como os dos caramujos de enfeite, mas sem olhos)
+        sway = p.get("tent", 0.0)
+        for k, (ox, ln) in enumerate(((0.5, 7.0), (2.6, 8.5))):
+            q = [add(tip, (ox + 1.0, -1.5))]
+            a0 = 0.9 + k * 0.25 + sway
+            for j in range(1, 5):
+                a_ = a0 + j * (0.34 + p.get("droop", 0.0))
+                q.append(add(q[-1], (math.sin(a_) * ln / 4.0, -math.cos(a_) * ln / 4.0)))
+            for j in range(len(q) - 1):
+                cv.line(q[j], q[j + 1], C1 if k == 0 else C0, 1)
+        # a concha: a mesma dos caramujos de enfeite, um pouco maior, de chapéu
+        hat = add(tip, (-1.0, -3.4))
+        cv.part([("c", (hat[0], hat[1], 4.3))], SHELL, SHELL, drip=False)
+        cv.part([("c", (hat[0] - 0.3, hat[1] + 0.3, 2.5))], SHELL_D, SHELL_D, drip=False)
+        cv.px(hat[0] - 0.5, hat[1] - 0.5, SHELL_L)
+        cv.px(hat[0] - 2.5, hat[1] - 2.5, SHELL_L)
 
     p["_neck"] = neck
     arm(p["arm_f"], sh_f, True)
     if p.get("syringe") is not None:
         sa, sl = p["syringe"]
         draw_syringe(cv, p["_hand"], p["_fore"] + sa if sa is not None else p["_fore"], sl)
-    cv.goo(p.get("goo", 8), wind=p.get("wind", 0.0))
-    cv.wet(4)
+    if not p.get("rabbit"):
+        cv.goo(p.get("goo", 8), wind=p.get("wind", 0.0))
+        cv.wet(4)
     return cv.img
 
 
@@ -442,30 +469,100 @@ def inject_pose(i):
             "pump": pump, "goo": 14}
 
 
+# ---------------------------------------------------------------- o ringue (D114)
+
+def guard_pose(i):
+    """Em guarda: base aberta, punhos na frente do queixo, balançando."""
+    b = (0.0, 0.8, 1.2, 0.6)[i]
+    legs = [(0.42, -0.1, -0.05), (-0.45, -0.05)]
+    return {"hip": stand_hip(legs, b, x=44.0), "tilt": 0.18, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (0.95, 2.75), "arm_b": (0.7, 2.9), "neck": 0.05 + b * 0.02, "tent": -0.1 + b * 0.05, "ears": b * 0.04}
+
+
+WALK = [0.42, 0.25, 0.0, -0.2, 0.0, 0.25]
+
+
+def walk_pose(i):
+    """Andando em guarda: passos curtos, os pés trocando."""
+    a = WALK[i]
+    legs = [(a, -0.1 - abs(a) * 0.3, -0.05), (-0.45 + (0.42 - a) * 0.9, -0.05 - (0.42 - a) * 0.4)]
+    return {"hip": stand_hip(legs, (0.0, 0.8, 1.4, 0.8, 0.0, 0.6)[i], x=44.0), "tilt": 0.2, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (0.95, 2.75), "arm_b": (0.7, 2.9), "neck": 0.05, "tent": -0.1, "ears": 0.05 * (i % 2)}
+
+
+def jab_pose(i):
+    """O jab: carrega um tiquinho, estica o braço da frente reto, segura, volta à guarda."""
+    legs = [(0.5, -0.05, -0.05), (-0.55, -0.1)]
+    arm = [(0.8, 2.5), (1.6, 1.6), (1.58, 1.62), (1.1, 2.4)][i]
+    return {"hip": stand_hip(legs, 1.0 if i in (1, 2) else 0.0, x=42.0 if i in (1, 2) else 44.0), "tilt": 0.3 if i in (1, 2) else 0.2,
+            "leg_f": legs[0], "leg_b": legs[1], "arm_f": arm, "arm_b": (0.7, 2.9), "neck": 0.1, "tent": -0.3 if i == 1 else -0.1,
+            "ears": -0.15 if i == 1 else 0.0}
+
+
+def block_pose(i):
+    """Defendendo: os dois braços fechados na frente, o corpo para trás."""
+    legs = [(0.35, -0.15, -0.05), (-0.55, -0.1)]
+    return {"hip": stand_hip(legs, 1.5, x=46.0), "tilt": -0.05 - 0.04 * i, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (1.35, 3.0), "arm_b": (1.25, 3.05), "neck": -0.1, "tent": 0.15, "ears": 0.2}
+
+
+def hit_pose(i):
+    """Apanhou: a cabeça para trás, os braços abertos."""
+    legs = [(0.3, -0.1, -0.05), (-0.5, -0.2)]
+    return {"hip": stand_hip(legs, 1.0, x=48.0 + i), "tilt": -0.3 - 0.1 * i, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (0.6, 0.2), "arm_b": (-0.5, -0.2), "neck": -0.4, "tent": 0.5, "ears": 0.45, "face": "roar" if i else ""}
+
+
+def jump_pose(i):
+    legs = [(1.2, -0.3, 0.2), (0.6, -0.9, 0.2)] if i == 0 else [(0.6, -0.5, 0.1), (-0.2, -0.8, 0.2)]
+    return {"hip": (44.0, 52.0), "tilt": 0.2, "leg_f": legs[0], "leg_b": legs[1],
+            "arm_f": (0.95, 2.75), "arm_b": (0.7, 2.9), "neck": 0.0, "ears": -0.25}
+
+
+def rabbit(fn):
+    """A mesma pose, no coelhão."""
+    def f(i):
+        q = fn(i)
+        q["rabbit"] = True
+        return q
+    return f
+
+
+RABBIT_ANIMS = [("guard", 4, rabbit(guard_pose)), ("walk", 6, rabbit(walk_pose)), ("jab", 4, rabbit(jab_pose)),
+                ("block", 2, rabbit(block_pose)), ("hit", 2, rabbit(hit_pose)), ("jump", 2, rabbit(jump_pose)),
+                ("flex", 6, rabbit(flex_pose)), ("die", 4, rabbit(die_pose))]
+
+
 ANIMS = [("run", 8, run_pose), ("idle", 4, idle_pose), ("flex", 6, flex_pose), ("throw", 4, throw_pose), ("die", 4, die_pose),
          ("leap", 3, leap_pose), ("punch", 4, punch_pose), ("tired", 4, tired_pose), ("hold", 4, hold_pose),
-         ("inject", INJ, inject_pose)]
+         ("inject", INJ, inject_pose), ("guard", 4, guard_pose), ("walk", 6, walk_pose), ("block", 2, block_pose),
+         ("hit", 2, hit_pose)]
 
 
-def main():
-    cols = max(n for _, n, _ in ANIMS)
-    sheet = Image.new("RGBA", (cols * FW, len(ANIMS) * FH), (0, 0, 0, 0))
+def build(anims, name):
+    cols = max(n for _, n, _ in anims)
+    sheet = Image.new("RGBA", (cols * FW, len(anims) * FH), (0, 0, 0, 0))
     meta = {"frame": [FW, FH], "ground": GROUND, "anims": {}}
-    for row, (name, n, fn) in enumerate(ANIMS):
+    for row, (an, n, fn) in enumerate(anims):
         for i in range(n):
             pose = fn(i)
             pose.setdefault("seed", row * 31 + i * 7 + 3)
             sheet.paste(Image.fromarray(draw_senzi(pose), "RGBA"), (i * FW, row * FH))
-        meta["anims"][name] = {"row": row, "frames": n}
-        if name == "hold":
+        meta["anims"][an] = {"row": row, "frames": n}
+        if an == "hold":
             h = pose["_hand"]
             meta["hand_up"] = [round(h[0], 1), round(h[1], 1)]   # a mão aberta no alto (a seringa flutua ali)
     os.makedirs(os.path.join(ROOT, "art"), exist_ok=True)
-    sheet.save(os.path.join(ROOT, "art", "senzi.png"))
-    with open(os.path.join(ROOT, "art", "senzi.json"), "w") as f:
+    sheet.save(os.path.join(ROOT, "art", name + ".png"))
+    with open(os.path.join(ROOT, "art", name + ".json"), "w") as f:
         json.dump(meta, f, indent="\t")
         f.write("\n")
-    print("art/senzi.png: %d animações, %dx%d" % (len(ANIMS), sheet.width, sheet.height))
+    print("art/%s.png: %d animações, %dx%d" % (name, len(anims), sheet.width, sheet.height))
+
+
+def main():
+    build(ANIMS, "senzi")
+    build(RABBIT_ANIMS, "coelhao")
 
 
 if __name__ == "__main__":
