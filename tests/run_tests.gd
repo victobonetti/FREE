@@ -87,6 +87,7 @@ func _init() -> void:
 	test_mecha_drop()
 	test_mecha_bot()
 	test_senzi()
+	test_senzi_minis()
 	test_senzi_bot()
 	print("")
 	if failures == 0:
@@ -3831,6 +3832,39 @@ func test_senzi() -> void:
 ## Um bot que só foge: gira a sala quando ele chega perto, e pula os muros. As vidas do coelho são
 ## repostas: o que se prova é que a energia dele acaba sozinha (tempo + muros) e a porta abre.
 ## Um bot que foge até ele cansar e, na seringa, gira a sala para ficar acima dela e cai em cima
+
+
+func test_senzi_minis() -> void:
+	print("Senzi: caramujos-bomba (grandes, lentos, com aviso) e a voz mais destorcida")
+	for nm in ["senzi_scream2", "senzi_scream3", "senzi_grunt2", "senzi_grunt3"]:
+		check(SfxFactory.make(nm) != null and SfxFactory.ONE_SHOTS.has(nm), "a voz deformada existe: %s" % nm)
+	var m = _senzi()
+	m.s_hp = 15.0   # 1 coração: último terço
+	m.state = "hold"   # (parado: o teste é só dos caramujos)
+	m.t = 0
+	check(m._phase() == 2, "último terço")
+	m._spawn_mini()
+	check(m.minis.size() == 1 and m.minis[0]["st"] == "wait", "um caramujo brota e espera, piscando")
+	var seen_lock := false
+	var seen_air := false
+	var air_frames := 0
+	var lives0: int = m.lives
+	var n := 0
+	while not m.minis.is_empty() and n < 600:
+		m.energy = 999.0
+		tick()
+		n += 1
+		if m.minis.is_empty():
+			break
+		var b: Dictionary = m.minis[0]
+		seen_lock = seen_lock or b["locked"]
+		if b["st"] == "air":
+			seen_air = true
+			air_frames += 1
+	check(seen_lock, "a marca trava antes do pulo")
+	check(seen_air and air_frames >= 40, "ele se joga devagar, em arco (%d quadros no ar)" % air_frames)
+	check(m.minis.is_empty(), "e se autodestrói")
+	check(m.lives < lives0, "a explosão na marca (o coelho parado lá) tira um coração")
 ## (a seringa está no alto, fora do pulo: o giro deixa a mão dele de lado e o coelho cai até ela).
 func test_senzi_bot() -> void:
 	print("Senzi: fugir, pegar a seringa e vencer no ringue")

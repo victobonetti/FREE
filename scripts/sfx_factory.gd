@@ -19,6 +19,7 @@ const ONE_SHOTS := {
 	"lock_on": [-20.0, 0.0], "missile": [-17.0, 0.12], "homer": [-18.0, 0.08], "slam": [-8.0, 0.05],
 	"blast": [-15.0, 0.15], "thump": [-11.0, 0.08],
 	"senzi_scream": [-11.0, 0.08], "senzi_grunt": [-12.0, 0.14],
+	"senzi_scream2": [-11.0, 0.08], "senzi_grunt2": [-12.0, 0.14], "senzi_scream3": [-11.0, 0.08], "senzi_grunt3": [-12.0, 0.14],
 	"step_grass": [-22.0, 0.14], "step_dirt": [-20.0, 0.14], "step_stone": [-23.0, 0.12],
 	"step_wet": [-22.0, 0.14], "step_metal": [-25.0, 0.1], "step_wood": [-21.0, 0.12],
 	"step_plate": [-24.0, 0.12], "step_water": [-21.0, 0.15],
@@ -83,10 +84,10 @@ static func make(sfx_name: String) -> AudioStreamWAV:
 			return _blast()
 		"thump":
 			return _thump()
-		"senzi_scream":
-			return _senzi_voice(0.85, [180.0, 430.0, 300.0, 130.0], 1)
-		"senzi_grunt":
-			return _senzi_voice(0.28, [260.0, 330.0, 190.0, 110.0], 2)
+		"senzi_scream", "senzi_scream2", "senzi_scream3":
+			return _senzi_voice(0.85, [180.0, 430.0, 300.0, 130.0], 1, int(sfx_name.right(1)) - 1 if sfx_name != "senzi_scream" else 0)
+		"senzi_grunt", "senzi_grunt2", "senzi_grunt3":
+			return _senzi_voice(0.28, [260.0, 330.0, 190.0, 110.0], 2, int(sfx_name.right(1)) - 1 if sfx_name != "senzi_grunt" else 0)
 	if sfx_name.begins_with("step_"):
 		return _step(sfx_name.trim_prefix("step_"))
 	return null
@@ -647,12 +648,24 @@ static func rumble() -> AudioStreamWAV:
 ## cai (os quatro pontos de `pitch`), com vibrato; a fonte é dente de serra com quadrada, filtrada por três
 ## formantes de vogal aberta ("aah"), com chiado de bafo; um anel de modulação a 63 Hz deixa estranha
 ## (alienígena), e o final passa por saturação forte, esmagamento de bits e queda de taxa (a distorção).
-static func _senzi_voice(seconds: float, pitch: Array, seed_value: int) -> AudioStreamWAV:
+## `grit` (0 a 2) é a deformação do Senzi: quanto mais derretido, mais grave, mais instável (vibrato forte),
+## mais chiado, com uma voz grave por baixo, saturação mais pesada, menos bits e taxa menor.
+static func _senzi_voice(seconds: float, pitch: Array, seed_value: int, grit := 0) -> AudioStreamWAV:
+	var drive: float = [3.2, 6.0, 10.0][grit]
+	var bits: float = [14.0, 7.0, 3.0][grit]
+	var hold_n: int = [3, 5, 8][grit]
+	var noise: float = [0.18, 0.32, 0.5][grit]
+	var ring_depth: float = [0.4, 0.6, 0.85][grit]
+	var vib: float = [0.07, 0.13, 0.22][grit]
+	var pitch_mul: float = [1.0, 0.86, 0.72][grit]
+	var sub: float = [0.0, 0.3, 0.6][grit]
+	seconds *= [1.0, 1.1, 1.25][grit]
 	var b := _buf(seconds)
-	var rng := _rng(seed_value)
+	var rng := _rng(seed_value + grit * 10)
 	var n := b.size()
 	var formants := [[720.0, 1.0, 140.0], [1150.0, 0.7, 180.0], [2600.0, 0.45, 300.0]]
 	var phase := 0.0
+	var sub_phase := 0.0
 	var hold := 0.0
 	var amps := PackedFloat32Array()
 	amps.resize(18)
@@ -667,8 +680,12 @@ static func _senzi_voice(seconds: float, pitch: Array, seed_value: int) -> Audio
 			f0 = lerpf(pitch[1], pitch[2], (k - 0.12) / 0.43)
 		else:
 			f0 = lerpf(pitch[2], pitch[3], (k - 0.55) / 0.45)
-		f0 *= 1.0 + 0.07 * sin(TAU * 9.0 * t) + 0.03 * sin(TAU * 23.0 * t)
+		f0 *= pitch_mul
+		f0 *= 1.0 + vib * sin(TAU * 9.0 * t) + 0.03 * sin(TAU * 23.0 * t)
+		if grit > 0:
+			f0 *= 1.0 + 0.05 * grit * sin(TAU * 41.0 * t + 3.0 * sin(TAU * 5.0 * t))   # a voz falha, quebra
 		phase += f0 / MIX_RATE
+		sub_phase += f0 * 0.5 / MIX_RATE
 		# harmônicos pesados pelos formantes (os pesos mudam devagar: recalculados a cada 64 amostras)
 		if i % 64 == 0:
 			for h in range(1, 18):
@@ -682,12 +699,13 @@ static func _senzi_voice(seconds: float, pitch: Array, seed_value: int) -> Audio
 		for h in range(1, 18):
 			v += sin(TAU * phase * h) * amps[h]
 		v += (fmod(phase, 1.0) * 2.0 - 1.0) * 0.18                # o dente de serra cru por baixo
-		v += rng.randf_range(-1.0, 1.0) * (0.18 + 0.25 * k)         # o bafo
-		v *= 0.6 + 0.4 * sin(TAU * 63.0 * t)                        # o anel: estranho
+		v += (fmod(sub_phase, 1.0) * 2.0 - 1.0) * sub               # a voz grave, monstruosa, por baixo
+		v += rng.randf_range(-1.0, 1.0) * (noise + 0.25 * k)        # o bafo
+		v *= (1.0 - ring_depth * 0.5) + ring_depth * 0.5 * sin(TAU * (63.0 + 20.0 * grit) * t)   # o anel: estranho
 		var env := minf(t / 0.025, 1.0) * (1.0 - smoothstep(0.7, 1.0, k))
-		v = tanh(v * 3.2 * env)                                     # a saturação
-		v = roundf(v * 14.0) / 14.0                                 # o esmagamento de bits
-		if i % 3 == 0:
+		v = tanh(v * drive * env)                                   # a saturação
+		v = roundf(v * bits) / bits                                 # o esmagamento de bits
+		if i % hold_n == 0:
 			hold = v                                                # a queda de taxa
 		b[i] = hold * 0.75
 	return _wav(b)
