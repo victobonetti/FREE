@@ -3377,6 +3377,7 @@ func test_senzi() -> void:
 	print("Senzi: revelação, corrida grudada, muros, energia")
 	var m = _senzi(false)
 	check(m.state == "lurk", "começa como um caramujo comum")
+	check(not room.allow_rotate, "sem giro até a luta começar")
 	var n := 0
 	while m.state == "lurk" and n < 600:
 		tick({"move": 1.0})
@@ -3509,6 +3510,21 @@ func test_senzi() -> void:
 	check(not Rect2i(room.rabbit.rect).intersects(under) and room.rabbit.pos.y + 12 <= under.position.y + 1,
 		"brotou em cima do coelho: ele sai por cima, sem ficar preso")
 	m.walls.clear()
+	# um de cima e um de baixo com o coelho no meio: não fica preso (o de baixo estoura)
+	var top := Rect2i(int(m._inner().get_center().x) - 6, int(m._inner().position.y), 14, fl - 14 - int(m._inner().position.y))
+	var bot := Rect2i(top.position.x, fl - 8, 14, 8)
+	room.rabbit.pos = Vector2i(top.position.x + 1, fl - 12)
+	room.rabbit.vel = Vector2.ZERO
+	m.walls.append({"rect": top, "n": Vector2(0, 1), "age": 20, "kind": "hang", "gid": 10, "k": 0.0, "seed": 1})
+	m.walls.append({"rect": bot, "n": Vector2(0, -1), "age": -1, "kind": "stump", "gid": 11, "k": 0.0, "seed": 1})
+	idle(3)
+	var stuck := false
+	for sw in m.walls:
+		if Rect2i(room.rabbit.rect).intersects(Rect2i(sw["rect"])):
+			stuck = true
+	check(not stuck, "entre um cogumelo de cima e um de baixo, o coelho não fica preso")
+	check(m._too_tight(bot, Vector2(0, -1)), "e um cogumelo não brota se deixaria um vão menor que o coelho")
+	m.walls.clear()
 	m.s_hp = m.S_HP_MAX
 	# a mola joga o coelho e vira a gravidade
 	m.walls.clear()
@@ -3579,7 +3595,7 @@ func test_senzi() -> void:
 	idle(m.HOLD_FRAMES + 2)
 	check(m.state == "inject", "6 s sem pegarem: ele se injeta")
 	idle(m.INJECT_FRAMES + 2)
-	check(m.state == "berserk" and m.energy >= m.ENERGY - 1.0 and m.doses == 1, "a energia volta toda e ele volta a correr")
+	check(m.state == "berserk" and absf(m.energy - m.ENERGY / 3.0) < 2.0 and m.doses == 1, "a energia volta, mas só um terço, e ele volta a correr")
 	check(m._speed(0) > m.SPEED[0], "e mais rápido (%.0f px/s)" % m._speed(0))
 	# o coelho pega a seringa: ele morre (por enquanto) e a porta destrava
 	m.energy = 0.01

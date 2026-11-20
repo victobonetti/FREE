@@ -57,16 +57,16 @@ const H_JUMP := 230.0
 const HJAB_HIT := 4                  # o jab do coelho: quadro em que acerta, total, alcance, dano
 const HJAB_TOTAL := 13
 const HJAB_REACH := 40.0
-const HJAB_DMG := 3.5
+const HJAB_DMG := 4.5
 const HKICK_HIT := 9                 # o chute (giro direito): mais lento, mais longe, mais forte, e quebra a defesa
 const HKICK_TOTAL := 24
 const HKICK_REACH := 54.0
-const HKICK_DMG := 5.0
+const HKICK_DMG := 6.0
 # Os golpes do coelhão: [quadro em que acerta, total, alcance, dano]. Em pé: jab (giro esquerdo) e chute
 # (giro direito). Agachado (para baixo): o gancho de baixo para cima, estilo Mortal Kombat (giro
 # esquerdo: joga o Senzi para o alto) e a rasteira (giro direito: baixa, a defesa em pé dele não segura).
 const HMOVES := {"jab": [HJAB_HIT, HJAB_TOTAL, HJAB_REACH, HJAB_DMG], "kick": [HKICK_HIT, HKICK_TOTAL, HKICK_REACH, HKICK_DMG],
-	"upper": [7, 30, 50.0, 7.0], "low": [6, 18, 50.0, 3.5]}
+	"upper": [7, 30, 50.0, 8.5], "low": [6, 18, 50.0, 4.5]}
 const S_STUN := 12                   # quadros sem agir depois de apanhar
 const H_STUN := 16
 const S_WALK := 46.0
@@ -293,6 +293,7 @@ func on_reset(r) -> void:
 	state = "lurk" if not intro_seen else "reveal"
 	if state == "reveal":
 		t = REVEAL - 30   # já visto: a revelação é curta
+	r.allow_rotate = false   # sem giro até a luta começar
 
 
 func on_rotate(r, d: int) -> void:
@@ -597,8 +598,8 @@ func step(r) -> void:
 				r.particles.append({"pos": pos + _up() * 14.0, "vel": Vector2(rng.randf_range(-30, 30), rng.randf_range(-30, 10)),
 					"life": 14, "col": C_JUICE, "grav": 60.0})
 			if t == pump:
-				# o PUMP: a energia volta toda
-				energy = ENERGY
+				# o PUMP: a energia volta, mas só um terço (para não ficar frustrante: logo cansa de novo)
+				energy = ENERGY / 3.0
 				doses += 1
 				bar_hit = 30
 				pop_flash = 8
@@ -886,10 +887,26 @@ func _spawn_wave() -> void:
 			var r: Rect2i = piece[0]
 			if Rect2(r).grow(3.0).intersects(Rect2(room.rabbit.rect)) or Rect2(r).grow(4.0).intersects(body_rect()):
 				continue
+			if _too_tight(r, piece[1]):
+				continue
 			if walls.size() >= WALL_MAX:
 				walls.pop_front()
 			walls.append({"rect": r, "n": piece[1], "age": -SPROUT_WARN, "kind": pc[0], "gid": gid_next, "k": 0.0, "seed": rng.randi()})
 	room.sfx.emit("plate_on")
+
+
+## Um cogumelo de cima e um de baixo na mesma coluna (de ondas diferentes) com um vão menor que o
+## coelho o prenderiam: não brota.
+func _too_tight(r: Rect2i, n: Vector2) -> bool:
+	for w in walls:
+		var o: Rect2i = w["rect"]
+		var on: Vector2 = w["n"]
+		if on == n or o.end.x <= r.position.x or r.end.x <= o.position.x:
+			continue
+		var gap := (r.position.y - o.end.y) if n.y < 0 else (o.position.y - r.end.y)
+		if absf(n.y) > 0.5 and gap < 16:
+			return true
+	return false
 
 
 ## Os retângulos de uma peça (a fenda são dois), com a normal da face onde nasce.
@@ -955,10 +972,17 @@ func _unstick_rabbit() -> void:
 			p.x = r.end.x
 		else:
 			p.x = r.position.x - rr.size.x
+		var out := Rect2i(p, rr.size)
+		if room.solid_static(out):
+			# sair pela ponta o enfiaria em outro (o de cima e o de baixo juntos): o cogumelo estoura
+			_shatter(w, n)
+			walls.erase(w)
+			return
 		rb.pos = p
 		rb.vel = n * 120.0 if absf(n.y) > 0.5 else Vector2(n.x * 80.0, -80.0)
 		rb.on_ground = false
 		rb.launched = false
+		return
 
 
 func _speed(ph: int) -> float:
