@@ -498,6 +498,8 @@ func step(r) -> void:
 				r.input_lock = true
 				r.allow_rotate = false
 		"reveal":
+			if t == R_POPS[0] or (t == REVEAL - 29 and intro_seen):
+				_start_theme()   # o tema começa quando ele se transforma
 			if t in R_POPS:
 				# cada estouro: clarão, tremor forte, poeira do teto
 				var k := R_POPS.find(t)
@@ -1537,6 +1539,17 @@ func _draw_heart(q: Vector2, full: bool, col := C_HEART) -> void:
 # terços (um coração por terço). Nocaute no Senzi: ele cai. Acabou o tempo: o coelhão desincha e a
 # perseguição recomeça (a vida perdida do Senzi fica perdida).
 
+## O tema do Senzi (D116): começa quando ele se transforma (na revelação) e segue a luta toda.
+const THEME := "res://music/senzi-theme.mp3"
+
+
+func _start_theme() -> void:
+	if room.music_override == THEME:
+		return
+	room.music_override = THEME
+	room.music_request.emit(THEME)
+
+
 ## A transformação: congela, a sala volta ao normal (ele se solta e cai), o raio, os estouros, o rugido.
 func _start_grab() -> void:
 	state = "grabbed"
@@ -1550,6 +1563,7 @@ func _start_grab() -> void:
 	room.pending_rot = 0
 	room.shake = maxf(room.shake, 3.0)
 	room.sfx.emit("gate_open")
+	_start_theme()   # (já toca desde a revelação; garante, se não)
 
 
 func _grabbed() -> void:

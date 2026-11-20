@@ -3391,6 +3391,7 @@ func test_senzi() -> void:
 		n += 1
 	check(m.state == "berserk" and not room.input_lock, "e entra em fúria")
 	check(heard.has("senzi_scream"), "e ruge, o grito distorcido")
+	check(room.music_override == m.THEME, "o tema do Senzi começa quando ele se transforma")
 	check(SfxFactory.make("senzi_scream") != null and SfxFactory.ONE_SHOTS.has("senzi_scream") and SfxFactory.ONE_SHOTS.has("senzi_grunt"),
 		"o grito distorcido do Senzi existe (o inteiro e o curto)")
 	# grudado: girar não o solta
