@@ -2,10 +2,8 @@
 	"actors": [
 		"res://scripts/boss_snail.gd"
 	],
-	"hint": "Fuja dele. Cansado, ele se solta: gire para jogá-lo no cogumelo vermelho",
-	"hint_touch": "Fuja dele. Cansado, ele se solta: gire para jogá-lo no cogumelo vermelho",
 	"name": "Senzi",
-	"notes": "Boss do ato 3 (D112): Senzi, o caramujo. Fúria grudado nas superfícies, muros de cogumelo, cansaço, cogumelos vermelhos e espinhos. Provado pelo teste-bot test_senzi_bot.",
+	"notes": "Boss do ato 3 (D112–D117): Senzi, o caramujo. Perseguição grudado nas superfícies, cogumelos em padrões, a seringa, o coelhão e o ringue. Provado pelo teste-bot test_senzi_bot.",
 	"rotate": true,
 	"rows": [
 		"####################################",
