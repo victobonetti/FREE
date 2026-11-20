@@ -36,6 +36,7 @@ extends Node2D
 const DT := 1.0 / 60.0
 const FLY_SPEED := 130.0
 const FLY_ACCEL := 420.0
+const FLY_TIMEOUT := 240   # quadros: limite para chegar a um ponto de cena
 const FLEE_ACCEL := 520.0
 const LEVER_FRAMES := 36      # duração do gesto de puxar a alavanca
 const LEVER_HIT := 18         # quadro em que a alavanca vira e os efeitos acontecem
@@ -192,6 +193,14 @@ func step(r) -> void:
 				visible = true
 				_begin()
 		"fly":
+			t += 1
+			# a distância mínima do coelho pode impedir de chegar (a cena trava o jogador): passado o prazo, ele chega na marra
+			if t > FLY_TIMEOUT and not path.is_empty():
+				pos = path[-1]
+				vel = Vector2.ZERO
+				path.clear()
+				_arrived()
+				return
 			if _fly_to(path[0]):
 				path.pop_front()
 				if path.is_empty():
@@ -250,6 +259,7 @@ func _begin() -> void:
 	if path.is_empty():
 		_arrived()
 	else:
+		t = 0
 		phase = "fly"
 
 

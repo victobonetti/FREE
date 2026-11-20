@@ -1523,6 +1523,9 @@ func _start_grab() -> void:
 	room.pending_rot = 0
 	room.shake = maxf(room.shake, 3.0)
 	room.sfx.emit("gate_open")
+	# o tema do Senzi começa na hora da transformação
+	room.music_override = "res://music/senzi-theme.mp3"
+	room.music_request.emit(room.music_override)
 
 
 func _grabbed() -> void:
