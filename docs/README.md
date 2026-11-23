@@ -9,6 +9,7 @@ Jogo de plataforma e puzzle em que um coelho foge por salas que podem ser girada
 | [ARQUITETURA.md](ARQUITETURA.md) | Como o código funciona: arquivos, rotação, física, formato das salas, testes, onde ajustar cada coisa. É o "como". |
 | [HISTORICO.md](HISTORICO.md) | O que foi feito em cada rodada, o retorno de quem jogou e o que está pendente. |
 | [COMPARTILHAR.md](COMPARTILHAR.md) | Como gerar as versões web e Windows e mandar para os amigos testarem. |
+| [PLANO_METROIDVANIA.md](PLANO_METROIDVANIA.md) | Só planejamento (D118): a análise das fases e o plano do jogo como um mundo contínuo (metroidvania), com o mapa ([plano-mapa.png](plano-mapa.png)). |
 
 ## Estado atual (15/11/2026)
 
