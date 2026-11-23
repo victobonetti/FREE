@@ -1,14 +1,15 @@
 # FREE como metroidvania: análise e plano do mapa
 
-> **Estado: só planejamento (D118).** Nada daqui está implementado. O mapa, as tabelas e a curva saem
-> de `tools/world/plano_mapa.py` (`python3 tools/world/plano_mapa.py` gera `docs/plano-mapa.png`, as
-> tabelas e a checagem de progressão). Mudou o plano? Mude os dados lá e rode de novo.
+> **Estado: só planejamento (D118, D119).** Nada daqui está implementado. O mapa, as tabelas e a curva saem
+> de `tools/world/plano_mapa.py` (`python3 tools/world/plano_mapa.py` gera `docs/plano-mapa.png`,
+> `docs/plano-rosa.png`, as tabelas e a checagem de progressão). Mudou o plano? Mude os dados lá e
+> rode de novo.
 
 ![O plano do mapa](plano-mapa.png)
 
 ## 1. A proposta em poucas linhas
 
-- **Um mundo só, contínuo**, no lugar das 33 fases em fila: **66 salas** (cerca de 238 telas)
+- **Um mundo só, contínuo**, no lugar das 33 fases em fila: **73 salas** (cerca de 246 telas)
   ligadas por saídas na parede, em volta de uma espinha vertical, **o Poço**: o buraco onde o coelho
   cai na abertura, que atravessa os três mundos e termina no **Laboratório**.
 - **Os três mundos** ficam onde a história já os põe: o **Subsolo** a oeste e no alto, a **Fábrica**
@@ -16,8 +17,13 @@
   do Poço, fechado pela **porta das três luzes** (uma chave por chefe).
 - **O giro vira o centro da progressão:** em vez de vir pronto, ele cresce em **sete habilidades**
   (A1–A7), uma por etapa, e cada uma abre caminhos novos **e muda salas antigas** na volta.
-- **Dificuldade crescente** de 1 a 10 no caminho principal (49 salas), com descanso depois de cada
-  chefe, e segredos opcionais (4 corações, pistas do laboratório) mais difíceis que o entorno.
+- **Dificuldade crescente** de 1 a 10 no caminho principal (51 salas), com descanso depois de cada
+  chefe, e segredos opcionais (5 corações, pistas do laboratório) mais difíceis que o entorno.
+- **Travas além das habilidades (D119):** três itens-chave de história, um por mundo: a noz-mestra
+  do Jeffrey, o crachá do Gatsby e a lanterna (opcional). Ver 4.1.
+- **O giro como chave do mapa (D119):** **rosas**, salas quadradas com uma abertura só, que aponta
+  para um vizinho diferente a cada giro e guarda a posição. São quatro, uma em cada canto do mapa,
+  e há salas escondidas que só se alcançam por um giro exato. Ver 4.2.
 - **Quase tudo que existe é aproveitado:** as 33 fases entram, mantidas, ampliadas ou refeitas. As
   salas novas são sobretudo corredores, tocas de salvar, ligações entre mundos, segredos e o
   Laboratório.
@@ -162,7 +168,85 @@
 - `Z` (abre ao resolver a sala);
 - mão única (queda, fuga, atalho que abre do outro lado);
 - habilidade: cristal-barreira (A6), parede de gosma (A7), água funda (A3);
+- item-chave: trava de raiz (noz-mestra), catraca (crachá), escuro (lanterna);
+- giro exato: a abertura de uma rosa (90°, 180° ou 270°);
 - as três chaves.
+
+### 4.1 Travas para segurar o avanço: avaliação
+
+A pergunta: além das habilidades, vale criar mecânicas para o jogador não correr na frente, como
+um item que o esquilo dá e que é preciso para seguir?
+
+**Vale, com medida.** Cada tipo de trava faz uma coisa diferente:
+
+| Tipo | Exemplo | A favor | Contra | Recomendação |
+|---|---|---|---|---|
+| **Habilidade** | A1–A7 | muda o jeito de jogar; serve de novo em todo lugar; dá poder na volta | cara de fazer (código, arte, provas) | a trava principal |
+| **Item-chave de história** | a noz-mestra do Jeffrey | barata (uma porta especial e um ícone); a história explica; segura o jogador num trecho até ele vencer quem guarda | vira "caça à chave" se forem muitos; a chave que abre uma porta só é esquecível | **sim, no máximo um por mundo**, sempre de um chefe ou de um evento, com a porta vista **antes** (o jogador sabe o que procura; o mapa marca a porta) |
+| **Item carregado** | levar uma bateria de uma sala a outra | cria rotas e decisões | com o giro e a morte na hora, perder o item frustra | **só como exceção**: no máximo duas salas de distância, e o item volta à origem se perder |
+| **Contador** | as três chaves | bom para o fim (junta tudo) | "junte 20 coisas" vira tarefa | só a porta das três luzes |
+| **Escuro** | a lanterna | muda como a sala se lê (os fungos brilham); bom para um trecho opcional | custa um efeito de luz | sim, só no Fungário oeste (opcional) |
+| **Mão única e atalho** | queda, alavanca do outro lado | guia sem trancar; deixa o mapa menos linear | — | em todo mundo |
+| **Giro exato** | as rosas (4.2) | é o próprio giro como chave, a cara do jogo | precisa de salas quadradas e de desenho cuidadoso | sim (4.2) |
+
+**Os três itens-chave do plano:**
+- **A noz-mestra (Jeffrey):** a raiz que tranca a saída da Despensa para a Passagem só abre com ela.
+  O jogador vê a trava antes de enfrentar o Jeffrey; vencê-lo é o que libera a Fábrica.
+- **O crachá do Gatsby (Casa de força):** o Gatsby foge e deixa cair o crachá. A catraca do
+  Escritório para a corrida só passa com ele, então a Casa de força vem antes da corrida.
+- **A lanterna (Ninho de vagalumes, opcional):** o Fungário oeste é escuro. Sem a lanterna, só se vê
+  em volta do coelho, e o Esporal (no escuro) não passa.
+
+**Contra correr na frente com truque de giro:** toda trava precisa resistir a tudo que o jogador
+pode ter naquele ponto (um giro no ar bem feito não pode pular a raiz da noz). O validador do mapa
+(seção 7) checa isso com as habilidades e os itens de cada etapa. A checagem do plano já achou e
+corrigiu quatro furos assim:
+- as Setas deixavam entrar nas Cavernas pelo Poço sem a batida de pata;
+- a Fuga e o elevador não pediam a habilidade recém-ganha;
+- a Rosa funda levava ao Mergulho sem o giro no ar.
+
+### 4.2 O giro exato: as rosas
+
+O pedido: aproveitar o giro para salas que só se alcançam com um giro exato, deixando o mapa
+menos linear.
+
+![A rosa](plano-rosa.png)
+
+**A regra geral do mundo continua:** a saída comum só deixa passar com a sala de pé (D100). **A rosa
+é a exceção:** uma sala **quadrada** (por exemplo 22×22 tiles, no meio da sua casa do mapa) com **uma
+abertura só, no meio de um lado**.
+- **Girando a rosa,** a abertura passa para o meio de outro lado e aponta para outro vizinho do
+  mapa. Uma rosa liga até quatro salas, uma por posição.
+- **Encaixe:** a abertura só deixa passar quando está de frente para a saída de um vizinho. Ela
+  brilha quando encaixa; virada para a rocha, aparece fechada.
+- **A rosa guarda o giro em que você a deixou**, ao contrário das outras salas (3.3). Assim dá para
+  "apontar" a rosa de dentro e voltar a ela por outro lado.
+- **O enigma da rosa** é chegar à abertura em cada posição: virada para cima, ela fica no teto. Por
+  isso cada rosa tem por dentro peças que mudam com o giro: plataforma por orientação, corda, mola,
+  água.
+- **Com amortecedor,** a rosa desfaz o giro em 2,5 s: dá tempo de sair, mas é corrido. Com a pata
+  firme (A6), fica tranquila.
+- **180° com perigo:** quando os dois giros de 90° passariam por uma posição mortal (ácido, espinho),
+  a abertura de 180° só serve com a meia-volta (A5), de uma vez.
+
+**As quatro rosas do plano:**
+
+| Rosa | 0° (de pé) | 90° | 180° | 270° | Para quê |
+|---|---|---|---|---|---|
+| **rA Rosa das raízes** | Ninho (entrada) | Comporta | Derrame | Espinhos | as Cavernas em qualquer ordem |
+| **rB Rosa funda** (pede A2) | Prumo (entrada) | **Câmara de cristal** (escondida: coração 5) | Represa | Água | duas entradas para o Aquífero, e um segredo |
+| **rC Rosa da caldeira** (ácido) | Tanques (entrada) | rocha | Elevador (A5 + A6: atalho para o Fungário) | **Cofre do Gatsby** (escondido: pista) | atalho e segredo |
+| **rD Rosa do micélio** | Micélio (entrada) | rocha | Poço P3 (atalho de volta) | **Ninho de vagalumes** (escondido: a lanterna) | atalho e o item opcional |
+
+**Menos linear:** os cruzamentos (salas com três ligações ou mais) eram 28 de 66 salas; agora são
+36 de 73, e há 10 ligações por giro exato. Na prática:
+- nas Cavernas, Comporta, Derrame e Espinhos podem ser feitos em qualquer ordem;
+- o Aquífero tem duas entradas;
+- cada mundo ganha um atalho e um segredo que só o giro certo revela.
+
+**Ideia para depois (não está no mapa):** um **cofre de giro**, uma sala que abre com uma sequência
+de giros (por exemplo: horário, horário, anti-horário), dada por uma pista em outra sala. Fica bem
+como segredo do Laboratório.
 
 ## 5. O mapa
 
@@ -185,6 +269,9 @@
   - a Lagoa funda (o Aquífero ↔ a Margem do Fungário, A3 + A7);
   - as Setas (Cavernas → Poço, mão única);
   - a corrida (Fábrica → Poço, mão única).
+- **As rosas (4.2)**, uma por canto: Rosa das raízes e Rosa funda no Subsolo, Rosa da caldeira na
+  Fábrica, Rosa do micélio no Fungário. Cada uma é um cruzamento que o giro escolhe, e três delas
+  escondem uma sala.
 - **O Laboratório** (embaixo de tudo):
   - três **câmaras de teste**, que remixam os três mundos ("eram testes o tempo todo");
   - a sala de controle (desligar os amortecedores);
@@ -222,6 +309,9 @@
 | c3 | Setas | 1x2 | 3 | A1 | atalho para o Poço | setas | plataforma por orientação |
 | c4 | Toca longa | 3x1 | 3 | A1 | — | toca | caixa longe do compartimento |
 | c5 | Ninho (salvar) | 1x1 | 0 | — | — | nova | — |
+| rA | Rosa das raízes | 1x1 | 3 | A1 | — | nova | rosa: a abertura aponta para quatro salas |
+| rB | Rosa funda | 1x1 | 4 | A2 | — | nova | rosa, com água |
+| hx | Câmara de cristal | 2x1 | 5 | giro exato (90°) | coração 5 | nova | escondida: só pela rosa |
 | c6 | Espinhos | 2x1 | 4 | A1 | — | espinhos | espinho + plataforma |
 | c7 | Prumo | 2x2 | 4 | A1 | — | prumo (refeita) | corda |
 | c8 | Vertigem | 3x2 | 5 | A1 | A2 giro no ar | vertigem (maior) | tudo do subsolo seco |
@@ -236,7 +326,7 @@
 | a7 | Lagoa funda | 3x2 | 7 | A3 + A7 (no fim) | atalho para o Fungário | nova | água funda, gosma |
 | ax | Poço d'água | 2x2 | 6 | A3 | coração 2 | nova | segredo |
 | d1 | Despensa (salvar) | 2x1 | 0 | A3 | — | nova | nozes, pista |
-| d2 | Covil do Jeffrey (chefe) | 2x2 | 6 | — | A4 puxar caixas, chave 1 | jeffrey | chefe |
+| d2 | Covil do Jeffrey (chefe) | 2x2 | 6 | — | A4 puxar caixas, chave 1, noz-mestra | jeffrey | chefe |
 | d3 | Fuga | 2x3 | 6 | A4 | — | fuga (maior) | limitador, fuga |
 
 #### Passagem
@@ -257,7 +347,9 @@
 | f6 | Dutos | 1x3 | 6 | — | A5 meia-volta | dutos | ventilador |
 | f7 | Caldeira | 2x1 | 6 | A5 | — | nova | ácido (introdução) |
 | f8 | Tanques | 2x2 | 7 | A5 | — | nova | ácido + giro |
-| f9 | Casa de força | 2x2 | 7 | A5 | — | casa-de-forca | tudo da fábrica; Gatsby provoca |
+| f9 | Casa de força | 2x2 | 7 | A5 | crachá do Gatsby | casa-de-forca | tudo da fábrica; o Gatsby foge e deixa cair o crachá |
+| rC | Rosa da caldeira | 1x1 | 7 | — | — | nova | rosa, com ácido (180° só com A5) |
+| fx | Cofre do Gatsby | 1x1 | 7 | giro exato (270°) | pista | nova | escondida: só pela rosa |
 | fa | Escritório do Gatsby (salvar) | 1x1 | 0 | — | — | nova | pista |
 | fb | Corrida do Gatsby (chefe) | 5x5 | 8 | A5 | — | gatsby | a corrida (chefe) |
 | fc | A mecha (chefe) | 2x2 | 7 | — | A6 pata firme, chave 2 | a-mecha | chefe |
@@ -278,8 +370,10 @@
 | g7 | Caramujário (salvar) | 2x1 | 0 | — | — | nova | pista |
 | g8 | Colônia | 4x1 | 8 | — | — | colonia (maior) | todos os fungos; o presságio |
 | g9 | Arena do Senzi (chefe) | 2x1 | 9 | — | A7 seringa, chave 3 | senzi | chefe |
-| ga | Túnel dos caramujos | 2x1 | 6 | A6 | — | nova | liga o Poço ao oeste |
-| gb | Esporal | 4x2 | 8 | A6 | — | nova | esporos + água |
+| rD | Rosa do micélio | 1x1 | 7 | — | — | nova | rosa: atalho para o Poço |
+| gx | Ninho de vagalumes | 1x1 | 6 | giro exato (270°) | lanterna | nova | escondida: só pela rosa |
+| ga | Túnel dos caramujos | 2x1 | 6 | A6 | — | nova | liga o Poço ao oeste; escuro |
+| gb | Esporal | 4x2 | 8 | lanterna | — | nova | esporos + água, no escuro |
 | gc | Raízes podres | 3x2 | 8 | A7 | coração 4 | nova | segredo (gosma) |
 | gd | Margem | 3x2 | 7 | A7 | — | nova | chega a Lagoa funda |
 
@@ -297,16 +391,17 @@
 
 ### 5.3 Progressão (checada pelo script)
 
-A simulação começa no Campo sem nada, abre o que dá com o que já tem e recolhe o que as salas dão:
+A simulação começa no Campo sem nada, abre o que dá com o que já tem (habilidades, itens, giros
+exatos das rosas) e recolhe o que as salas dão:
 
 - onda 1: 6 salas abertas; ganha A1 batida de pata (Toca do susto)
-- onda 2: 14 salas abertas; ganha A2 giro no ar (Vertigem)
-- onda 3: 22 salas abertas; ganha A3 mergulho (Mergulho)
-- onda 4: 26 salas abertas; ganha A4 puxar caixas (Covil do Jeffrey); chave 1 (Covil do Jeffrey)
-- onda 5: 39 salas abertas; ganha A5 meia-volta (Dutos)
-- onda 6: 42 salas abertas; ganha A6 pata firme (A mecha); chave 2 (A mecha)
-- onda 7: 57 salas abertas; ganha A7 seringa (Arena do Senzi); chave 3 (Arena do Senzi)
-- salas alcançáveis: 66 de 66
+- onda 2: 15 salas abertas; ganha A2 giro no ar (Vertigem)
+- onda 3: 25 salas abertas; ganha A3 mergulho (Mergulho)
+- onda 4: 29 salas abertas; ganha A4 puxar caixas (Covil do Jeffrey); chave 1 (Covil do Jeffrey); noz-mestra (Covil do Jeffrey)
+- onda 5: 44 salas abertas; ganha A5 meia-volta (Dutos); crachá do Gatsby (Casa de força)
+- onda 6: 47 salas abertas; ganha A6 pata firme (A mecha); chave 2 (A mecha)
+- onda 7: 63 salas abertas; ganha A7 seringa (Arena do Senzi); chave 3 (Arena do Senzi); lanterna (Ninho de vagalumes)
+- salas alcançáveis: 73 de 73
 
 ### 5.4 Curva de dificuldade
 
@@ -340,7 +435,9 @@ Regras de ritmo:
 - fonte de seringa;
 - toca de salvar;
 - cápsula, coração, pista e chave;
-- saída de mão única.
+- saída de mão única;
+- **a rosa** (sala quadrada com uma abertura que gira e guarda a posição);
+- trava de raiz (noz-mestra), catraca (crachá) e escuro (lanterna).
 
 ## 7. O trabalho técnico
 
@@ -349,20 +446,22 @@ Regras de ritmo:
 | Mapa em telas | sala com tamanho em telas; saídas com posição (lado + tela + deslocamento); várias por lado. Hoje é uma sala por casa e uma saída por lado | M |
 | Salvar | arquivo em `user://`: habilidades, salas resolvidas, atalhos, itens, chefes, toca atual | M |
 | Habilidades | travas no coelho e na sala: A1/A2 já são o giro e o giro no ar; A5 é entrada nova (o 180° já existe); A6 mexe no limitador; A3 é natação nova; A7 é o coelhão fora do ringue | P a G |
-| Peças novas | barreiras, itens, tocas, fontes de seringa (glifos e objetos, editor, sandbox) | M |
+| Peças novas | barreiras, itens, tocas, fontes de seringa, travas de item (glifos e objetos, editor, sandbox) | M |
+| Rosas | a ligação do mapa passa a depender da posição da sala (a abertura do lado L, girada N vezes, aponta para outro lado); a rosa guarda a posição; o encaixe brilha | M |
+| Escuro | a luz em volta do coelho e dos fungos, e a lanterna | M |
 | Estado por sala | o que fica e o que volta (3.3) | M |
 | Morte e volta | volta na entrada da sala; nos chefes, na última toca | P |
 | Tela de mapa | pausa com o mapa inteiro; ícones | M |
 | Editor | janela "Mundo" em telas, com as saídas posicionadas e os ícones | M |
-| Validador | a checagem deste plano, mas sobre os dados reais: tudo alcançável, sem beco sem saída; cada sala com prova (replay ou robô) **com as habilidades disponíveis ali** | M |
+| Validador | a checagem deste plano, mas sobre os dados reais: tudo alcançável, sem beco sem saída, nenhuma trava pulável com o que se tem ali; cada sala com prova (replay ou robô) **com as habilidades e os itens disponíveis ali** | M |
 | Música por região | e as transições entre elas | P |
-| Conteúdo | 66 salas: cerca de 33 aproveitadas (mantidas, ampliadas ou refeitas) e 33 novas | G |
+| Conteúdo | 73 salas: cerca de 33 aproveitadas (mantidas, ampliadas ou refeitas) e 40 novas | G |
 
 **Riscos:**
 - **Giro × saídas:** o desenho de cada câmara precisa terminar de pé. O editor deve avisar.
 - **A7 no mundo:** o coelhão é grande; as salas com seringa precisam de espaço. Há uma alternativa
   mais barata (ver 9).
-- **O tamanho:** 238 telas é muito. A ordem das etapas abaixo permite parar em qualquer mundo com
+- **O tamanho:** 246 telas é muito. A ordem das etapas abaixo permite parar em qualquer mundo com
   algo jogável.
 - **As provas:** com habilidades, a prova de cada sala passa a ter contexto. É o maior trabalho de
   testes.
@@ -392,6 +491,9 @@ Regras de ritmo:
    deixou?
 5. **Giro no ar como habilidade** (A2): hoje ele vem desde o começo; tirar no início muda a sensação
    das primeiras salas. Recomendo tirar (dá mais peso ao ganho).
-6. **O tamanho:** 66 salas como meta, ou uma primeira versão menor (cerca de 40: o caminho principal
+6. **O tamanho:** 73 salas como meta, ou uma primeira versão menor (cerca de 45: o caminho principal
    sem os segredos e com o Laboratório curto)?
 7. **O final:** a fuga pelo Poço até o céu de verdade, como proposto?
+8. **Itens-chave:** os três do plano (noz-mestra, crachá, lanterna) ou mais algum? O item carregado
+   (por exemplo, a bateria do elevador) entra ou fica de fora?
+9. **Rosas:** quatro, como no plano, ou mais (uma a cada 6–8 salas)?

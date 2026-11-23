@@ -40,6 +40,9 @@ R = [
     ("c3", "Setas", "1", 11, 2, 1, 2, 3, "A1", "atalho para o Poço", "setas", "plataforma por orientação", ""),
     ("c4", "Toca longa", "1", 3, 2, 3, 1, 3, "A1", "", "toca", "caixa longe do compartimento", ""),
     ("c5", "Ninho", "1", 7, 3, 1, 1, 0, "", "", "nova", "", "S"),
+    ("rA", "Rosa das raízes", "1", 8, 3, 1, 1, 3, "A1", "", "nova", "rosa: a abertura aponta para quatro salas", "R"),
+    ("rB", "Rosa funda", "1", 6, 5, 1, 1, 4, "A2", "", "nova", "rosa, com água", "R"),
+    ("hx", "Câmara de cristal", "1", 7, 5, 2, 1, 5, "giro exato (90°)", "coração 5", "nova", "escondida: só pela rosa", "♥?"),
     ("c6", "Espinhos", "1", 7, 4, 2, 1, 4, "A1", "", "espinhos", "espinho + plataforma", ""),
     ("c7", "Prumo", "1", 5, 3, 2, 2, 4, "A1", "", "prumo (refeita)", "corda", ""),
     ("c8", "Vertigem", "1", 2, 3, 3, 2, 5, "A1", "A2 giro no ar", "vertigem (maior)", "tudo do subsolo seco", ""),
@@ -54,7 +57,7 @@ R = [
     ("a7", "Lagoa funda", "1", 0, 8, 3, 2, 7, "A3 + A7 (no fim)", "atalho para o Fungário", "nova", "água funda, gosma", "?"),
     ("ax", "Poço d'água", "1", 0, 6, 2, 2, 6, "A3", "coração 2", "nova", "segredo", "♥"),
     ("d1", "Despensa", "1", 8, 6, 2, 1, 0, "A3", "", "nova", "nozes, pista", "S?"),
-    ("d2", "Covil do Jeffrey", "1", 8, 7, 2, 2, 6, "", "A4 puxar caixas, chave 1", "jeffrey", "chefe", "B"),
+    ("d2", "Covil do Jeffrey", "1", 8, 7, 2, 2, 6, "", "A4 puxar caixas, chave 1, noz-mestra", "jeffrey", "chefe", "B"),
     ("d3", "Fuga", "1", 10, 6, 2, 3, 6, "A4", "", "fuga (maior)", "limitador, fuga", ""),
     # passagem
     ("t1", "Passagem", "T", 13, 7, 3, 1, 4, "", "", "passagem", "plataformas móveis, esteira", ""),
@@ -67,7 +70,9 @@ R = [
     ("f6", "Dutos", "2", 21, 6, 1, 3, 6, "", "A5 meia-volta", "dutos", "ventilador", ""),
     ("f7", "Caldeira", "2", 18, 9, 2, 1, 6, "A5", "", "nova", "ácido (introdução)", ""),
     ("f8", "Tanques", "2", 20, 9, 2, 2, 7, "A5", "", "nova", "ácido + giro", ""),
-    ("f9", "Casa de força", "2", 16, 9, 2, 2, 7, "A5", "", "casa-de-forca", "tudo da fábrica; Gatsby provoca", ""),
+    ("f9", "Casa de força", "2", 16, 9, 2, 2, 7, "A5", "crachá do Gatsby", "casa-de-forca", "tudo da fábrica; o Gatsby foge e deixa cair o crachá", ""),
+    ("rC", "Rosa da caldeira", "2", 22, 9, 1, 1, 7, "", "", "nova", "rosa, com ácido (180° só com A5)", "R"),
+    ("fx", "Cofre do Gatsby", "2", 22, 10, 1, 1, 7, "giro exato (270°)", "pista", "nova", "escondida: só pela rosa", "?"),
     ("fa", "Escritório do Gatsby", "2", 16, 6, 1, 1, 0, "", "", "nova", "pista", "S?"),
     ("fb", "Corrida do Gatsby", "2", 13, 1, 5, 5, 8, "A5", "", "gatsby", "a corrida (chefe)", "B"),
     ("fc", "A mecha", "2", 18, 1, 2, 2, 7, "", "A6 pata firme, chave 2", "a-mecha", "chefe", "B"),
@@ -84,8 +89,10 @@ R = [
     ("g7", "Caramujário", "3", 16, 13, 2, 1, 0, "", "", "nova", "pista", "S?"),
     ("g8", "Colônia", "3", 14, 14, 4, 1, 8, "", "", "colonia (maior)", "todos os fungos; o presságio", ""),
     ("g9", "Arena do Senzi", "3", 13, 15, 2, 1, 9, "", "A7 seringa, chave 3", "senzi", "chefe", "B"),
-    ("ga", "Túnel dos caramujos", "3", 10, 12, 2, 1, 6, "A6", "", "nova", "liga o Poço ao oeste", ""),
-    ("gb", "Esporal", "3", 6, 12, 4, 2, 8, "A6", "", "nova", "esporos + água", ""),
+    ("rD", "Rosa do micélio", "3", 13, 12, 1, 1, 7, "", "", "nova", "rosa: atalho para o Poço", "R"),
+    ("gx", "Ninho de vagalumes", "3", 13, 11, 1, 1, 6, "giro exato (270°)", "lanterna", "nova", "escondida: só pela rosa", ""),
+    ("ga", "Túnel dos caramujos", "3", 10, 12, 2, 1, 6, "A6", "", "nova", "liga o Poço ao oeste; escuro", ""),
+    ("gb", "Esporal", "3", 6, 12, 4, 2, 8, "lanterna", "", "nova", "esporos + água, no escuro", ""),
     ("gc", "Raízes podres", "3", 3, 11, 3, 2, 8, "A7", "coração 4", "nova", "segredo (gosma)", "♥"),
     ("gd", "Margem", "3", 0, 10, 3, 2, 7, "A7", "", "nova", "chega a Lagoa funda", ""),
     # laboratório
@@ -102,23 +109,25 @@ R = [
 # "chaves" a porta das três luzes
 LINKS = [
     ("C1", "P1", "1"), ("P1", "r1", ""), ("r1", "r2", ""), ("r2", "r3", ""), ("r3", "r4", ""), ("r4", "c1", "A1"),
-    ("c1", "c2", "Z"), ("c2", "c3", "Z"), ("c3", "P1", "1"), ("r4", "c4", "A1"), ("c1", "c5", ""), ("c5", "c6", ""),
+    ("c2", "c3", "Z"), ("c3", "P1", "1"), ("r4", "c4", "A1"), ("c1", "c5", ""),
+    ("c5", "rA", ""), ("rA", "c1", "R90"), ("rA", "c2", "R180"), ("rA", "c6", "R270"),
     ("c5", "c7", ""), ("c7", "c8", "Z"), ("c4", "c8", "Z"), ("c8", "cx", "A2"), ("c6", "c9", "A2"), ("c2", "c9", "A2"),
-    ("c7", "a1", "A2"), ("a1", "a2", ""), ("a2", "a6", ""), ("a1", "a3", "Z"), ("a3", "a4", "Z"), ("a4", "a5", ""),
+    ("c7", "rB", "A2"), ("rB", "hx", "R90"), ("rB", "a3", "R180"), ("rB", "a1", "R270"),
+    ("a1", "a2", "A2"), ("a2", "a6", ""), ("a1", "a3", "A2"), ("a3", "a4", "Z"), ("a4", "a5", ""),
     ("a6", "ax", "A3"), ("a6", "a7", "A3"), ("a5", "d1", "A3"), ("d1", "d2", ""), ("d2", "d3", "A4"), ("d3", "P2", "1"),
-    ("c9", "d1", "A4"), ("P2", "t1", ""), ("t1", "f1", ""), ("f1", "f2", ""), ("f2", "f3", "Z"), ("f1", "f4", ""),
-    ("f4", "f5", "Z"), ("f3", "f6", ""), ("f5", "f6", "Z"), ("f6", "f8", "A5"), ("f5", "f7", "A5"), ("f7", "f8", "Z"),
-    ("f7", "f9", "Z"), ("f9", "f4", "Z"), ("f1", "fa", ""), ("fa", "fb", "A5"), ("fb", "fc", ""), ("fc", "fp", ""),
+    ("c9", "d1", "A4"), ("P2", "t1", "noz"), ("t1", "f1", ""), ("f1", "f2", ""), ("f2", "f3", "Z"), ("f1", "f4", ""),
+    ("f4", "f5", "Z"), ("f3", "f6", ""), ("f5", "f6", "Z"), ("f6", "f8", "A5"), ("f5", "f7", "A5"), ("f7", "f8", "Z"), ("f8", "rC", ""), ("rC", "fe", "R180+A5+A6"), ("rC", "fx", "R270"),
+    ("f7", "f9", "Z"), ("f9", "f4", "Z"), ("f1", "fa", ""), ("fa", "fb", "A5+crachá"), ("fb", "fc", ""), ("fc", "fp", ""),
     ("fp", "fd", "A6"), ("fp", "fe", "A6"),
     ("fb", "P1", "1"), ("fe", "g1", "1"), ("g1", "g2", ""), ("g2", "g3", "Z"), ("g3", "g4", "Z"), ("g3", "g5", ""),
-    ("g4", "g6", "A5"), ("g5", "g7", "Z"), ("g4", "g7", ""), ("g6", "g8", "Z"), ("g7", "g8", ""), ("g8", "g9", "Z"),
+    ("g4", "g6", "A5"), ("g6", "rD", ""), ("rD", "P3", "R180"), ("rD", "gx", "R270"), ("g5", "g7", "Z"), ("g4", "g7", ""), ("g6", "g8", "Z"), ("g7", "g8", ""), ("g8", "g9", "Z"),
     ("g9", "P4", "1"),
-    ("P1", "P2", "A6"), ("P2", "P3", "A6"), ("P3", "P4", "A7"), ("P3", "ga", ""), ("ga", "gb", ""), ("gb", "gc", "A7"),
+    ("P1", "P2", "A6"), ("P2", "P3", "A6"), ("P3", "P4", "A7"), ("P3", "ga", ""), ("ga", "gb", "lanterna"), ("gb", "gc", "A7"),
     ("gc", "gd", ""), ("gd", "a7", "A7"), ("P4", "L1", "chaves"), ("L1", "L2", ""), ("L2", "L4", "Z"), ("L4", "L1", "Z"),
     ("L1", "L3", "Z"), ("L3", "L5", "Z"), ("L5", "L6", "Z"), ("L3", "L6", ""), ("L6", "L7", ""),
 ]
 
-CRITICAL = ["C1", "P1", "r1", "r2", "r3", "r4", "c1", "c2", "c5", "c7", "c8", "c9", "a1", "a3", "a4", "a5", "d1",
+CRITICAL = ["C1", "P1", "r1", "r2", "r3", "r4", "c1", "c5", "rA", "c2", "c7", "c8", "c9", "rB", "a1", "a3", "a4", "a5", "d1",
             "d2", "d3", "P2", "t1", "f1", "f2", "f3", "f6", "f5", "f7", "f9", "f4", "fa", "fb", "fc", "fp", "fe",
             "g1", "g2", "g3", "g4", "g6", "g8", "g9", "P4", "L1", "L2", "L4", "L3", "L5", "L6", "L7"]
 
@@ -128,7 +137,7 @@ PAD = 30
 
 def main():
     byid = {r[0]: r for r in R}
-    W = 24 * U + PAD * 2 + 330
+    W = 24 * U + PAD * 2 + 400
     H = 19 * U + PAD * 2 + 170
     img = Image.new("RGB", (W, H), (14, 14, 20))
     d = ImageDraw.Draw(img)
@@ -170,6 +179,8 @@ def main():
             tags += "♥"
         if "?" in mark:
             tags += "?"
+        if "R" in mark:
+            tags += "✣"
         if give.startswith("A"):
             tags += " " + give[:2]
         if tags:
@@ -180,6 +191,10 @@ def main():
         ax, ay, aw, ah = ra[3:7]
         bx, by_, bw, bh = rb[3:7]
         col = {"": (150, 150, 160), "Z": (243, 207, 59), "1": (120, 200, 255), "chaves": (255, 90, 110)}.get(k, (255, 140, 60))
+        if k.startswith("R"):
+            col = (90, 240, 220)
+        elif k in ITEMS.values() or "crachá" in k:
+            col = (190, 255, 120)
         if ax + aw == bx or bx + bw == ax:
             ex = PAD + (ax + aw if ax + aw == bx else ax) * U
             y0s, y1s = max(ay, by_), min(ay + ah, by_ + bh)
@@ -192,15 +207,17 @@ def main():
             ex = PAD + (x0s + x1s) / 2.0 * U
             d.rectangle([ex - 9, ey - 4, ex + 9, ey + 4], fill=col)
             lab_at = (ex + 11, ey - 7)
-        if k.startswith("A") or k in ("chaves", "1"):
+        if k.startswith("A") or k.startswith("R") or k in ("chaves", "1") or k in ITEMS.values() or "crachá" in k:
             horiz = ax + aw == bx or bx + bw == ax
             arrow = ("→" if bx > ax else "←") if horiz else ("↓" if by_ > ay else "↑")
             lab = {"chaves": "3 chaves", "1": arrow}.get(k, k)
+            if k.startswith("R"):
+                lab = k.split("+")[0][1:] + "°" + ("".join("+" + t for t in k.split("+")[1:]))
             tw = d.textlength(lab, font=bold)
             d.rectangle([lab_at[0] - 2, lab_at[1] - 1, lab_at[0] + tw + 2, lab_at[1] + 14], fill=(20, 12, 6))
             d.text(lab_at, lab, fill=col, font=bold)
     # legenda
-    lx = PAD + 24 * U + 20
+    lx = PAD + 24 * U + 90
     y0 = PAD
     d.text((lx, y0), "FREE — plano do mapa", fill=(255, 255, 255), font=big)
     y0 += 28
@@ -211,13 +228,14 @@ def main():
     y0 += 8
     for col, txt in [((150, 150, 160), "passagem livre"), ((243, 207, 59), "abre ao resolver a sala (Z)"),
                      ((120, 200, 255), "mão única (queda, fuga)"), ((255, 140, 60), "pede habilidade (A1–A7)"),
-                     ((255, 90, 110), "as três chaves")]:
+                     ((255, 90, 110), "as três chaves"), ((90, 240, 220), "giro exato de uma rosa (90°/180°/270°)"),
+                     ((190, 255, 120), "item-chave (noz, crachá, lanterna)")]:
         d.line([(lx, y0 + 7), (lx + 18, y0 + 7)], fill=col, width=3)
         d.text((lx + 24, y0), txt, fill=(230, 230, 230), font=font)
         y0 += 18
     y0 += 8
     for txt in ["número: dificuldade (0–10)", "borda grossa: caminho principal", "S toca de salvar   ★ chefe",
-                "♥ coração   ? pista do laboratório", "A1–A7: onde se ganha a habilidade", "1 quadrado = 1 tela (40×22 tiles)"]:
+                "♥ coração   ? pista do laboratório", "✣ rosa (a abertura gira com a sala)", "A1–A7: onde se ganha a habilidade", "1 quadrado = 1 tela (40×22 tiles)"]:
         d.text((lx, y0), txt, fill=(200, 200, 200), font=font)
         y0 += 17
     y0 += 10
@@ -246,6 +264,7 @@ def main():
         rad = 5 if "B" in r[12] else 3
         d.ellipse([px - rad, py - rad, px + rad, py + rad], fill=col)
     img.save(os.path.join(ROOT, "docs", "plano-mapa.png"))
+    rosa(font, bold, big)
 
     # tabelas
     for wd, (nm, _) in WORLDS.items():
@@ -262,12 +281,72 @@ def main():
     progressao()
 
 
+def rosa(font, bold, big):
+    """O desenho que explica a rosa: a mesma sala quadrada nas quatro posições; a abertura (no meio de um
+    lado) aponta, em cada uma, para um vizinho diferente. Exemplo: a Rosa das raízes (rA)."""
+    cell = 150
+    img = Image.new("RGB", (4 * (cell + 40) + 40, cell + 150), (14, 14, 20))
+    d = ImageDraw.Draw(img)
+    d.text((20, 12), "A rosa: a abertura gira com a sala e aponta para outro vizinho", fill=(255, 255, 255), font=big)
+    nomes = ["Ninho (c5)", "Comporta (c1)", "Derrame (c2)", "Espinhos (c6)"]
+    lados = [(-1, 0), (0, -1), (1, 0), (0, 1)]      # de pé, a abertura está à esquerda; cada 90° horário a leva adiante
+    for i in range(4):
+        ox = 40 + i * (cell + 40)
+        oy = 60
+        x0, y0, x1, y1 = ox + 25, oy + 25, ox + cell - 25, oy + cell - 25
+        d.rectangle([x0, y0, x1, y1], outline=(230, 220, 200), width=3, fill=(40, 34, 28))
+        dx, dy = lados[i]
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        hw = 14
+        if dx:
+            ex = x0 if dx < 0 else x1
+            d.rectangle([ex - 3, cy - hw, ex + 3, cy + hw], fill=(90, 240, 220))
+            d.line([(ex + dx * 6, cy), (ex + dx * 22, cy)], fill=(90, 240, 220), width=3)
+        else:
+            ey = y0 if dy < 0 else y1
+            d.rectangle([cx - hw, ey - 3, cx + hw, ey + 3], fill=(90, 240, 220))
+            d.line([(cx, ey + dy * 6), (cx, ey + dy * 22)], fill=(90, 240, 220), width=3)
+        # a seta de gravidade e o giro
+        d.text((cx - 18, cy - 8), "%d°" % (90 * i), fill=(255, 230, 150), font=bold)
+        d.text((ox + 10, oy + cell + 8), "leva a: " + nomes[i], fill=(220, 220, 220), font=font)
+    d.text((20, cell + 120), "A sala é quadrada; a abertura fica no meio de um lado. A rosa guarda o giro em que você a deixou.",
+           fill=(180, 180, 180), font=font)
+    img.save(os.path.join(ROOT, "docs", "plano-rosa.png"))
+
+
+ITEMS = {"noz-mestra": "noz", "crachá do Gatsby": "crachá", "lanterna": "lanterna"}
+
+
+def _ok(k, have):
+    """A ligação abre? "" / "Z" / "1" sempre; R90/R180/R270 (o giro exato de uma rosa) pede a batida de
+    pata; o resto (habilidades, itens, "chaves") pede o que diz; "+" junta exigências."""
+    for t in k.split("+"):
+        if t in ("", "Z", "1"):
+            continue
+        if t.startswith("R"):
+            if "A1" not in have:
+                return False
+        elif t == "chaves":
+            if not {"chave 1", "chave 2", "chave 3"} <= have:
+                return False
+        elif t not in have:
+            return False
+    return True
+
+
+def _key(g):
+    if g.startswith("A"):
+        return g[:2]
+    if g.startswith("chave"):
+        return g
+    return ITEMS.get(g)
+
+
 def progressao():
     """Simula a progressão em ondas: começa no Campo sem nada; em cada onda, abre todas as ligações
     possíveis com o que já tem (as de mão única, só no sentido delas) e, depois, recolhe o que as
-    salas alcançadas dão. Imprime o que cada onda destrava e confere que todas as salas ficam
-    alcançáveis (sem beco sem saída no plano)."""
-    byid = {r[0]: r for r in R}
+    salas alcançadas dão (habilidades, chaves e itens). Imprime o que cada onda destrava e confere que
+    todas as salas ficam alcançáveis (sem beco sem saída no plano)."""
     have = set()
     seen = {"C1"}
     wave = 0
@@ -276,8 +355,7 @@ def progressao():
         while grew:
             grew = False
             for a, b, k in LINKS:
-                ok = k in ("", "Z", "1") or k in have or (k == "chaves" and {"chave 1", "chave 2", "chave 3"} <= have)
-                if not ok:
+                if not _ok(k, have):
                     continue
                 for x, y in ((a, b), (b, a)) if k != "1" else ((a, b),):
                     if x in seen and y not in seen:
@@ -288,8 +366,8 @@ def progressao():
             if r[0] not in seen:
                 continue
             for g in [t.strip() for t in r[9].split(",")]:
-                key = g[:2] if g.startswith("A") else g
-                if (g.startswith("A") or g.startswith("chave")) and key not in have:
+                key = _key(g)
+                if key and key not in have and key not in [n[0] for n in new]:
                     new.append((key, "%s (%s)" % (g, r[1])))
         if not new:
             break
