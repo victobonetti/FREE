@@ -14,3 +14,6 @@ desktop.ini
 *.tmp
 *~
 __pycache__/
+
+# Configuração local do Claude Code (pessoal; o CLAUDE.md é que vai no repositório)
+.claude/settings.local.json

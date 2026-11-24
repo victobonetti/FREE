@@ -11,7 +11,7 @@ extends Node2D
 ## grande no alto, cai com o tempo e muito mais a cada muro quebrado. Sem energia, ele desaba e morre.
 ##   - A cada terço da barra gasto ele fica mais rápido (e para um instante, flexionando, com raiva).
 ##   - No segundo terço: às vezes pula para a frente do coelho (pisca e grunhe antes) ou vira de repente.
-##   - No último: também arremessa halteres.
+##   - No último: também invoca caramujos-bomba.
 ## 3 corações do coelho nesta sala, como na mecha.
 
 const LIVES := 3
@@ -157,7 +157,18 @@ const PUNCH_SPEED := 520.0           # px/s, o coelho voando
 const PUNCH_LIFT := 150.0
 const PUNCH_MIN := 120.0             # o voo mínimo do coelho socado (px até a parede)
 const FLY_FRAMES := 70               # quadros em que o coelho voando quebra o que encontra
-const BELL_EVERY := 140
+# Os caramujos-bomba (último terço): aparecem no chão, grandes, piscando cada vez mais rápido; nos últimos
+# MINI_LOCK quadros a marca vermelha no chão trava onde o coelho estava, e eles se jogam (devagar, em arco)
+# para lá; no chão, o pavio pisca ainda mais rápido e eles se autodestroem (só a explosão fere).
+const MINI_EVERY := 210              # quadros entre dois caramujos
+const MINI_MAX := 2
+const MINI_WAIT := 120               # parado, piscando
+const MINI_LOCK := 45                # os últimos quadros da espera: a marca trava
+const MINI_AIR := 0.9                # s no ar (lento: dá para sair da marca)
+const MINI_REACH := 150.0            # o pulo mais longo (px)
+const MINI_FUSE := 40                # o pavio, no chão
+const MINI_BLAST := 24.0             # meia largura da explosão (a marca)
+const MINI_BLAST_H := 28.0           # e a altura
 const RAGE_FRAMES := 45              # a pausa de raiva ao passar de um terço da barra
 const DIE_FRAMES := 150
 
@@ -190,7 +201,7 @@ var walls: Array = []          # {"rect": Rect2i, "n": Vector2 (normal da face o
 var gid_next := 0
 var _wall_base := Transform2D.IDENTITY
 var wave_i := 0                # a próxima onda do padrão do terço
-var bells: Array = []          # {"pos", "vel", "age", "bounced"}
+var minis: Array = []          # os caramujos-bomba: {"pos" (os pés), "vel", "st": wait/air/fuse, "t", "face", "tp" (a marca), "locked"}
 var wall_t := 0
 var leap_t := 0
 var bell_t := 0
@@ -256,7 +267,7 @@ func on_reset(r) -> void:
 	r.input_lock = false
 	rng.seed = 20261119
 	walls.clear()
-	bells.clear()
+	minis.clear()
 	debris.clear()
 	splats.clear()
 	spits.clear()
@@ -308,9 +319,10 @@ func on_rotate(r, d: int) -> void:
 	for db in debris:
 		db["pos"] = r._rot_point(db["pos"], d)
 		db["vel"] = _rv(db["vel"], d)
-	for b in bells:
+	for b in minis:
 		b["pos"] = r._rot_point(b["pos"], d)
 		b["vel"] = _rv(b["vel"], d)
+		b["tp"] = r._rot_point(b["tp"], d)
 
 
 static func _rv(v: Vector2, d: int) -> Vector2:
@@ -479,7 +491,7 @@ func step(r) -> void:
 		r.cam_focus = null
 		r.rabbit.pos = Vector2i(int(hx) - 6, int(_inner().end.y) - 12)
 		r.rabbit.vel = Vector2.ZERO
-	_update_bells()
+	_update_minis()
 	_update_fly()
 	if fighting():
 		_age_shrooms()
@@ -512,7 +524,7 @@ func step(r) -> void:
 					r.particles.append({"pos": pos, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(40.0, 160.0),
 						"life": rng.randi_range(12, 26), "col": C_MUSCLE if i % 2 else C_SHELL, "grav": 120.0})
 			if t == R_ROAR + 2:
-				r.sfx.emit("senzi_scream")   # o rugido da revelação
+				_say("scream")   # o rugido da revelação
 			if t >= REVEAL:
 				intro_seen = true
 				r.input_lock = false
@@ -529,7 +541,7 @@ func step(r) -> void:
 				state = "leap"
 				t = 0
 				leap_from = pos
-				r.sfx.emit("senzi_grunt")
+				_say("grunt")
 		"leap":
 			var k := clampf(float(t) / LEAP_FRAMES, 0.0, 1.0)
 			pos = leap_from.lerp(leap_to, k) + Vector2(0, -sin(k * PI) * LEAP_HIGH)
@@ -563,7 +575,7 @@ func step(r) -> void:
 			# passou de um terço da barra: para, flexiona e ruge; volta mais rápido
 			_hit_rabbit()
 			if t == 10:
-				r.sfx.emit("senzi_scream")
+				_say("scream")
 				r.shake = maxf(r.shake, 3.0)
 			if t >= RAGE_FRAMES:
 				state = "berserk"
@@ -608,7 +620,7 @@ func step(r) -> void:
 				r.shake = 8.0
 				r.impact.emit(3.5)
 				r.sfx.emit("blast")
-				r.sfx.emit("senzi_scream")   # o PUMP
+				_say("scream")   # o PUMP
 				for i in 24:
 					var a := rng.randf() * TAU
 					r.particles.append({"pos": pos, "vel": Vector2(cos(a), sin(a)) * rng.randf_range(60.0, 200.0),
@@ -690,9 +702,9 @@ func _berserk() -> void:
 			leap_to = _pt_of(_u_floor(_rabbit_c().x))
 	if ph >= 2:
 		bell_t += 1
-		if bell_t >= BELL_EVERY:
+		if bell_t >= MINI_EVERY and minis.size() < MINI_MAX:
 			bell_t = 0
-			_throw_bell()
+			_spawn_mini()
 	if energy <= 0.0:
 		_tire()
 
@@ -715,7 +727,7 @@ func _in_reach(reach: float) -> bool:
 func _punch() -> void:
 	if t == PUNCH_WIND:
 		room.sfx.emit("blast")
-		room.sfx.emit("senzi_grunt")
+		_say("grunt")
 		if _in_reach(PUNCH_REACH):
 			var lives0 := lives
 			room.kill()   # um coração (ou a morte, no último)
@@ -1003,7 +1015,7 @@ func _tire() -> void:
 	energy = 0.0
 	state = "tired"
 	t = 0
-	bells.clear()
+	minis.clear()
 	room.sfx.emit("steam_burst")
 	room.shake = maxf(room.shake, 2.0)
 
@@ -1035,13 +1047,13 @@ func _take_syringe() -> void:
 
 
 func _die() -> void:
-	room.sfx.emit("senzi_scream")
+	_say("scream")
 	energy = 0.0
 	state = "dying"
 	t = 0
 	vel = Vector2.ZERO
 	walls.clear()
-	bells.clear()
+	minis.clear()
 	flash = 30
 	bar_hit = 30
 	room.shake = 6.0
@@ -1069,47 +1081,167 @@ func _fall() -> void:
 	pos.y = maxf(pos.y, inn.position.y + br.size.y / 2.0)
 
 
-func _throw_bell() -> void:
-	var rc := _rabbit_c()
-	var T := 0.9
-	var v := Vector2((rc.x - pos.x) / T, (rc.y - pos.y) / T - 0.5 * GRAV * T)
-	bells.append({"pos": pos + Vector2(0, -10), "vel": v, "age": 0, "bounced": false})
-	throw_t = 16
-	room.sfx.emit("gatsby_dash")
-
-
-func _update_bells() -> void:
+## Um caramujo-bomba brota no chão, longe do coelho e do Senzi (o Senzi faz o gesto de lançar).
+func _spawn_mini() -> void:
 	var inn := _inner()
+	var rc := _rabbit_c()
+	var x := rc.x
+	for i in 12:
+		x = rng.randf_range(inn.position.x + 16.0, inn.end.x - 16.0)
+		if absf(x - rc.x) >= 70.0 and absf(x - pos.x) >= 36.0:
+			break
+	var at := Vector2(x, inn.end.y)
+	minis.append({"pos": at, "vel": Vector2.ZERO, "st": "wait", "t": 0, "face": signf(rc.x - x) if rc.x != x else 1.0,
+		"tp": at, "locked": false})
+	throw_t = 16
+	room.sfx.emit("plate_on")
+	for i in 10:
+		var a := rng.randf() * PI
+		room.particles.append({"pos": at, "vel": Vector2(-cos(a), -sin(a)) * rng.randf_range(20.0, 70.0),
+			"life": rng.randi_range(10, 20), "col": C_SHELL if i % 2 else C_GOO, "grav": 120.0})
+
+
+## O pisca de um caramujo: cada vez mais rápido (período em quadros, do começo ao fim da contagem).
+func _mini_blink(b: Dictionary) -> bool:
+	var k := 0.0
+	var per := 20
+	if b["st"] == "wait":
+		k = float(b["t"]) / MINI_WAIT
+		per = int(lerpf(20.0, 6.0, k))
+	elif b["st"] == "air":
+		per = 5
+	else:
+		per = 3
+	return (int(b["t"]) % per) < maxi(per / 2, 1) and (b["st"] != "wait" or b["t"] > 12)
+
+
+func _update_minis() -> void:
+	var inn := _inner()
+	var fl := inn.end.y
 	var keep: Array = []
-	for b in bells:
-		b["age"] += 1
-		b["vel"].y += GRAV / 60.0
-		b["pos"] += b["vel"] / 60.0
+	for b in minis:
+		b["t"] += 1
 		var p: Vector2 = b["pos"]
-		if p.y > inn.end.y - 4.0:
-			p.y = inn.end.y - 4.0
-			if not b["bounced"]:
-				b["vel"] = Vector2(b["vel"].x * 0.5, -absf(b["vel"].y) * 0.4)
-				b["bounced"] = true
-				room.sfx.emit("crunch")
-			else:
-				b["vel"] = Vector2(b["vel"].x * 0.9, 0.0)
-		if p.x < inn.position.x + 4.0 or p.x > inn.end.x - 4.0:
-			b["vel"].x = -b["vel"].x * 0.5
-			p.x = clampf(p.x, inn.position.x + 4.0, inn.end.x - 4.0)
+		if b["st"] == "wait":
+			if b["vel"] != Vector2.ZERO or p.y < fl - 0.5:
+				b["vel"].y += GRAV / 60.0
+				p += b["vel"] / 60.0
+				if p.y >= fl:
+					p.y = fl
+					b["vel"] = Vector2.ZERO
+			var left: int = MINI_WAIT - int(b["t"])
+			if left == MINI_LOCK:
+				# trava a marca onde o coelho está agora (no chão): dá para sair de lá antes do pulo
+				var tx := clampf(_rabbit_c().x, p.x - MINI_REACH, p.x + MINI_REACH)
+				tx = clampf(tx, inn.position.x + 14.0, inn.end.x - 14.0)
+				b["tp"] = Vector2(tx, fl)
+				b["locked"] = true
+				b["face"] = signf(tx - p.x) if tx != p.x else b["face"]
+				room.sfx.emit("lock_on")
+			elif left < MINI_LOCK and left % 12 == 0:
+				room.sfx.emit("lock_on")
+			if b["t"] >= MINI_WAIT:
+				var tx: float = (b["tp"] as Vector2).x
+				b["vel"] = Vector2((tx - p.x) / MINI_AIR, -0.5 * GRAV * MINI_AIR)
+				b["st"] = "air"
+				b["t"] = 0
+				_say("grunt")
+		elif b["st"] == "air":
+			b["vel"].y += GRAV / 60.0
+			p += b["vel"] / 60.0
+			if p.y >= fl and b["vel"].y > 0.0:
+				p.y = fl
+				b["vel"] = Vector2.ZERO
+				b["st"] = "fuse"
+				b["t"] = 0
+				room.shake = maxf(room.shake, 1.5)
+				room.sfx.emit("slam")
+			p.x = clampf(p.x, inn.position.x + 8.0, inn.end.x - 8.0)
+		else:
+			if b["t"] % 10 == 0:
+				room.sfx.emit("lock_on")
+			if b["t"] >= MINI_FUSE:
+				_mini_blast(p)
+				continue
 		b["pos"] = p
-		if room.invuln == 0 and Rect2(room.rabbit.rect).intersects(Rect2(p - Vector2(5, 3), Vector2(10, 6))):
-			room.kill()
-			continue
-		if b["age"] < 200:
-			keep.append(b)
-	bells = keep
+		keep.append(b)
+	minis = keep
+
+
+## A autodestruição: estoura (só aqui fere), na marca.
+func _mini_blast(p: Vector2) -> void:
+	room.sfx.emit("blast")
+	room.shake = maxf(room.shake, 4.0)
+	room.impact.emit(1.5)
+	room.particles.append({"pos": p + Vector2(0, -8), "vel": Vector2.ZERO, "life": 12, "col": Color(1, 1, 1, 0.9), "grav": 0.0, "ring": 6.0})
+	for i in 22:
+		var a := rng.randf() * TAU
+		room.particles.append({"pos": p + Vector2(0, -8), "vel": Vector2(cos(a), sin(a)) * rng.randf_range(50.0, 170.0),
+			"life": rng.randi_range(12, 26), "col": [C_SHELL, C_GOO, C_SKIN, Color("ffb050")][i % 4], "grav": 140.0})
+	var rc := _rabbit_c()
+	if room.invuln == 0 and absf(rc.x - p.x) < MINI_BLAST and rc.y > p.y - MINI_BLAST_H and rc.y < p.y + 6.0:
+		room.kill()
 
 
 # ---------------------------------------------------------------- desenho
 
 func _process(_d: float) -> void:
 	queue_redraw()
+
+
+## Os caramujos-bomba: a marca da explosão no chão (trava vermelha antes do pulo, pulsando) e o caramujo
+## grande (concha roxa, olhos em haste), piscando em branco/vermelho cada vez mais rápido.
+func _draw_minis(base: Transform2D) -> void:
+	for b in minis:
+		var fl := _inner().end.y
+		var st: String = b["st"]
+		var blink := _mini_blink(b)
+		draw_set_transform_matrix(base)
+		var zone := Vector2.ZERO
+		var show := false
+		if st == "fuse":
+			zone = b["pos"]
+			show = true
+		elif b["locked"]:
+			zone = b["tp"]
+			show = true
+		if show:
+			var cx := roundf(zone.x)
+			var a := 0.5 if blink else 0.3
+			if st == "fuse" and blink:
+				a = 0.8
+			draw_rect(Rect2(cx - MINI_BLAST, fl - 2.0, MINI_BLAST * 2.0, 2.0), Color(0, 0, 0, 0.5))
+			draw_rect(Rect2(cx - MINI_BLAST, fl - 3.0, MINI_BLAST * 2.0, 1.0), Color(1.0, 0.25, 0.3, 0.45 + a))
+			draw_rect(Rect2(cx - MINI_BLAST, fl - MINI_BLAST_H, 1.0, MINI_BLAST_H - 2.0), Color(1.0, 0.25, 0.3, a))
+			draw_rect(Rect2(cx + MINI_BLAST - 1.0, fl - MINI_BLAST_H, 1.0, MINI_BLAST_H - 2.0), Color(1.0, 0.25, 0.3, a))
+			draw_rect(Rect2(cx - MINI_BLAST, fl - MINI_BLAST_H, MINI_BLAST * 2.0, 1.0), Color(1.0, 0.25, 0.3, a * 0.7))
+		var p: Vector2 = (b["pos"] as Vector2).round()
+		var f: float = b["face"]
+		var sq := 1.0
+		if st == "air":
+			sq = 1.0 + clampf(absf((b["vel"] as Vector2).y) / 400.0, 0.0, 0.3)
+		draw_set_transform_matrix(base * Transform2D(Vector2(f, 0), Vector2(0, sq), p))
+		var tint := Color(1, 1, 1, 0)
+		if blink:
+			tint = Color(1.0, 0.3, 0.3, 0.75) if st != "wait" else Color(1, 1, 1, 0.6)
+		var body := C_SKIN.lerp(tint, tint.a)
+		var shell := C_SHELL.lerp(tint, tint.a)
+		var dark := C_SHELL_DARK.lerp(tint, tint.a * 0.6)
+		# o corpo (lesma) e a cabeça à frente
+		draw_rect(Rect2(-10, -5, 20, 5), body)
+		draw_rect(Rect2(6, -9, 6, 6), body)
+		draw_rect(Rect2(10, -7, 3, 3), body)
+		# olhos em haste
+		draw_rect(Rect2(8, -14, 1, 5), body)
+		draw_rect(Rect2(11, -13, 1, 4), body)
+		draw_rect(Rect2(7, -16, 3, 3), Color.BLACK if not blink else Color("ffe0e0"))
+		draw_rect(Rect2(10, -15, 3, 3), Color.BLACK if not blink else Color("ffe0e0"))
+		# a concha, grande
+		draw_circle(Vector2(-3, -10), 8.0, shell)
+		draw_circle(Vector2(-3, -10), 5.0, dark)
+		draw_circle(Vector2(-3, -10), 2.5, shell)
+		draw_arc(Vector2(-3, -10), 8.0, PI * 0.9, PI * 1.7, 8, C_SHELL_LINE.lerp(tint, tint.a), 1.0)
+	draw_set_transform_matrix(base)
 
 
 func _draw() -> void:
@@ -1129,13 +1261,7 @@ func _draw() -> void:
 		draw_rect(Rect2(cx - LEAP_LAND, fl - 3.0, LEAP_LAND * 2.0, 1.0), Color(1.0, 0.25, 0.3, 0.35 + 0.45 * pulse))
 		draw_rect(Rect2(cx - LEAP_LAND, fl - 7.0, 1.0, 5.0), Color(1.0, 0.25, 0.3, 0.6))
 		draw_rect(Rect2(cx + LEAP_LAND - 1.0, fl - 7.0, 1.0, 5.0), Color(1.0, 0.25, 0.3, 0.6))
-	for b in bells:
-		draw_set_transform_matrix(base * Transform2D(b["age"] * 0.3, (b["pos"] as Vector2).round()))
-		draw_rect(Rect2(-5, -1, 10, 2), Color("6a6d75"))
-		draw_rect(Rect2(-6, -3, 3, 6), Color("2b2c33"))
-		draw_rect(Rect2(3, -3, 3, 6), Color("2b2c33"))
-		draw_rect(Rect2(-6, -3, 3, 1), Color("8a8d95"))
-		draw_rect(Rect2(3, -3, 3, 1), Color("8a8d95"))
+	_draw_minis(base)
 	_draw_snail(base)
 	for sp in spits:
 		var q: Vector2 = (sp["pos"] as Vector2).round()
@@ -1555,7 +1681,7 @@ func _start_grab() -> void:
 	state = "grabbed"
 	t = 0
 	walls.clear()
-	bells.clear()
+	minis.clear()
 	fly_t = 0
 	vel = Vector2.ZERO
 	room.input_lock = true
@@ -1606,7 +1732,7 @@ func _grabbed() -> void:
 		r.impact.emit(1.5 + 0.8 * k)
 		r.sfx.emit("blast" if k == 2 else "slam")
 	if t == G_ROAR:
-		r.sfx.emit("senzi_scream")
+		_say("scream")
 	if hero_on:
 		r.cam_focus = Vector2((hx + pos.x) / 2.0, hy - 40.0)
 	if t >= G_END:
@@ -1788,7 +1914,7 @@ func _s_act() -> void:
 			if act_t == wind + 1:
 				room.sfx.emit("blast" if act == "charge" else "thump")
 				if act == "charge":
-					room.sfx.emit("senzi_scream")
+					_say("scream")
 			if act_t >= wind + 1 and act_t <= wind + 4 and not s_hit_done:
 				var reach := SJAB_REACH + (24.0 if act == "charge" else 0.0)
 				if dist < reach and hy > _inner().end.y - 34.0 and not h_crouch:   # agachado, passa por cima
@@ -1862,7 +1988,7 @@ func _s_act() -> void:
 				if grabbed_t >= GRAB_HOLD:
 					grabbed_t = -1
 					# arremessa por cima, para trás dele
-					room.sfx.emit("senzi_grunt")
+					_say("grunt")
 					_hit_hero(GRAB_DMG, true, Vector2(-toward * 230.0, -240.0))
 					act_t = GRAB_WIND + 20
 			if act_t >= GRAB_WIND + 32 and grabbed_t < 0:
@@ -1938,13 +2064,13 @@ func _hit_senzi(dmg: float, kind := "jab") -> void:
 	bar_hit = 10
 	room.shake = maxf(room.shake, 2.5)
 	room.sfx.emit("crunch")
-	room.sfx.emit("senzi_grunt")   # apanhou: grita
+	_say("grunt")   # apanhou: grita
 	_spark(Vector2(pos.x - sd * 12.0, pos.y - 14.0), Color(1, 1, 1))
 	if _s_hearts() < hearts0:
 		room.shake = 6.0
 		room.impact.emit(3.0)
 		room.sfx.emit("blast")
-		room.sfx.emit("senzi_scream")   # perdeu um coração: o grito inteiro
+		_say("scream")   # perdeu um coração: o grito inteiro
 		act_i = 0
 	if s_hp <= 0.0:
 		_ring_win()
@@ -2350,3 +2476,9 @@ func _melt_drips() -> void:
 		# um naco que cai
 		room.particles.append({"pos": at, "vel": Vector2(rng.randf_range(-20, 20), -rng.randf_range(10, 40)),
 			"life": rng.randi_range(25, 40), "col": C_MELT[2].darkened(0.2), "grav": 400.0})
+
+
+## A voz do Senzi: quanto mais deformado (a fase, que segue a vida dele), mais destorcida ("senzi_scream2"...).
+func _say(kind: String) -> void:
+	var lvl := _phase()
+	room.sfx.emit("senzi_" + kind + (str(lvl + 1) if lvl > 0 else ""))
