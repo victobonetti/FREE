@@ -1092,11 +1092,27 @@ func _world_enter(id: String, entry_exit: int, vel: Vector2, toca := -1) -> void
 	custom = "world"
 	world_room = id
 	wstate.visited[id] = true
+	if bool(def.get("ending", false)):
+		# o Campo, de novo: o céu de verdade (o fim)
+		wstate.save()
+		call_deferred("_end_custom", true)
+		return
 	_spawn_room(def, -1, "")
 	if not room.world_event.is_connected(_on_world_event):
 		room.world_event.connect(_on_world_event)
 	world_map.current = id
 	world_map.screen_w = get_viewport().get_visible_rect().size.x
+
+
+## Um aviso embaixo da tela (o item pego, a toca): aparece e some sozinho.
+func _world_notice(text: String) -> void:
+	hint.text = text
+	hint.modulate.a = 0.0
+	if hint_tween != null:
+		hint_tween.kill()
+	hint_tween = create_tween()
+	hint_tween.tween_property(hint, "modulate:a", 1.0, 0.3)
+	hint_tween.tween_property(hint, "modulate:a", 0.0, 1.0).set_delay(3.5)
 
 
 ## A sala avisou de algo do mundo: um item pego, uma barreira aberta, o coelho dormiu numa toca.
@@ -1108,6 +1124,10 @@ func _on_world_event(kind: String, data: Dictionary) -> void:
 		"item":
 			wstate.taken[key] = true
 			wstate.give(str(data["give"]))
+			var g := str(data["give"])
+			var nm: String = WorldState.ABILITY_NAMES.get(g, WorldState.ITEM_NAMES.get(g, g))
+			var tip: String = WorldState.ABILITY_HINTS.get(g, "")
+			_world_notice(nm + ("  ·  " + tip if tip != "" else ""))
 			room.def["_taken"] = _keys_of(wstate.taken, world_room)
 			room.def["_abilities"] = wstate.abilities.duplicate()
 			room.def["_items"] = wstate.items.duplicate()
@@ -1119,6 +1139,7 @@ func _on_world_event(kind: String, data: Dictionary) -> void:
 		"toca":
 			wstate.toca = {"room": world_room, "toca": int(data.get("index", 0))}
 			wstate.save()
+			_world_notice("Salvo")
 		"boss":
 			wstate.bosses[world_room] = true
 			wstate.save()
@@ -1132,6 +1153,12 @@ func _on_room_exited(_side: int, vel: Vector2) -> void:
 		return
 	if room != null and room.exits_unlocked:
 		wstate.solved[world_room] = true
+	# a corrida do Gatsby: sair pela saída do fim é vencer
+	if room != null:
+		for v in room.def.get("win_exit", []):
+			if int(v) == room.exit_index:
+				wstate.bosses[world_room] = true
+				wstate.save()
 	var o := 0
 	if room != null and room.rose:
 		o = room.exit_orient

@@ -10,6 +10,18 @@ const Check := preload("res://scripts/world_check.gd")
 func _init() -> void:
 	var w := World.load_world()
 	var only: Array = Array(OS.get_cmdline_user_args())
+	if not only.is_empty() and only[0] == "trace":
+		# trace <sala> <entrada> <alvo> [habilidades...]
+		var ab2 := {}
+		for a in only.slice(4):
+			ab2[a] = true
+		var tg = only[3]
+		if String(tg).is_valid_int():
+			tg = int(tg)
+		for st in Check.trace_path(World.load_room_def(only[1]), ab2, int(only[2]), tg):
+			print("  giro %d  (%d, %d)  %s" % [st[0], st[1], st[2], ["chão", "ar", "ar2"][st[3]]])
+		quit()
+		return
 	if not only.is_empty() and only[0] == "reach":
 		# reach <sala> [habilidades...]: de cada saída, aonde se chega (modo alcance)
 		var ab := {}

@@ -11,8 +11,9 @@ extends RefCounted
 ##   dizem de que saída se chega a que saída com as habilidades e os itens de agora. O validador de
 ##   progressão do mundo anda por essas ligações, ganhando o que as salas dão.
 ##
-## O modelo (em tiles, o coelho ocupa 2×2): andar (1 por tile), pular (até 3 para cima e 2 para o
-## lado no alto; 1 por tile), cair (de graça; 1 por tile de deriva), girar no chão (A1) ou uma vez no ar
+## O modelo (em tiles, o coelho ocupa 2×2): andar (1 por tile), pular (até 3 para cima, 1 de lado por
+## linha e mais 1 no alto; 1 por tile), cair (de graça no aberto, 1 por tile no corredor; 1 de deriva
+## a cada 2), girar no chão (A1) ou uma vez no ar
 ## (A2), 2 por giro. Corda, ventilador, vapor e plataforma móvel valem como escada (sobe e desce);
 ## água deixa nadar (afundar só com o mergulho, A3); mola e cogumelo-mola pulam alto. Espinhos e ácido
 ## não se pisam. A saída comum só deixa passar de pé (D100).
@@ -258,6 +259,7 @@ static func _dijkstra(m: Dictionary, grids: Array, entry: int, ab: Dictionary, r
 	var half := can_rot and ab.has("A5")
 	# índice do estado: ((o * h_max + y) * w_max + x) * 3 + modo
 	var wm := maxi(w0, h0)
+	_wm = wm
 	var n := 4 * wm * wm * 3
 	var dist := PackedInt32Array()
 	dist.resize(n)
@@ -282,6 +284,7 @@ static func _dijkstra(m: Dictionary, grids: Array, entry: int, ab: Dictionary, r
 			bi += 1
 			if dist[s] != cost:
 				continue
+			_cur = s
 			var mode := s % 3
 			var cell := s / 3
 			var x := cell % wm
@@ -295,12 +298,16 @@ static func _dijkstra(m: Dictionary, grids: Array, entry: int, ab: Dictionary, r
 			if e >= 0:
 				if not best.has(e):
 					best[e] = cost
+					if trace_on:
+						_hit[e] = s
 				var eo := "%d@%d" % [e, o]
 				if not best.has(eo):
 					best[eo] = cost
 			var it := _item_touch(g, x, y)
 			if it >= 0 and not best.has("i%d" % it):
 				best["i%d" % it] = cost
+				if trace_on:
+					_hit["i%d" % it] = s
 			var hold := _hold(g, x, y)
 			var sup := _supported(g, x, y)
 			if mode != M_GROUND:
@@ -308,11 +315,15 @@ static func _dijkstra(m: Dictionary, grids: Array, entry: int, ab: Dictionary, r
 					_push(dist, buckets, ((o * wm + y) * wm + x) * 3 + M_GROUND, cost)
 					continue
 				# cair: reto de graça, na diagonal 1
+				# caindo em cima de espinho (ou ácido): morreu (não dá para girar depois de encostar)
+				if not _free(g, x, y + 1) and _deadly_below(g, x, y):
+					continue
 				# no corredor estreito, cair custa como andar (girado, o túnel não é atalho)
 				var nar := 1 if _narrow(g, x, y + 1) else 0
-				for dx in [0, -1, 1]:
+				# deriva no ar: 1 tile de lado a cada 2 de queda (o coelho anda 72 px/s; a queda acelera)
+				for dx in ([0, -1, 1] if (y + 1) % 2 == 0 else [0]):
 					var nx: int = x + dx
-					if _free(g, nx, y + 1) and (dx == 0 or (_free(g, nx, y) and _free(g, x, y + 1))):
+					if _free(g, nx, y + 1) and (dx == 0 or _free(g, nx, y) or _free(g, x, y + 1)):
 						_push(dist, buckets, ((o * wm + y + 1) * wm + nx) * 3 + mode, cost + maxi(absi(dx), nar))
 				if mode == M_FALL and air_rot:
 					_rotate_edges(dist, buckets, wm, grids, o, x, y, cost, M_FALL2, half)
@@ -340,26 +351,42 @@ static func _dijkstra(m: Dictionary, grids: Array, entry: int, ab: Dictionary, r
 	return best
 
 
+## Depuração: guarda de onde veio cada estado (trace_path).
+static var trace_on := false
+static var _parent := {}
+static var _cur := -1
+static var _hit := {}
+static var _wm := 0
+
+
 static func _push(dist: PackedInt32Array, buckets: Array, s: int, c: int) -> void:
 	if c >= dist[s]:
 		return
 	dist[s] = c
+	if trace_on:
+		_parent[s] = _cur
 	while buckets.size() <= c:
 		buckets.append([])
 	(buckets[c] as Array).append(s)
 
 
+## O pulo: sobe até `jh`, andando 1 de lado por linha (o coelho corre 72 px/s também subindo), e
+## mais 1 de lado no alto. A queda depois segue com a deriva de 1 a cada 2 linhas.
 static func _jump_edges(dist: PackedInt32Array, buckets: Array, wm: int, g: Dictionary, o: int, x: int, y: int, cost: int, jh: int, mode: int) -> void:
-	for hgt in range(1, jh + 1):
-		if not _free(g, x, y - hgt):
-			break
-		var ny := y - hgt
-		_push(dist, buckets, ((o * wm + ny) * wm + x) * 3 + mode, cost + hgt)
-		for d in [-1, 1]:
-			for k in range(1, 3):
-				if not _free(g, x + d * k, ny):
-					break
-				_push(dist, buckets, ((o * wm + ny) * wm + x + d * k) * 3 + mode, cost + hgt + k)
+	for d in [0, -1, 1]:
+		var cx := x
+		var cy := y
+		for i in range(1, jh + 1):
+			if d != 0 and _free(g, cx + d, cy - 1) and _free(g, cx, cy - 1):
+				cx += d
+				cy -= 1
+			elif _free(g, cx, cy - 1):
+				cy -= 1
+			else:
+				break
+			_push(dist, buckets, ((o * wm + cy) * wm + cx) * 3 + mode, cost + i + absi(cx - x))
+		if d != 0 and _free(g, cx + d, cy):
+			_push(dist, buckets, ((o * wm + cy) * wm + cx + d) * 3 + mode, cost + (y - cy) + absi(cx + d - x))
 
 
 static func _rotate_edges(dist: PackedInt32Array, buckets: Array, wm: int, grids: Array, o: int, x: int, y: int, cost: int, mode: int, half: bool) -> void:
@@ -412,6 +439,10 @@ static func _free(g: Dictionary, x: int, y: int) -> bool:
 			if k == SOLID or k == DEADLY:
 				return false
 	return true
+
+
+static func _deadly_below(g: Dictionary, x: int, y: int) -> bool:
+	return _k(g, x, y + 2) == DEADLY or _k(g, x + 1, y + 2) == DEADLY
 
 
 static func _supported(g: Dictionary, x: int, y: int) -> bool:
@@ -641,8 +672,10 @@ static func progression(w: Dictionary) -> Dictionary:
 			break
 	var missing: Array = []
 	for r in World.rooms(w):
-		if not reached.has(str(r["id"])):
-			missing.append(str(r["id"]))
+		var rid := str(r["id"])
+		# o Campo do fim só abre depois do amortecedor-mor (a subida final): não conta
+		if not reached.has(rid) and not bool(World.load_room_def(rid).get("ending", false)):
+			missing.append(rid)
 	return {"waves": waves, "reached": reached, "missing": missing, "items": got, "abilities": ab, "inventory": it}
 
 
@@ -704,3 +737,24 @@ static func _behind_barrier(def: Dictionary, r: Rect2i, ab: Dictionary, it: Dict
 		if Rect2i(int(a[0]), int(a[1]), int(a[2]), int(a[3])).grow(3).intersects(r):
 			return true
 	return false
+
+
+## O caminho do modelo da saída `entry` até `target` (índice da saída ou "iN"): [[giro, x, y, modo]].
+static func trace_path(def: Dictionary, ab: Dictionary, entry: int, target, reach := true) -> Array:
+	trace_on = true
+	_parent.clear()
+	_hit.clear()
+	var m := model(def, ab, {}, reach)
+	var grids := _rotations(m)
+	_dijkstra(m, grids, entry, ab, bool(def.get("rotate", true)))
+	trace_on = false
+	var out: Array = []
+	if not _hit.has(target):
+		return out
+	var st: int = _hit[target]
+	while st >= 0:
+		var mode := st % 3
+		var cell := st / 3
+		out.push_front([cell / (_wm * _wm), cell % _wm, (cell / _wm) % _wm, mode])
+		st = int(_parent.get(st, -1))
+	return out

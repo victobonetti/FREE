@@ -156,7 +156,7 @@ class Room:
         pulo vence 3). Abre `head` linhas acima do chão."""
         d = 1 if c1 >= c0 else -1
         f = f0
-        since = run
+        since = 0   # as primeiras colunas (a boca da saída) ficam no chão da saída
         c = c0
         while True:
             if f != f1 and since >= run:
@@ -224,10 +224,24 @@ class Room:
                 self.set(c + cc, r + rr, ch)
         if objs:
             for kind, lst in d.items():
-                if not isinstance(lst, list) or kind == "rows" or kind == "actors":
+                if kind in SCALAR_KEYS:
+                    continue
+                if kind == "spin_block":
+                    self.extra[kind] = [int(lst[0]) + c, int(lst[1]) + r, int(lst[2])]
+                    continue
+                if kind == "gatsby":
+                    self.extra[kind] = shift_script(lst, c, r)
+                    continue
+                if kind in ("actors", "omen", "elevator"):
+                    self.extra[kind] = lst
+                    continue
+                if not isinstance(lst, list):
                     continue
                 for o in lst:
                     self.objs.setdefault(kind, []).append(shift_obj(kind, o, c, r, lw if mirror else None))
+            for k in ("boss_music", "music", "spin_cooldown", "awaken"):
+                if k in d and k != "awaken":
+                    self.extra[k] = d[k]
         self.extra["puzzle"] = True   # o validador não empilha caixas: vale resolvida
         for k in ("limiter", "rotate", "reload_time", "limiter_time"):
             if k in d:
@@ -311,6 +325,23 @@ class Room:
             along = dr.c0 if dr.side in (0, 2) else dr.r0
             return (dr.side, along)
         return sorted(self.doors, key=key)
+
+
+SCALAR_KEYS = {"rows", "name", "notes", "verified", "verified_hash", "version", "start_rot", "rotate", "theme", "hint",
+               "hint_touch", "door_open", "limiter", "limiter_time", "reload_time", "boss_music", "music", "spin_cooldown",
+               "awaken"}
+
+
+def shift_script(g, dc, dr):
+    """O roteiro do Gatsby (corrida, casa de força): os gatilhos em tiles, deslocados."""
+    g = copy.deepcopy(g)
+    if "start" in g:
+        g["start"] = [int(g["start"][0]) + dc, int(g["start"][1]) + dr]
+    for st in g.get("script", []):
+        if "when" in st:
+            w = st["when"]
+            st["when"] = [int(w[0]) + dc, int(w[1]) + dr, int(w[2]), int(w[3])]
+    return g
 
 
 def shift_obj(kind, o, dc, dr, mirror_w=None):

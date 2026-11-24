@@ -15,6 +15,7 @@
 		1,
 		4
 	],
+	"entry_only_until": "L7",
 	"hint": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço",
 	"hint_touch": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço",
 	"limiter": false,
