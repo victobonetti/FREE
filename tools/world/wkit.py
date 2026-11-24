@@ -87,6 +87,8 @@ class Room:
         self.hint = ""
         self.limiter = False
         self.rotate = True
+        self.start_rot = 0
+        self.portal_nb = None   # (vizinha do P, vizinha da D): sala de portais (D124)
 
     # ------------------------------------------------------------ grade
     def inside(self, c, r):
@@ -191,6 +193,23 @@ class Room:
             left = not left
             r -= 3
 
+    def ladder(self, d0, floor):
+        """A escada até uma saída no alto (colunas d0..d0+3, linha 0): patamares a cada 3 linhas,
+        alternando à esquerda (d0-3..d0) e à direita (d0+3..d0+6), e o último embaixo da saída (linha
+        4). Entre eles, um vão de 2 (o pulo de 3 para cima anda uns 3 para o lado); nada fica em cima de
+        onde se pula."""
+        self.carve_rock(max(d0 - 3, 1), 1, min(d0 + 6, self.w - 2), floor - 1)
+        r = floor - 3
+        left = True
+        while r > 4:
+            if left:
+                self.ledge(max(d0 - 3, 1), d0, r)
+            else:
+                self.ledge(d0 + 3, min(d0 + 6, self.w - 2), r)
+            left = not left
+            r -= 3
+        self.ledge(d0, d0 + 3, 4)
+
     def connect(self, door, c, f):
         """Liga a saída `door` ao ponto (c, chão f) dentro da sala, escavando."""
         if door.side in (1, 3):
@@ -275,13 +294,41 @@ class Room:
             self.barrier(d.c0, self.h - 3, 4, 2, need)
         d.sealed = True
 
+    def portal(self, level, p_nb, d_nb, reward=(), at=None):
+        """Sala de portais (D124): a fase da campanha inteira, sem mudar nada (o começo P, a porta D,
+        o giro inicial, a porta aberta), lacrada na rocha. As saídas da borda só ligam o mapa (são
+        parede); entrando pela da vizinha `p_nb`, o coelho aparece no P; pela de `d_nb`, na porta.
+        A porta aberta leva a `d_nb`; voltar ao P leva a `p_nb`. As provas da fase (replay ou robô)
+        valem aqui. `reward`: o que a fase dá ao sair pela porta."""
+        d = load_level(level)
+        lw = max(len(x) for x in d["rows"])
+        lh = len(d["rows"])
+        if at is None:
+            at = ((self.w - lw) // 2, (self.h - lh) // 2)
+        assert lw <= self.w and lh <= self.h, "%s: a fase %s (%dx%d) não cabe" % (self.id, level, lw, lh)
+        self.embed(level, at[0], at[1], strip="")
+        self.extra["puzzle"] = True
+        self.extra["virtual_exits"] = True
+        self.extra["level"] = level
+        self.portal_nb = (p_nb, d_nb)
+        self.start_rot = int(d.get("start_rot", 0))
+        if d.get("door_open"):
+            self.extra["door_open"] = True
+        if reward:
+            self.extra["reward"] = list(reward)
+        if d.get("theme"):
+            self.theme = d["theme"]
+        for dr in self.doors:
+            dr.kind = "X"
+        return d
+
     # ------------------------------------------------------------ saída
     def stamp_doors(self):
         for dr in self.doors:
             for (c, r) in dr.cells:
                 self.g[r][c] = dr.kind
-        # as saídas precisam ter ar logo para dentro
-        for dr in self.doors:
+        # as saídas precisam ter ar logo para dentro (menos na sala de portais: lá a saída é parede)
+        for dr in ([] if self.portal_nb else self.doors):
             for (c, r) in dr.cells:
                 ic, ir = c, r
                 if dr.side == 0:
@@ -297,9 +344,13 @@ class Room:
 
     def to_json(self):
         d = {
-            "name": self.name, "rotate": self.rotate, "limiter": self.limiter, "start_rot": 0, "version": 1,
+            "name": self.name, "rotate": self.rotate, "limiter": self.limiter, "start_rot": self.start_rot, "version": 1,
             "rows": ["".join(x) for x in self.g],
         }
+        if self.portal_nb:
+            order = self.exit_order()
+            d["portal_p"] = order.index(self.door_to(self.portal_nb[0]))
+            d["portal_d"] = order.index(self.door_to(self.portal_nb[1]))
         if self.theme:
             d["theme"] = self.theme
         if self.notes:

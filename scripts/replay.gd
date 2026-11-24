@@ -101,8 +101,8 @@ static func run(def: Dictionary, replay: Dictionary) -> Dictionary:
 			else:
 				room.step(_expand(cmd))
 			frame += 1
-			if room.state == "won" or room.state == "done":
-				won = true
+			if room.state == "won" or room.state == "done" or room.state == "exit":
+				won = true   # "exit": no mundo, a porta é um portal (D124)
 				break
 		if won:
 			break
@@ -116,10 +116,11 @@ static func run(def: Dictionary, replay: Dictionary) -> Dictionary:
 		room.step({})
 		frame += 1
 		extra += 1
-		won = room.state == "won" or room.state == "done"
+		won = room.state == "won" or room.state == "done" or room.state == "exit"
+	var exit_index: int = room.exit_index if room.state == "exit" else -1
 	room.free()
 	_apply_state(before)   # devolve o estado do jogo como estava
-	return {"won": won, "frame": frame, "end": snap}
+	return {"won": won, "frame": frame, "end": snap, "exit": exit_index}
 
 
 static func _expand(cmd: Dictionary) -> Dictionary:

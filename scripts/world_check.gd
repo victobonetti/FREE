@@ -268,10 +268,16 @@ static func _dijkstra(m: Dictionary, grids: Array, entry: int, ab: Dictionary, r
 	var best := {}
 	var st: Array = _entry_state(m, entry)
 	var p0: Vector2i = st[0]
-	var g0: Dictionary = grids[0]
+	var o0 := 0
+	if not _start_at.is_empty():
+		# o robô do mundo: o caminho a partir de onde o coelho está (giro, célula)
+		o0 = int(_start_at[0])
+		p0 = _start_at[1]
+		st = [p0, 1]
+	var g0: Dictionary = grids[o0]
 	if not _free(g0, p0.x, p0.y):
 		return best
-	var s0 := ((0 * wm + p0.y) * wm + p0.x) * 3 + M_FALL
+	var s0 := ((o0 * wm + p0.y) * wm + p0.x) * 3 + M_FALL
 	dist[s0] = 0
 	buckets.append([s0])
 	var start_rise: bool = st[1] == 2
@@ -295,6 +301,8 @@ static func _dijkstra(m: Dictionary, grids: Array, entry: int, ab: Dictionary, r
 			var gh: int = g["h"]
 			# chegou numa saída aberta? (e em que giro: a rosa sai para lados diferentes)
 			var e := _exit_touch(g, x, y)
+			if e == ignore_exit and o == 0:
+				e = -1   # a saída por onde o robô entrou: passar por ela de novo não conta
 			if e >= 0:
 				if not best.has(e):
 					best[e] = cost
@@ -303,6 +311,9 @@ static func _dijkstra(m: Dictionary, grids: Array, entry: int, ab: Dictionary, r
 				var eo := "%d@%d" % [e, o]
 				if not best.has(eo):
 					best[eo] = cost
+					if trace_on:
+						_hit[eo] = s
+				continue   # encostou numa saída aberta: saiu da sala (não segue daqui)
 			var it := _item_touch(g, x, y)
 			if it >= 0 and not best.has("i%d" % it):
 				best["i%d" % it] = cost
@@ -357,6 +368,9 @@ static var _parent := {}
 static var _cur := -1
 static var _hit := {}
 static var _wm := 0
+static var _start_at: Array = []   # [giro, célula]: começar daí em vez da saída
+static var rot_extra := 0           # o robô do mundo: girar custa mais (prefere andar quando dá)
+static var ignore_exit := -1        # o robô do mundo: a saída por onde entrou
 
 
 static func _push(dist: PackedInt32Array, buckets: Array, s: int, c: int) -> void:
@@ -377,7 +391,9 @@ static func _jump_edges(dist: PackedInt32Array, buckets: Array, wm: int, g: Dict
 		var cx := x
 		var cy := y
 		for i in range(1, jh + 1):
-			if d != 0 and _free(g, cx + d, cy - 1) and _free(g, cx, cy - 1):
+			# na subida, o coelho anda ~2 tiles nos 3 de altura (72 px/s em ~0,25 s): de lado só depois
+			# da primeira linha
+			if d != 0 and i >= 2 and _free(g, cx + d, cy - 1) and _free(g, cx, cy - 1):
 				cx += d
 				cy -= 1
 			elif _free(g, cx, cy - 1):
@@ -405,7 +421,7 @@ static func _rotate_edges(dist: PackedInt32Array, buckets: Array, wm: int, grids
 		var no := posmod(o + (2 if d == 2 else d), 4)
 		var g2: Dictionary = grids[no]
 		if _free(g2, p.x, p.y):
-			_push(dist, buckets, ((no * wm + p.y) * wm + p.x) * 3 + mode, cost + ROT_COST)
+			_push(dist, buckets, ((no * wm + p.y) * wm + p.x) * 3 + mode, cost + ROT_COST + rot_extra * (2 if mode == M_FALL2 else 1))
 
 
 ## O vão na altura do corpo é estreito (até NARROW tiles de largura)? Um corredor, não um salão.
@@ -539,6 +555,23 @@ static func flip_skips(def: Dictionary, abilities := {"A1": true, "A2": true}) -
 	return out
 
 
+## A regra do giro numa sala do mundo: a de portais (D124) é a fase da campanha, do P à porta (só se a
+## porta não é trancada: trancada, o enigma segura); as outras, saída a saída. [] se passa.
+static func room_skips(def: Dictionary) -> Array:
+	if def.has("flip_exempt"):
+		return []
+	if def.has("portal_p"):
+		if not bool(def.get("door_open", false)):
+			return []
+		var ls := level_skip(def)
+		if ls.is_empty():
+			return []
+		if int(ls["dist"]) >= SKIP_MIN_DIST and float(ls["rot"]) < SKIP_RATIO * float(ls["dist"]) and float(ls["rot"]) < SKIP_VS_UP * float(ls["up"]):
+			return [{"from": "P", "to": "D", "rot": ls["rot"], "up": ls["up"], "dist": ls["dist"]}]
+		return []
+	return flip_skips(def)
+
+
 ## O mesmo para uma fase da campanha (sem saídas): do começo (P) à porta (D), com e sem giro.
 static func level_skip(def: Dictionary, abilities := {"A1": true, "A2": true}) -> Dictionary:
 	var rows: Array = def.get("rows", []).duplicate()
@@ -623,6 +656,13 @@ static func progression(w: Dictionary) -> Dictionary:
 				reached[id] = wave + 1
 			var def := World.load_room_def(id)
 			var res := _room_reach(id, def, e, ab, it)
+			# sala de portais (D124): sair pela porta dá a recompensa da fase
+			if def.has("reward") and res.has(int(def.get("portal_d", -1))):
+				var rk := "%s:reward" % id
+				if not got.has(rk):
+					got[rk] = wave + 1
+					for g in def["reward"]:
+						gains.append([str(g), id])
 			var il: Array = def.get("items", [])
 			for k in res:
 				if typeof(k) == TYPE_STRING and String(k).begins_with("i"):
@@ -667,7 +707,7 @@ static func progression(w: Dictionary) -> Dictionary:
 				if g in ["noz", "cracha", "lanterna", "chave1", "chave2", "chave3"] and before == 0:
 					new_any = true
 			names.append("%s (%s)" % [g, gk[1]])
-		waves.append({"rooms": reached.size(), "gains": names})
+		waves.append({"rooms": reached.size(), "gains": names, "abilities": ab.duplicate(), "items": it.duplicate()})
 		if not new_any:
 			break
 	var missing: Array = []
@@ -744,7 +784,7 @@ static func trace_path(def: Dictionary, ab: Dictionary, entry: int, target, reac
 	trace_on = true
 	_parent.clear()
 	_hit.clear()
-	var m := model(def, ab, {}, reach)
+	var m := model(def, ab, def.get("_items", {}), reach)
 	var grids := _rotations(m)
 	_dijkstra(m, grids, entry, ab, bool(def.get("rotate", true)))
 	trace_on = false
@@ -757,4 +797,12 @@ static func trace_path(def: Dictionary, ab: Dictionary, entry: int, target, reac
 		var cell := st / 3
 		out.push_front([cell / (_wm * _wm), cell % _wm, (cell / _wm) % _wm, mode])
 		st = int(_parent.get(st, -1))
+	return out
+
+
+## O caminho do modelo a partir da célula `p` (canto do 2x2) com a sala girada `o`, até `target`.
+static func trace_from(def: Dictionary, ab: Dictionary, p: Vector2i, o: int, target, reach := true) -> Array:
+	_start_at = [o, p]
+	var out := trace_path(def, ab, 0, target, reach)
+	_start_at = []
 	return out

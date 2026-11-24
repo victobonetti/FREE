@@ -3,41 +3,18 @@
 		"res://scripts/boss_squirrel.gd"
 	],
 	"boss_music": "res://music/boss-rush-groove.mp3",
-	"items": [
-		{
-			"after_boss": 1,
-			"give": "A4",
-			"rect": [
-				10,
-				19,
-				2,
-				2
-			]
-		},
-		{
-			"after_boss": 1,
-			"give": "chave1",
-			"rect": [
-				15,
-				19,
-				2,
-				2
-			]
-		},
-		{
-			"after_boss": 1,
-			"give": "noz",
-			"rect": [
-				26,
-				19,
-				2,
-				2
-			]
-		}
-	],
+	"level": "jeffrey",
 	"limiter": false,
 	"name": "Covil do Jeffrey",
-	"notes": "Covil do Jeffrey (chefe, fase 17): vencido, deixa o puxar caixas (A4), a chave 1 e a noz-mestra.",
+	"notes": "Covil do Jeffrey (fase da campanha, inteira: entra-se no começo, a porta leva adiante; D124).",
+	"portal_d": 1,
+	"portal_p": 0,
+	"puzzle": true,
+	"reward": [
+		"A4",
+		"chave1",
+		"noz"
+	],
 	"rotate": true,
 	"rows": [
 		"####XXXX################################",
@@ -57,10 +34,10 @@
 		"#......................................#",
 		"#......................................#",
 		"#......................................#",
-		"#......................................#",
-		"#......................................Z",
-		"#......................................Z",
-		"#......................................Z",
+		"#...................................DD.#",
+		"#...................................DD.X",
+		"#..PP...............................DD.X",
+		"#..PP...............................DD.X",
 		"########################################"
 	],
 	"spin_block": [
@@ -71,5 +48,6 @@
 	"spin_cooldown": 45,
 	"start_rot": 0,
 	"theme": "despensa",
-	"version": 1
+	"version": 1,
+	"virtual_exits": true
 }

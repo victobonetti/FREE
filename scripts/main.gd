@@ -1188,6 +1188,21 @@ func _on_room_exited(_side: int, vel: Vector2) -> void:
 		return
 	if room != null and room.exits_unlocked:
 		wstate.solved[world_room] = true
+	# sala de portais (D124): sair pela porta dá a recompensa da fase (a habilidade, a chave...)
+	if room != null and room.portal_d >= 0 and room.exit_index == room.portal_d:
+		var rk := "%s:reward" % world_room
+		if not wstate.taken.has(rk) and room.def.has("reward"):
+			wstate.taken[rk] = true
+			var names: Array = []
+			for g in room.def["reward"]:
+				wstate.give(str(g))
+				names.append(WorldState.ABILITY_NAMES.get(str(g), WorldState.ITEM_NAMES.get(str(g), str(g))))
+			wstate.solved[world_room] = true
+			wstate.save()
+			var first := str(room.def["reward"][0])
+			var tip: String = WorldState.ABILITY_HINTS.get(first, "")
+			call_deferred("_world_notice", ", ".join(names) + ("  ·  " + tip if tip != "" else ""))
+		wstate.solved[world_room] = true
 	# as caixas ficam onde o coelho deixou (D123)
 	if room != null:
 		var st: Dictionary = room.snapshot()

@@ -90,16 +90,6 @@ def r1(rm):
     rm.notes = "Primeiros passos (refeita, D123): a caixa é o degrau até a saída no alto."
 
 
-@recipe("r2")
-def r2(rm):
-    rm.theme = "raizes"
-    rm.embed("degraus", 25, 4, mirror=True)
-    rm.tunnel(78, 13, 53, 15)
-    rm.tunnel(1, 19, 25, 15)
-    rm.door_to("r3").kind = "Z"
-    rm.notes = "Degraus (fase 2, espelhada), mais alta que os corredores."
-
-
 @recipe("r3")
 def r3(rm):
     """Raiz torta (nova, sem giro): a caixa da prateleira cai no vão e vira o degrau da parede."""
@@ -119,13 +109,13 @@ def r3(rm):
 
 @recipe("r4")
 def r4(rm):
-    """Toca do susto: a cápsula da batida de pata (A1) no corredor; o poço leva à câmara de baixo,
-    onde as paredes só se passam girando (por cima delas há um vão estreito)."""
+    """Toca do susto: a cápsula da batida de pata (A1) no corredor; o vão leva à câmara de baixo, onde
+    as paredes só se passam girando (por cima delas há um vão estreito). O corredor segue até a
+    Fresta (o segredo do giro no ar)."""
     rm.theme = "raizes"
-    rm.tunnel(38, 19, 24, 19)
-    rm.tunnel(24, 19, 14, 17)
+    rm.carve(1, 16, 38, 18)
     rm.item(28, 17, "A1")
-    rm.carve(14, 17, 19, 29)          # o poço para baixo
+    rm.carve(19, 19, 21, 29)          # o vão para a câmara de baixo
     rm.carve(11, 30, 28, 40)          # a câmara do meio
     rm.carve(1, 30, 8, 40)            # à esquerda (saída para a Toca longa)
     rm.carve(31, 30, 38, 40)          # à direita (saída para a Comporta)
@@ -133,25 +123,12 @@ def r4(rm):
     rm.carve(29, 30, 30, 32)
     rm.fill(1, 30, 6, 33)             # tetos baixos dos lados: girado, não se cai reto
     rm.fill(33, 30, 38, 33)
+    for c in (6, 13, 33):
+        rm.set(c, 16, "#")
     rm.notes = "Toca do susto: a cápsula do giro (A1); embaixo, as paredes de 9 só passam girando."
 
 
 # ---------------------------------------------------------------- as Cavernas
-
-@recipe("c1")
-def c1(rm):
-    rm.theme = "caverna"
-    rm.embed("comporta", 5, 10)
-    rm.carve(1, 16, 5, 18)
-    rm.tunnel(34, 19, 45, 17)
-    rm.tunnel(45, 17, 58, 17)
-    rm.tunnel(58, 17, 72, 19)
-    rm.carve(36, 19, 39, 20)
-    rm.carve(67, 19, 70, 20)
-    rm.door_to("c5").kind = "Z"
-    rm.door_to("rA").kind = "Z"
-    rm.notes = "Comporta (fase 4): resolvida, abre as descidas para o Ninho e para a rosa."
-
 
 @recipe("c5")
 def c5(rm):
@@ -162,7 +139,8 @@ def c5(rm):
     rm.ledge(46, rm.w - 2, 13)
     rm.ledge(42, 44, 16)
     rm.toca(10, 19)
-    rm.notes = "Ninho (toca de salvar, sem giro)."
+    rm.item(37, 17, "A2")                         # no pé do poço da Comporta: quem desce pega
+    rm.notes = "Ninho (toca de salvar, sem giro): a cápsula do giro no ar (A2), antes das salas que pedem ele (D124)."
 
 
 ROT_GLYPH = {"=": "}", "}": "_", "_": "{", "{": "=", "↑": "→", "→": "↓", "↓": "←", "←": "↑",
@@ -199,38 +177,6 @@ def rA(rm):
     rm.notes = "Rosa das raízes (D119): a abertura gira com a sala e guarda o giro."
 
 
-@recipe("c2")
-def c2(rm):
-    rm.theme = "caverna"
-    rm.embed("derrame", 1, 20)
-    rm.tunnel(36, 35, 78, 41)
-    rm.carve(38, 36, 41, 42)
-    rm.door_to("c3").kind = "Z"
-    rm.notes = "Derrame (fase 5): comportas em cadeia; resolvido, abre as Setas."
-
-
-@recipe("c3")
-def c3(rm):
-    rm.theme = "caverna"
-    rm.embed("setas", 10, 26)
-    rm.carve(1, 38, 10, 40)
-    rm.carve(29, 38, 38, 40)
-    rm.door_to("P1").kind = "Z"
-    rm.notes = "Setas (fase 7): resolvida, abre o atalho de volta ao Poço (mão única)."
-
-
-@recipe("c4")
-def c4(rm):
-    rm.theme = "caverna"
-    rm.embed("toca", 36, 8, mirror=True)
-    rm.carve(74, 16, 78, 18)
-    rm.tunnel(36, 19, 24, 19)
-    rm.carve(20, 16, 24, 18)
-    rm.carve(20, 19, 23, 20)
-    rm.door_to("c8").kind = "Z"
-    rm.notes = "Toca longa (fase 6, espelhada): resolvida, abre a descida para a Vertigem."
-
-
 def spiky_shaft(rm, c0, c1, r0, r1, openings=(), bottom=True, hole=None):
     """Uma câmara (colunas c0..c1, linhas r0..r1) forrada de espinhos (paredes, fundo e teto, menos o
     vão `hole` = (col0, col1) do teto, por onde se cai) e com aberturas [(lado 'L'/'R', linha0,
@@ -251,16 +197,6 @@ def spiky_shaft(rm, c0, c1, r0, r1, openings=(), bottom=True, hole=None):
         rm.carve(cc, a, cc, b)
     if bottom:
         rm.spikes(c0, c1, r1, "^")
-
-
-@recipe("c6")
-def c6(rm):
-    rm.theme = "caverna"
-    rm.embed("espinhos", 48, 1, mirror=True)
-    rm.tunnel(75, 18, 78, 19)
-    rm.carve(75, 15, 76, 17)
-    rm.door_to("c9").kind = "Z"
-    rm.notes = "Espinhos (fase 8, espelhada): cai-se da rosa; resolvida, abre a Galeria."
 
 
 @recipe("c7")
@@ -284,23 +220,6 @@ def c7(rm):
     rm.fill(20, 34, 22, 36)
     rm.fill(32, 34, 34, 36)
     rm.notes = "Prumo (refeita, D120): a corda no poço; o vão sobre os espinhos leva à rosa funda com o giro no ar (A2)."
-
-
-@recipe("c8")
-def c8(rm):
-    rm.theme = "caverna"
-    rm.embed("vertigem", 41, 12)
-    rm.carve(79, 13, 83, 15)                       # o nicho da cápsula, atrás da trava da sala
-    rm.carve(78, 13, 78, 15)
-    rm.barrier(79, 13, 2, 3, "sala")
-    rm.item(81, 14, "A2")
-    rm.carve(78, 28, 78, 30)
-    rm.tunnel(78, 31, 96, 35)
-    rm.tunnel(96, 35, 106, 35)
-    rm.tunnel(106, 35, 118, 41)
-    rm.shaft(99, 1, 34)
-    rm.tunnel(1, 19, 41, 19)
-    rm.notes = "Vertigem (fase 10): resolvida, a trava abre o nicho do giro no ar (A2)."
 
 
 @recipe("c9")
@@ -338,16 +257,17 @@ def c9(rm):
 
 @recipe("cx")
 def cx(rm):
-    """Fresta (segredo): do corredor de cima, um vão sobre a câmara de espinhos; só girando no ar
-    (A2) se cai de lado no nicho do coração, do outro lado."""
+    """Fresta (segredo): o poço de espinhos largo demais para pular; o coração fica no bloco do outro
+    lado. Girar no chão (A1) faz cair de lado nos espinhos da parede do bloco; só pulando e girando no
+    ar (A2) se voa por cima deles e se pousa no bloco."""
     rm.theme = "caverna"
-    rm.carve(50, 16, 78, 18)
-    rm.shaft(52, 2, 18)
-    rm.carve(29, 2, 57, 4)                         # o corredor de cima (chão 5)
-    rm.carve(30, 5, 32, 5)
-    spiky_shaft(rm, 14, 33, 6, 20, openings=[("L", 10, 15)], hole=(30, 32))
-    rm.carve(3, 10, 12, 15)                        # o nicho
-    rm.item(6, 14, "coracao")
+    rm.carve(1, 9, 38, 18)
+    rm.spikes(6, 30, 18)              # o fundo do poço (no chão)
+    rm.fill(1, 14, 5, 18)             # o bloco do coração (em cima: linha 14)
+    for r in range(16, 18):
+        rm.set(6, r, ">")             # a cara do bloco: espinhos embaixo, rocha em cima
+    rm.spikes(6, 30, 9, "v")          # o teto do poço
+    rm.item(2, 12, "coracao")
     rm.notes = "Fresta (segredo): o coração 1, com o giro no ar (A2)."
 
 
@@ -375,71 +295,6 @@ def hx(rm):
     for c in (6, 14, 25, 32):
         rm.set(c, 6, "#")
     rm.notes = "Câmara de cristal (escondida: só pela rosa funda a 90°): o coração 5."
-
-
-@recipe("a1")
-def a1(rm):
-    rm.theme = "aquifero"
-    rm.embed("agua", 60, 0)
-    rm.tunnel(1, 19, 55, 19)
-    rm.tunnel(55, 19, 60, 21)
-    rm.carve(47, 19, 50, 20)
-    rm.put(47, 19, "↑" * 4)
-    rm.tunnel(83, 21, 96, 13)
-    rm.notes = "Água (fase 11): o ralo e a água; a barra sobre o vão da Represa só deixa subir."
-
-
-@recipe("a2")
-def a2(rm):
-    rm.theme = "aquifero"
-    rm.embed("mare", 14, 8)
-    rm.tunnel(25, 21, 38, 19)
-    rm.carve(13, 28, 14, 30)
-    rm.tunnel(13, 31, 9, 31)
-    rm.shaft(3, 28, 62)
-    rm.carve(1, 60, 2, 62)
-    rm.notes = "Maré (fase 12): entra-se pelo alto (onde era a porta), sai-se pelo fundo."
-
-
-@recipe("a3")
-def a3(rm):
-    rm.theme = "aquifero"
-    rm.embed("represa", 40, 4)
-    rm.carve(47, 1, 50, 4)
-    rm.shaft(106, 1, 19)
-    rm.tunnel(106, 20, 79, 20)
-    rm.carve(90, 20, 93, 20)
-    rm.put(90, 20, "↑" * 4)
-    rm.door_to("a4").kind = "Z"
-    rm.notes = "Represa (fase 13): entra-se de cima (da Água ou da rosa funda)."
-
-
-@recipe("a4")
-def a4(rm):
-    rm.theme = "aquifero"
-    rm.embed("naufragio", 60, 2)
-    rm.carve(90, 1, 93, 2)
-    rm.carve(99, 11, 99, 13)
-    rm.tunnel(99, 14, 118, 19)
-    rm.door_to("a5").kind = "Z"
-    rm.notes = "Naufrágio (fase 14): as duas caixas nos buracos abrem o Mergulho."
-
-
-@recipe("a5")
-def a5(rm):
-    """Mergulho: a cápsula do mergulho (A3) na entrada; a saída para a Despensa passa por baixo d'água
-    (o canal no fundo do poço): só afundando."""
-    rm.theme = "aquifero"
-    rm.embed("mergulho", 9, 14)
-    rm.extra.pop("puzzle", None)
-    rm.tunnel(1, 41, 4, 41)
-    rm.shaft(3, 16, 40)
-    rm.carve(9, 15, 12, 17)
-    rm.item(5, 39, "A3")
-    rm.carve(30, 44, 38, 47)                      # o canal, embaixo d'água
-    rm.water(30, 44, 38, 47)
-    rm.shaft(33, 16, 43)
-    rm.notes = "Mergulho (fase 15): a cápsula do mergulho (A3); a Despensa fica do outro lado do canal submerso."
 
 
 @recipe("a6")
@@ -499,32 +354,6 @@ def d1(rm):
     for c in (18, 34, 66):
         rm.block(c, 17, "#")
     rm.notes = "Despensa (toca de salvar): nozes, uma pista; o vão desce para o Jeffrey."
-
-
-@recipe("d2")
-def d2(rm):
-    rm.theme = "despensa"
-    rm.embed("jeffrey", 0, 0)
-    rm.extra.pop("puzzle", None)
-    rm.door_to("d3").kind = "Z"
-    rm.item(10, 19, "A4", after_boss=True)
-    rm.item(15, 19, "chave1", after_boss=True)
-    rm.item(26, 19, "noz", after_boss=True)
-    rm.notes = "Covil do Jeffrey (chefe, fase 17): vencido, deixa o puxar caixas (A4), a chave 1 e a noz-mestra."
-
-
-@recipe("d3")
-def d3(rm):
-    rm.theme = "despensa"
-    rm.embed("fuga", 10, 20)
-    rm.extra.pop("puzzle", None)
-    rm.carve(1, 40, 8, 42)
-    rm.shaft(3, 40, 51)
-    rm.carve(9, 49, 10, 51)
-    rm.seal(rm.door_to("d2"), "A4")
-    rm.carve(41, 26, 41, 28)
-    rm.tunnel(41, 29, 78, 29)
-    rm.notes = "Fuga (fase 16): a caixa presa da entrada só sai puxando (A4); no alto, a queda de volta ao Poço."
 
 
 @recipe("P2")
@@ -602,31 +431,11 @@ def f1(rm):
     rm.theme = "industrial"
     rm.rotate = False
     rm.carve(1, 8, 38, 18)
-    rm.shaft(29, 1, 18)
-    rm.carve(6, 19, 9, 20)
-    rm.ledge(4, 11, 16)
+    rm.ladder(30, 19)                             # a escada até o Escritório
+    rm.carve(6, 19, 9, 20)                        # a descida para o Almoxarifado
+    rm.ledge(4, 11, 16)                           # a ponte sobre ela
     rm.toca(16, 19)
     rm.notes = "Portaria (toca de salvar, sem giro): a entrada da Fábrica."
-
-
-@recipe("f2")
-def f2(rm):
-    rm.theme = "industrial"
-    rm.embed("linha-de-montagem", 26, 9)
-    rm.tunnel(1, 19, 26, 17)
-    rm.tunnel(53, 17, 78, 19)
-    rm.door_to("f3").kind = "Z"
-    rm.notes = "Linha de montagem (fase 19)."
-
-
-@recipe("f3")
-def f3(rm):
-    rm.theme = "industrial"
-    rm.embed("esteiras", 24, 9)
-    rm.tunnel(1, 19, 24, 17)
-    rm.tunnel(55, 17, 78, 19)
-    rm.door_to("f6").kind = "Z"
-    rm.notes = "Esteiras (fase 20)."
 
 
 @recipe("f4")
@@ -635,8 +444,8 @@ def f4(rm):
     a caixa no buraco abre as Prensas. A barra sobre o vão da Casa de força só deixa subir."""
     rm.theme = "industrial"
     rm.extra["puzzle"] = True
-    rm.shaft(5, 1, 9)
     rm.carve(5, 6, 64, 9)
+    rm.ladder(6, 10)                              # a escada até a Portaria
     rm.shaft(59, 6, 18)
     rm.carve(20, 15, 78, 18)
     rm.set(22, 9, "+")
@@ -648,33 +457,6 @@ def f4(rm):
     rm.put(38, 19, "↑" * 4)
     rm.door_to("f5").kind = "Z"
     rm.notes = "Almoxarifado (novo): baterias, a calha e a caixa no buraco."
-
-
-@recipe("f5")
-def f5(rm):
-    rm.theme = "industrial"
-    rm.embed("prensas-e-vapor", 40, 6)
-    rm.tunnel(1, 19, 40, 17)
-    rm.tunnel(75, 17, 118, 19)
-    rm.carve(38, 19, 41, 20)
-    rm.put(38, 19, "↑" * 4)
-    rm.door_to("f6").kind = "Z"
-    rm.notes = "Prensas e vapor (fase 21)."
-
-
-@recipe("f6")
-def f6(rm):
-    """Dutos: resolvido, a trava abre o nicho da meia-volta (A5) e a descida para os Tanques."""
-    rm.theme = "industrial"
-    rm.embed("dutos", 10, 30)
-    rm.shaft(1, 38, 62)
-    rm.tunnel(6, 41, 10, 46)
-    rm.carve(29, 43, 29, 45)
-    rm.carve(30, 42, 33, 45)
-    rm.barrier(30, 43, 2, 3, "sala")
-    rm.item(32, 44, "A5")
-    rm.carve(30, 46, 33, 64)
-    rm.notes = "Dutos (fase 22): resolvida, a trava abre a meia-volta (A5) e a descida para os Tanques."
 
 
 @recipe("f7")
@@ -700,34 +482,24 @@ def f7(rm):
 
 @recipe("f8")
 def f8(rm):
+    """Tanques (nova, sem giro): o salão de cima, dos Dutos à rosa da caldeira, com um tanque de ácido
+    no chão e plataformas por cima; na ponta esquerda, a descida para o corredor de baixo (até a
+    Caldeira), com outra poça de ácido."""
     rm.theme = "industrial"
     rm.rotate = False
-    rm.carve(69, 1, 74, 4)
-    rm.carve(40, 5, 96, 12)
-    rm.carve(48, 13, 62, 15)
-    rm.water(48, 14, 62, 15, "%")
-    rm.ledge(53, 56, 11)
-    rm.shaft(30, 5, 18)
-    rm.carve(30, 5, 40, 12)
-    rm.carve(1, 15, 35, 18)
+    rm.carve(69, 1, 74, 4)                        # a queda dos Dutos
+    rm.carve(30, 5, 96, 12)                       # o salão de cima (chão 13)
+    rm.carve(45, 13, 60, 14)
+    rm.water(45, 13, 60, 14, "%")
+    for c in (47, 52, 57):
+        rm.ledge(c, c + 1, 10)
+    rm.carve(1, 12, 34, 18)                       # o corredor de baixo (chão 19) e a descida
+    rm.ledge(29, 31, 16)                          # o degrau da subida
     rm.carve(12, 19, 24, 20)
     rm.water(12, 19, 24, 20, "%")
-    rm.ledge(17, 19, 16)
+    for c in (13, 18, 23):
+        rm.ledge(c, c + 1, 16)
     rm.notes = "Tanques (nova): ácido nos dois andares; sem giro."
-
-
-@recipe("f9")
-def f9(rm):
-    rm.theme = "industrial"
-    rm.embed("casa-de-forca", 20, 24)
-    rm.shaft(37, 1, 23)
-    rm.carve(59, 34, 59, 36)
-    rm.carve(60, 33, 64, 36)
-    rm.barrier(60, 34, 2, 3, "sala")
-    rm.item(62, 35, "cracha")
-    rm.tunnel(64, 37, 78, 19)
-    rm.door_to("f4").kind = "Z"
-    rm.notes = "Casa de força (fase 23): o Gatsby foge; resolvida, a trava abre o crachá e a Caldeira."
 
 
 @recipe("rC")
@@ -756,41 +528,11 @@ def fa(rm):
     rm.theme = "industrial"
     rm.rotate = False
     rm.carve(1, 8, 38, 18)
-    rm.shaft(17, 1, 18)
-    rm.carve(30, 19, 33, 20)
+    rm.ladder(18, 19)                             # a escada até a catraca da corrida
+    rm.carve(30, 19, 33, 20)                      # a descida para a Portaria
     rm.toca(6, 19)
-    rm.item(25, 17, "pista")
+    rm.item(34, 17, "pista")
     rm.notes = "Escritório do Gatsby (toca de salvar): a catraca do crachá leva à corrida."
-
-
-@recipe("fb")
-def fb(rm):
-    """A corrida do Gatsby (fase 24, inteira). Da Portaria, o túnel de baixo leva ao começo; no fim,
-    a porta antiga dá na mecha (sair por ela é vencer a corrida); do meio da subida, a queda de volta
-    ao Poço."""
-    rm.theme = "industrial"
-    rm.embed("gatsby", 7, 1)   # "puzzle": a corrida é provada por replay; o modelo não usa as catapultas
-    rm.carve(138, 100, 141, 108)
-    rm.carve(10, 103, 141, 105)
-    rm.shaft(9, 97, 105)
-    rm.tunnel(185, 16, 198, 29)
-    rm.carve(1, 82, 8, 84)
-    rm.extra["win_exit"] = [rm.exit_order().index(rm.door_to("fc"))]
-    rm.extra["flip_exempt"] = ("a corrida: a placa de espinhos persegue pelo corredor de cima; o validador acha "
-                               "um atalho girando lá. Rever jogando (D121).")
-    rm.notes = "Corrida do Gatsby (fase 24): sair pela saída do fim vence a corrida."
-
-
-@recipe("fc")
-def fc(rm):
-    rm.theme = "industrial"
-    rm.embed("a-mecha", 0, 0)
-    rm.extra.pop("puzzle", None)
-    rm.door_to("fp").kind = "Z"
-    rm.door_to("fb").kind = "Z"
-    rm.item(11, 27, "A6", after_boss=True)
-    rm.item(16, 27, "chave2", after_boss=True)
-    rm.notes = "A mecha (chefe, fase 25): vencida, deixa a pata firme (A6) e a chave 2."
 
 
 @recipe("fd")
@@ -851,57 +593,6 @@ def g1(rm):
     rm.notes = "Câmara do elevador (toca de salvar): a chegada ao Fungário (mão única)."
 
 
-@recipe("g2")
-def g2(rm):
-    rm.theme = "fungos"
-    rm.embed("broto", 18, 4, mirror=True)
-    rm.tunnel(78, 19, 61, 17)
-    rm.carve(44, 1, 47, 4)
-    rm.tunnel(44, 4, 6, 4)
-    rm.shaft(1, 1, 18)
-    rm.notes = "Broto (fase 28, espelhada): sai-se pelo alto (onde era a porta)."
-
-
-@recipe("g3")
-def g3(rm):
-    rm.theme = "fungos"
-    rm.embed("chapeus", 20, 2, mirror=True)
-    rm.tunnel(78, 19, 59, 17)
-    rm.carve(19, 14, 20, 16)
-    rm.carve(13, 14, 18, 16)
-    rm.shaft(13, 14, 40)
-    rm.tunnel(13, 41, 1, 41)
-    rm.tunnel(18, 41, 41, 41)
-    rm.carve(38, 41, 41, 42)
-    rm.door_to("g4").kind = "Z"
-    rm.notes = "Chapéus (fase 29, espelhada)."
-
-
-@recipe("g4")
-def g4(rm):
-    rm.theme = "fungos"
-    rm.embed("murchos", 18, 3, mirror=True)
-    # D121: o teto da fase era alto demais (girada, caía-se por cima dos chapéus até a porta)
-    rm.fill(19, 4, 60, 6)
-    for c in (26, 36, 46, 54):
-        rm.fill(c, 7, c + 1, 8)
-    rm.tunnel(78, 19, 62, 16)
-    rm.tunnel(18, 16, 1, 19)
-    rm.carve(64, 19, 67, 20)
-    rm.put(64, 19, "↑" * 4)
-    rm.notes = "Murchos (fase 30, espelhada): o teto baixou e ganhou estalactites (D121)."
-
-
-@recipe("g5")
-def g5(rm):
-    rm.theme = "fungos"
-    rm.embed("esporos", 20, 4)
-    rm.carve(38, 1, 41, 4)
-    rm.tunnel(20, 17, 1, 19)
-    rm.door_to("g7").kind = "Z"
-    rm.notes = "Esporos (fase 31): cai-se do alto."
-
-
 @recipe("g6")
 def g6(rm):
     """Micélio (novo): o corredor dos Murchos acaba numa chaminé estreita entre espinhos. Girar 90°
@@ -929,37 +620,12 @@ def g7(rm):
     rm.theme = "fungos"
     rm.rotate = False
     rm.carve(1, 9, 78, 18)
-    rm.shaft(63, 1, 18)
+    rm.ladder(64, 19)                             # a escada até os Murchos
     rm.carve(38, 19, 41, 20)
     rm.ledge(35, 44, 16)
     rm.toca(10, 19)
     rm.item(25, 17, "pista")
     rm.notes = "Caramujário (toca de salvar): os caramujos e uma pista."
-
-
-@recipe("g8")
-def g8(rm):
-    rm.theme = "fungos"
-    rm.embed("colonia", 60, 2, mirror=True)
-    rm.shaft(157, 1, 16)
-    rm.tunnel(157, 17, 115, 17)
-    rm.carve(69, 1, 72, 2)
-    rm.tunnel(60, 17, 20, 17)
-    rm.carve(16, 14, 20, 16)
-    rm.carve(16, 17, 19, 20)
-    rm.door_to("g9").kind = "Z"
-    rm.notes = "Colônia (fase 32, espelhada): todos os fungos; o presságio."
-
-
-@recipe("g9")
-def g9(rm):
-    rm.theme = "fungos"
-    rm.embed("senzi", 0, 0)
-    rm.extra.pop("puzzle", None)
-    rm.door_to("P4").kind = "Z"
-    rm.item(12, 17, "A7", after_boss=True)
-    rm.item(22, 17, "chave3", after_boss=True)
-    rm.notes = "Arena do Senzi (chefe, fase 33): vencido, deixa a seringa (A7) e a chave 3."
 
 
 @recipe("rD")
@@ -1082,12 +748,13 @@ def c1_campo(rm):
 def l1(rm):
     rm.theme = ""
     rm.rotate = False
-    rm.shaft(17, 1, 18)
-    rm.carve(1, 13, 38, 18)
-    rm.shaft(2, 19, 40)
-    rm.carve(1, 37, 12, 40)
+    rm.carve(1, 13, 38, 18)                       # o corredor (chão 19)
+    rm.shaft(17, 1, 18)                           # da porta das três luzes, com patamares
+    rm.shaft(8, 19, 40)                           # do Teste: fungário (embaixo), subindo
+    rm.put(8, 19, "↑" * 6)                        # em cima, barras de passagem: o corredor segue por cima
+    rm.carve(1, 37, 13, 40)
     rm.toca(28, 19)
-    rm.item(10, 17, "pista")
+    rm.item(32, 17, "pista")
     rm.notes = "Antecâmara (toca de salvar): a verdade começa."
 
 
@@ -1103,49 +770,6 @@ def lab_test(rm, level, at, mirror=False):
             rm.carve(d.c0, 1 if d.side == 0 else rm.h - 3, d.c1, at[1] if d.side == 0 else rm.h - 2)
 
 
-@recipe("L2")
-def l2(rm):
-    rm.embed("vertigem", 40, 2, mirror=True)
-    rm.theme = ""
-    rm.tunnel(118, 19, 78, 19)
-    rm.carve(90, 19, 93, 20)
-    rm.tunnel(40, 19, 30, 19)
-    rm.door_to("L4").kind = "Z"
-    rm.notes = "Teste: subsolo (remix da Vertigem, espelhada). Provisória (D120)."
-
-
-@recipe("L3")
-def l3(rm):
-    rm.embed("prensas-e-vapor", 42, 6)
-    rm.theme = ""
-    rm.tunnel(1, 19, 42, 17)
-    rm.tunnel(77, 17, 118, 19)
-    rm.carve(100, 19, 103, 20)
-    rm.door_to("L5").kind = "Z"
-    rm.door_to("L1").kind = "Z"
-    rm.notes = "Teste: fábrica (remix das Prensas). Provisória (D120)."
-
-
-@recipe("L4")
-def l4(rm):
-    rm.embed("chapeus", 40, 3)
-    rm.theme = ""
-    rm.shaft(89, 1, 17)
-    rm.tunnel(79, 18, 118, 19)
-    rm.door_to("L1").kind = "Z"
-    rm.notes = "Teste: fungário (remix dos Chapéus). Provisória (D120)."
-
-
-@recipe("L5")
-def l5(rm):
-    rm.embed("dutos", 50, 2)
-    rm.theme = ""
-    rm.shaft(99, 1, 15)
-    rm.tunnel(69, 16, 118, 19)
-    rm.door_to("L6").kind = "Z"
-    rm.notes = "Sala de controle (remix dos Dutos): desligar os amortecedores. Provisória (D120)."
-
-
 @recipe("L6")
 def l6(rm):
     rm.theme = ""
@@ -1157,12 +781,62 @@ def l6(rm):
     rm.notes = "Biotério (novo): as gaiolas dos animais. Provisória (D120)."
 
 
-@recipe("L7")
-def l7(rm):
-    rm.theme = ""
-    rm.embed("giro", 30, 26)
-    rm.limiter = True
-    rm.tunnel(1, 41, 30, 37)
-    rm.extra["boss_on_solve"] = True
-    rm.notes = ("O amortecedor-mor: o primeiro giro, de novo, com o amortecedor puxando de volta. Resolvido, o "
-                "Poço vira a subida para o Campo (o fim). Provisória (D120).")
+
+
+# ---------------------------------------------------------------- as fases da campanha (portais, D124)
+# Cada uma entra inteira, sem mudar nada, e a prova dela (replay ou robô) vale no mundo: entra-se no
+# começo (P) vindo da primeira vizinha e a porta (D) leva à segunda. (fase, vizinha do P, vizinha da
+# porta, o que dá ao sair pela porta)
+PORTALS = {
+    "r2": ("degraus", "r1", "r3", []),
+    "c1": ("comporta", "r4", "c5", []),
+    "c2": ("derrame", "rA", "c3", []),
+    "c3": ("setas", "c2", "P1", []),
+    "c4": ("toca", "r4", "c8", []),
+    "c6": ("espinhos", "rA", "c9", []),
+    "c8": ("vertigem", "c4", "c7", ['pista']),
+    "a1": ("agua", "rB", "a2", []),
+    "a2": ("mare", "a1", "a6", []),
+    "a3": ("represa", "rB", "a4", []),
+    "a4": ("naufragio", "a3", "a5", []),
+    "a5": ("mergulho", "a4", "d1", ['A3']),
+    "d2": ("jeffrey", "d1", "d3", ['A4', 'chave1', 'noz']),
+    "d3": ("fuga", "d2", "P2", []),
+    "f2": ("linha-de-montagem", "f1", "f3", []),
+    "f3": ("esteiras", "f2", "f6", []),
+    "f5": ("prensas-e-vapor", "f4", "f7", []),
+    "f6": ("dutos", "f3", "f8", ['A5']),
+    "f9": ("casa-de-forca", "f7", "f4", ['cracha']),
+    "fb": ("gatsby", "fa", "fc", []),
+    "fc": ("a-mecha", "fb", "fp", ['A6', 'chave2']),
+    "g2": ("broto", "g1", "g3", []),
+    "g3": ("chapeus", "g2", "g5", []),
+    "g5": ("esporos", "g3", "g7", []),
+    "g4": ("murchos", "g7", "g6", []),
+    "g8": ("colonia", "g6", "g9", []),
+    "g9": ("senzi", "g8", "P4", ['A7', 'chave3']),
+    "L2": ("derrame", "L1", "L4", []),
+    "L3": ("prensas-e-vapor", "L1", "L5", []),
+    "L4": ("esporos", "L2", "L1", []),
+    "L5": ("dutos", "L3", "L6", []),
+    "L7": ("giro", "L6", "L6", []),
+}
+
+
+def _portal_recipe(rid):
+    lv, a, b, rw = PORTALS[rid]
+
+    def build(rm):
+        rm.portal(lv, a, b, reward=rw)
+        if rid == "fb":
+            rm.extra["win_exit"] = [rm.exit_order().index(rm.door_to("fc"))]
+            rm.extra["flip_exempt"] = ("a corrida: a placa de espinhos persegue pelo corredor de cima; "
+                                       "o validador acha um atalho girando lá. Rever jogando (D121).")
+        if rid == "L7":
+            rm.extra["win_exit"] = [rm.exit_order().index(rm.door_to("L6"))]
+        rm.notes = "%s (fase da campanha, inteira: entra-se no começo, a porta leva adiante; D124)." % rm.name
+    return build
+
+
+for _rid in PORTALS:
+    RECIPES[_rid] = _portal_recipe(_rid)

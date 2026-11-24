@@ -286,6 +286,15 @@ var rose := false              # a sala é uma rosa (D119): a abertura sai em qu
 var rose_open := {}            # rosa: giro (0..3) -> índices das saídas que encaixam numa vizinha nesse giro
 var entry_only: Array = []     # saídas de mão única (D120): só se entra por elas (a queda, o atalho)
 var dead_exits: Array = []     # saídas que agora não levam a nada (a rosa vizinha virada para outro lado)
+# Portais (D124): a fase da campanha lacrada na rocha. As saídas da borda viram parede (só ligam o
+# mapa); entra-se no começo (P) ou na porta (D), e sai-se por eles.
+var portal_p := -1             # a saída do mapa que leva ao começo (P) da fase
+var portal_d := -1             # a saída do mapa que a porta (D) leva
+var start_rect := Rect2i()     # o bloco do P (gira com a sala)
+var p_armed := false           # o portal do P só vale depois de o coelho sair de cima dele
+var d_armed := false
+var entered_d := false         # entrou pela porta: ela deixa voltar mesmo antes de a sala ser resolvida
+var p_hold := 0                # quadros segurando para baixo em cima do P
 # O mundo (D120): habilidades, itens e as peças que dependem deles.
 var ab := {}                   # habilidades que o coelho tem (world_state.gd); fora do mundo, o giro e o giro no ar
 var witems := {}               # itens que o coelho tem
@@ -569,7 +578,19 @@ func reset() -> void:
 	dead_exits = []
 	for v in def.get("_dead_exits", []):
 		dead_exits.append(int(v))
-	if int(def.get("_entry_exit", -1)) >= 0:
+	portal_p = int(def.get("portal_p", -1))
+	portal_d = int(def.get("portal_d", -1))
+	entered_d = false
+	p_armed = false
+	d_armed = false
+	if portal_p >= 0 or portal_d >= 0:
+		# sala de portais: chega-se pela porta (D) ou pelo começo (P, onde o 'P' já pôs o coelho)
+		if int(def.get("_entry_exit", -1)) == portal_d and portal_d != portal_p and has_door:
+			rabbit.pos = Vector2i(door.get_center().x - Rabbit.SIZE / 2, door.end.y - Rabbit.SIZE)
+			rabbit.vel = Vector2.ZERO
+			entered_d = true
+		rabbit.facing = 1 if rabbit.pos.x < pw / 2 else -1
+	elif int(def.get("_entry_exit", -1)) >= 0:
 		_place_at_exit(int(def["_entry_exit"]), def.get("_entry_vel", Vector2.ZERO))
 	elif int(def.get("_entry", -1)) >= 0:
 		_place_at_entry(int(def["_entry"]), def.get("_entry_vel", Vector2.ZERO))
@@ -1629,6 +1650,8 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 					tiles[r * gw + c] = 1   # saída fora da parede de fora: vira parede (a validação avisa)
 				else:
 					exit_cells.append([side, cell, ch == EXIT_LOCKED])
+					if bool(def.get("virtual_exits", false)):
+						tiles[r * gw + c] = 1   # sala de portais: a saída só liga o mapa; aqui é parede
 			elif ch >= "1" and ch <= "9":
 				var gid := int(ch)
 				if not gate_cells.has(gid):
@@ -1650,6 +1673,7 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 				var origin := Vector2i(c * TILE, r * TILE)
 				if ch == "P":
 					rabbit.pos = origin + Vector2i(2, 2)  # hitbox 12x12 centrada no bloco 16x16
+					start_rect = Rect2i(origin, Vector2i(16, 16))
 				elif ch == "B":
 					boxes.append(Box.new(origin))
 				elif ch == "L":
@@ -1672,7 +1696,7 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 	for ex in World.parse_exits(rows):
 		var er: Rect2i = ex["rect"]
 		exits.append({"side": int(ex["side"]), "rect": Rect2i(er.position * TILE, er.size * TILE), "locked": bool(ex["locked"]),
-			"flooded": false, "index": k})
+			"flooded": false, "index": k, "virtual": bool(def.get("virtual_exits", false))})
 		k += 1
 	_parse_ropes(rows, rope_cells)
 	var ids := gate_cells.keys()
@@ -1774,6 +1798,7 @@ func _rotate_logic(dir: int) -> void:
 		sockets[i] = _rot_rect(sockets[i], dir)
 	if has_door:
 		door = _rot_rect(door, dir)
+	start_rect = _rot_rect(start_rect, dir)
 	for s in spikes:
 		s["rect"] = _rot_rect(s["rect"], dir)
 		s["facing"] = posmod(s["facing"] + dir, 4)
@@ -2077,6 +2102,8 @@ func tile_solid_rect(r: Rect2i) -> bool:
 ## A saída deixa passar? Só com a sala de pé do jeito que foi desenhada (a saída no lado dela): o
 ## mapa liga as salas pelos lados desenhados, e girada ela levaria para o lugar errado.
 func exit_open(ex: Dictionary) -> bool:
+	if bool(ex.get("virtual", false)):
+		return false
 	if entry_only.has(int(ex.get("index", -1))) or dead_exits.has(int(ex.get("index", -1))):
 		return false
 	if rose:
@@ -2201,6 +2228,8 @@ func _check_exit() -> bool:
 ## a grade azul com um cadeado (coberta de água, azul-água).
 func _draw_exits() -> void:
 	for ex in exits:
+		if bool(ex.get("virtual", false)):
+			continue
 		var er := Rect2(ex["rect"])
 		var cs := exit_cur_side(ex)
 		var open := exit_open(ex)
@@ -2604,7 +2633,8 @@ func _update_sockets() -> void:
 	else:
 		door_dry = mini(door_dry + 1, DOOR_DRY_FRAMES)
 	door_flooded = door_dry < DOOR_DRY_FRAMES
-	var open: bool = (group_filled(0) or def.get("door_open", false) or door_unlocked) and not door_flooded
+	var solved_portal: bool = portal_d >= 0 and bool(def.get("_solved", false))
+	var open: bool = (group_filled(0) or def.get("door_open", false) or door_unlocked or solved_portal) and not door_flooded
 	if open != door_open:
 		door_open = open
 		door_flash = 14
@@ -3460,6 +3490,9 @@ func _check_hazards() -> void:
 
 
 func _check_win() -> void:
+	if portal_p >= 0 or portal_d >= 0:
+		_check_portals()
+		return
 	if door_open and has_door and overlaps(rabbit.rect, door):
 		state = "won"
 		timer = WIN_FRAMES
@@ -3676,6 +3709,7 @@ func _draw() -> void:
 	_draw_walls()
 	_draw_exits()
 	_draw_world_pieces()
+	_draw_back_portal()
 	_draw_conveyors()
 	_draw_gates()
 	_draw_platforms()
@@ -5734,6 +5768,12 @@ const LANTERN_R := 96.0
 
 func _parse_world_pieces() -> void:
 	ab = Dictionary(def.get("_abilities", {"A1": true, "A2": true})).duplicate()
+	if def.has("portal_p"):
+		# fase da campanha (D124): só o giro e o giro no ar, como sempre foi; as habilidades novas
+		# (mergulho, puxar, meia-volta, pata firme) mudariam a física e a solução provada
+		for k in ab.keys():
+			if k != "A1" and k != "A2":
+				ab.erase(k)
 	witems = Dictionary(def.get("_items", {})).duplicate()
 	rabbit.ab = ab
 	dark = bool(def.get("dark", false))
@@ -5822,6 +5862,56 @@ func _open_barrier(b: Dictionary) -> void:
 		particles.append({"pos": c + Vector2(randf_range(-6, 6), randf_range(-10, 10)), "vel": Vector2(cos(a), sin(a)) * randf_range(40.0, 130.0),
 			"life": randi_range(14, 28), "col": col, "grav": 260.0})
 	world_event.emit("opened", {"index": b["index"]})
+
+
+## Os portais (D124): a porta aberta leva adiante; voltar ao começo leva de volta. Cada um só vale
+## depois de o coelho sair de cima dele (ele aparece em cima de um dos dois).
+func _check_portals() -> void:
+	var rr: Rect2i = rabbit.rect
+	if not p_armed and not overlaps(rr.grow(10), start_rect):
+		p_armed = true
+	if not d_armed and has_door and not overlaps(rr.grow(10), door):
+		d_armed = true
+	if portal_d >= 0 and has_door and d_armed and (door_open or entered_d) and overlaps(rr, door):
+		_portal_exit(portal_d)
+	elif portal_p >= 0 and p_armed and start_rect.size.x > 0 and overlaps(rr, start_rect) and rabbit.on_ground \
+			and float(raw_inp.get("climb", 0.0)) > 0.5:
+		# voltar pelo começo: em cima do P, segurando para baixo (passar por cima não volta)
+		p_hold += 1
+		if p_hold >= 8:
+			_portal_exit(portal_p)
+	else:
+		p_hold = 0
+
+
+func _portal_exit(idx: int) -> void:
+	state = "exit"
+	exit_index = idx
+	exit_orient = 0
+	sfx.emit("win")
+	var side := 0
+	for ex in exits:
+		if int(ex["index"]) == idx:
+			side = int(ex["side"])
+	exited.emit(side, rabbit.vel)
+
+
+## O portal de volta, no começo da fase: um batente aberto (depois de o coelho sair de cima dele).
+func _draw_back_portal() -> void:
+	if portal_p < 0 or start_rect.size.x <= 0:
+		return
+	var r := Rect2(start_rect)
+	var a := 0.55 if p_armed else 0.25
+	var col := Color(C_DOOR_OPEN, a)
+	draw_rect(Rect2(r.position.x - 1, r.end.y - 26, 2, 26), col)
+	draw_rect(Rect2(r.end.x - 1, r.end.y - 26, 2, 26), col)
+	draw_rect(Rect2(r.position.x - 1, r.end.y - 27, r.size.x + 2, 2), col)
+	draw_rect(Rect2(r.position.x + 1, r.end.y - 25, r.size.x - 2, 25), Color(C_DOOR_OPEN, 0.06 + 0.04 * sin(frame * 0.1)))
+	if p_armed:
+		# a seta para baixo: segurar para baixo aqui volta
+		var c := Vector2(r.get_center().x, r.end.y - 20 + 2.0 * sin(frame * 0.12))
+		draw_line(c + Vector2(-3, -2), c, Color(C_DOOR_OPEN, 0.8), 1.0)
+		draw_line(c + Vector2(3, -2), c, Color(C_DOOR_OPEN, 0.8), 1.0)
 
 
 ## O que a sala guarda como o coelho deixou (o mundo, D123): onde ficaram as caixas, as baterias

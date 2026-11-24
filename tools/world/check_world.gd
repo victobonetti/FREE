@@ -47,9 +47,9 @@ func _init() -> void:
 		if not only.is_empty() and not only.has(id):
 			continue
 		var def := World.load_room_def(id)
-		var sk := Check.flip_skips(def)
+		var sk := Check.room_skips(def)
 		for s in sk:
-			print("  GIRO PULA %s: saída %d -> %d (distância %d; com giro %d, sem giro %s)" % [id, s["from"], s["to"], s["dist"], s["rot"],
+			print("  GIRO PULA %s: saída %s -> %s (distância %d; com giro %d, sem giro %s)" % [id, str(s["from"]), str(s["to"]), s["dist"], s["rot"],
 				str(s["up"]) if int(s["up"]) < Check.INF else "não passa"])
 			skips += 1
 	print("giro: %d pulos (%d ms)" % [skips, Time.get_ticks_msec() - t0])

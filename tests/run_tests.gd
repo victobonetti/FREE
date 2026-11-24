@@ -186,14 +186,67 @@ func load_named(n: String) -> void:
 
 
 func load_def(d: Dictionary) -> void:
+	if rec_on:
+		rec_runs = []
+		rec_def = d
+		rec_state = Replay.capture_state(d)
+		rec_done = false
 	room = RoomScript.new()
 	room.setup(d)
 	frames = 0
 
 
 func tick(inp: Dictionary = {}) -> void:
+	if rec_on:
+		Replay.record(rec_runs, inp)
 	room.step(inp)
 	frames += 1
+	if rec_on and not rec_done and (room.state == "won" or room.state == "done"):
+		_save_proof()
+
+
+# ------------------------------------------------------------ provas para o mundo (D124)
+# ONLY=record_proofs: roda os robôs da campanha gravando os comandos; quando vencem, a partida vira um
+# replay em tests/fixtures/world/<fase>.json. O teste do mundo roda esses replays nas salas de portais.
+
+var rec_on := false
+var rec_runs: Array = []
+var rec_def: Dictionary = {}
+var rec_state: Dictionary = {}
+var rec_done := false
+
+const PROOF_BOTS := ["test_passos", "test_degraus", "test_giro", "test_comporta", "test_setas", "test_room_1",
+	"test_room_2", "test_room_3", "test_room_4", "test_room_5", "test_mergulho", "test_agua", "test_mare",
+	"test_represa", "test_naufragio", "test_jeffrey_replay", "test_prumo"]
+
+
+func _save_proof() -> void:
+	rec_done = true
+	var id := ""
+	for k in Levels.ids():
+		if str(Levels.by_id(k).get("name", "")) == str(rec_def.get("name", "")):
+			id = k
+	if id == "":
+		return
+	DirAccess.make_dir_recursive_absolute("res://tests/fixtures/world")
+	var rep := Replay.pack(rec_runs, LevelData.from_def(rec_def).content_hash(), rec_state)
+	var f := FileAccess.open("res://tests/fixtures/world/%s.json" % id, FileAccess.WRITE)
+	f.store_string(JSON.stringify(rep) + "\n")
+	f.close()
+	print("  PROVA gravada: %s (%d quadros)" % [id, frames])
+
+
+func record_proofs() -> void:
+	rec_on = true
+	for fn in PROOF_BOTS:
+		call(fn)
+	# as fases com replay do editor: copia o replay
+	for id in Levels.ids():
+		var path := Levels.replay_path(id)
+		if FileAccess.file_exists(path):
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path("res://tests/fixtures/world/%s.json" % id))
+			print("  PROVA copiada (replay do editor): %s" % id)
+	rec_on = false
 
 
 func idle(n: int) -> void:
@@ -3269,9 +3322,8 @@ func test_world() -> void:
 		var data: RefCounted = World.load_room_data(id)
 		check(data != null and _msgs(data, true) == "", "%s valida (%s)" % [id, _msgs(data, true) if data != null else "?"])
 		var def0: Dictionary = World.load_room_def(id)
-		if not def0.has("flip_exempt"):
-			for sk in Check.flip_skips(def0):
-				skips.append("%s %d->%d" % [id, sk["from"], sk["to"]])
+		for sk in Check.room_skips(def0):
+			skips.append("%s %s->%s" % [id, str(sk["from"]), str(sk["to"])])
 		if bool(def0.get("ending", false)):
 			continue
 		var n: int = (World.info(id)["exits"] as Array).size()
@@ -3290,6 +3342,51 @@ func test_world() -> void:
 	check(inv.has("chave1") and inv.has("chave2") and inv.has("chave3") and inv.has("noz") and inv.has("cracha") and inv.has("lanterna"),
 		"e as chaves, a noz-mestra, o crachá e a lanterna (%s)" % str(inv))
 	check(int(inv.get("coracao", 0)) == 5, "e os cinco corações (%d)" % int(inv.get("coracao", 0)))
+	# as fases de portais (D124) vencidas com as provas da campanha, com as habilidades que o
+	# jogador tem quando chega a elas (a onda da progressão)
+	var no_proof: Array = []
+	var failed: Array = []
+	for r in World.rooms(w):
+		var id := str(r["id"])
+		var dd: Dictionary = World.load_room_def(id)
+		if not dd.has("portal_p"):
+			continue
+		var lvl := str(dd.get("level", ""))
+		# os chefes: a arena é a da campanha (lá provada pelo robô do acerto); aqui, vencido o chefe, a
+		# porta leva adiante
+		if not (dd.get("actors", []) as Array).is_empty() and lvl in ["jeffrey", "a-mecha", "senzi"]:
+			var db := _world_def(World, w, id, int(dd["portal_p"]), {"A1": true, "A2": true})
+			load_def(db)
+			var arena: Array = _level_rows(room.def, lvl).map(func(x): return String(x).replace("X", "#").replace("Z", "#"))
+			check(LevelData.from_def(Levels.by_id(lvl)).rows == arena, "%s: a arena é a da campanha (as saídas do mapa são parede)" % id)
+			var gone_b := [-1]
+			room.exited.connect(func(_sd, _v): gone_b[0] = room.exit_index)
+			idle(30)
+			for a in room.actors:
+				if "hearts" in a:
+					a.hearts = 0
+				if "state" in a:
+					a.state = "dead"
+			room.door_unlocked = true
+			room.input_lock = false
+			walk_jump_until(signf(room.door.get_center().x - cx()), func(): return gone_b[0] != -1, 2400)
+			if gone_b[0] != int(dd["portal_d"]):
+				failed.append("%s (vencido o chefe, a porta não levou adiante: %d)" % [id, gone_b[0]])
+			continue
+		var fp := "res://tests/fixtures/world/%s.json" % lvl
+		if not FileAccess.file_exists(fp):
+			no_proof.append("%s (%s)" % [id, lvl])
+			continue
+		# as habilidades das fases da campanha: o giro e o giro no ar (antes da batida de pata, nada)
+		var wave := int(pr["reached"].get(id, 1))
+		var ab_here: Dictionary = {"A1": true, "A2": true} if wave >= 2 else {}
+		var dproof := _world_def(World, w, id, int(dd["portal_p"]), ab_here)
+		var res: Dictionary = Replay.run(dproof, JSON.parse_string(FileAccess.get_file_as_string(fp)))
+		if not res["won"] or int(res["exit"]) != int(dd["portal_d"]):
+			failed.append("%s (%s, com %s: %s)" % [id, lvl, str(ab_here.keys()), str(res["end"])])
+	check(failed.is_empty(), "as fases de portais saem pela porta com a prova da campanha (falham: %s)" % str(failed))
+	if not no_proof.is_empty():
+		print("  SEM PROVA: %s" % str(no_proof))
 	# a regra do giro reconhece a Passagem antiga (o exemplo do D121)
 	var old_pass = JSON.parse_string(FileAccess.get_file_as_string("res://levels/campaign/passagem.json"))
 	var ls: Dictionary = Check.level_skip(old_pass)
@@ -3354,7 +3451,8 @@ func test_world() -> void:
 	load_def(dr)
 	check(room.rose and room.exit_open(room.exits[0]), "a rosa de pé abre para o Ninho")
 	room._rotate_logic(1)
-	check(room.exit_open(room.exits[0]) and World.link(w, "rA", 0, 1).get("room", "") == "c1", "girada 90°, a abertura da rosa dá na Comporta")
+	room._rotate_logic(1)
+	check(room.exit_open(room.exits[0]) and World.link(w, "rA", 0, 2).get("room", "") == "c2", "girada 180°, a abertura da rosa dá no Derrame")
 	# barreira: o cristal só abre com a pata firme; o item dá a habilidade e avisa o mundo
 	load_def({"rows": ["############", "#..........#", "#..........#", "#.PP.......#", "#.PP.......#", "############"],
 		"rotate": false, "barriers": [{"rect": [5, 1, 1, 4], "need": "A6"}], "items": [{"rect": [8, 3, 2, 2], "give": "A6"}]})
@@ -3407,6 +3505,18 @@ func test_world() -> void:
 	check(ev == ["finished"] and it.phase == it.FALL, "sem jogo salvo, a abertura acaba na queda (fase %d, %d quadros)" % [it.phase, frames])
 	it.free()
 	IntroScript.beta_sel = keep_sel
+
+
+## As linhas da fase `lvl` dentro da sala de portais (o recorte onde ela foi embutida).
+func _level_rows(d: Dictionary, lvl: String) -> Array:
+	var lrows: Array = Levels.by_id(lvl)["rows"]
+	var rows: Array = d["rows"]
+	var lw := String(lrows[0]).length()
+	var at := Vector2i((String(rows[0]).length() - lw) / 2, (rows.size() - lrows.size()) / 2)
+	var out: Array = []
+	for r in lrows.size():
+		out.append(String(rows[at.y + r]).substr(at.x, lw))
+	return out
 
 
 ## A sala do mundo como o jogo a monta (main.world_def), com as habilidades dadas.

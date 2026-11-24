@@ -3,32 +3,18 @@
 		"res://scripts/boss_mecha.gd"
 	],
 	"boss_music": "res://music/industrial-chase.mp3",
-	"items": [
-		{
-			"after_boss": 1,
-			"give": "A6",
-			"rect": [
-				11,
-				27,
-				2,
-				2
-			]
-		},
-		{
-			"after_boss": 1,
-			"give": "chave2",
-			"rect": [
-				16,
-				27,
-				2,
-				2
-			]
-		}
-	],
+	"level": "a-mecha",
 	"limiter": false,
 	"music": "res://music/industrial-chase.mp3",
 	"name": "A mecha",
-	"notes": "A mecha (chefe, fase 25): vencida, deixa a pata firme (A6) e a chave 2.",
+	"notes": "A mecha (fase da campanha, inteira: entra-se no começo, a porta leva adiante; D124).",
+	"portal_d": 0,
+	"portal_p": 1,
+	"puzzle": true,
+	"reward": [
+		"A6",
+		"chave2"
+	],
 	"rotate": true,
 	"rows": [
 		"##############################",
@@ -56,13 +42,14 @@
 		"#............................#",
 		"#............................#",
 		"#............................#",
-		"#............................#",
-		"Z............................Z",
-		"Z............................Z",
-		"Z............................Z",
+		"#.........................DD.#",
+		"X.........................DD.X",
+		"X..PP.....................DD.X",
+		"X..PP.....................DD.X",
 		"##############################"
 	],
 	"start_rot": 0,
 	"theme": "industrial",
-	"version": 1
+	"version": 1,
+	"virtual_exits": true
 }

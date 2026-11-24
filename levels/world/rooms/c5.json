@@ -1,7 +1,19 @@
 {
+	"items": [
+		{
+			"after_boss": 0,
+			"give": "A2",
+			"rect": [
+				37,
+				17,
+				2,
+				2
+			]
+		}
+	],
 	"limiter": false,
 	"name": "Ninho",
-	"notes": "Ninho (toca de salvar, sem giro).",
+	"notes": "Ninho (toca de salvar, sem giro): a cápsula do giro no ar (A2), antes das salas que pedem ele (D124).",
 	"rotate": false,
 	"rows": [
 		"####################################XXXX##################",
