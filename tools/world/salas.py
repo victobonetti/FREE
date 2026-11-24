@@ -563,15 +563,15 @@ def t1(rm):
     rm.fill(68, 16, 71, 18)
     rm.fill(72, 11, 74, 18)
     rm.carve(72, 13, 74, 15)
-    # D: o elevador sobre o fosso, até o patamar do alto
-    rm.carve(75, 5, 100, 18)
+    # D: a segunda plataforma sobre o fosso, até o patamar do alto
+    rm.carve(75, 9, 100, 18)
     rm.spikes(79, 100, 18)
     rm.fill(75, 16, 78, 18)
-    rm.fill(86, 5, 88, 8)
-    rm.ledge(96, 100, 10)
-    rm.add("movers", {"ch": 3, "off": [79, 16, 4, 1], "on": [91, 11], "speed": 30, "cycle": 3.5})
+    rm.fill(86, 9, 88, 11)
+    rm.fill(96, 13, 100, 18)
+    rm.add("movers", {"ch": 4, "off": [79, 16, 4, 1], "on": [91, 16], "speed": 30, "cycle": 3.5})
     # E: a escada até a Fábrica
-    rm.tunnel(100, 10, 118, 19)
+    rm.tunnel(100, 13, 118, 19)
     rm.notes = "Passagem (refeita, D121): câmaras baixas e pilares; o giro não atravessa mais a sala de uma vez."
 
 
@@ -634,6 +634,7 @@ def f4(rm):
     rm.set(22, 9, "+")
     rm.set(44, 9, "+")
     rm.block(48, 13, "H")
+    rm.block(54, 17, "L")
     rm.block(70, 19, "S")
     rm.carve(38, 19, 41, 20)
     rm.put(38, 19, "↑" * 4)
@@ -1099,7 +1100,7 @@ def l2(rm):
     rm.embed("vertigem", 40, 2, mirror=True)
     rm.theme = ""
     rm.tunnel(118, 19, 78, 19)
-    rm.carve(58, 20, 61, 20)
+    rm.carve(90, 19, 93, 20)
     rm.tunnel(40, 19, 30, 19)
     rm.door_to("L4").kind = "Z"
     rm.notes = "Teste: subsolo (remix da Vertigem, espelhada). Provisória (D120)."
@@ -1111,7 +1112,7 @@ def l3(rm):
     rm.theme = ""
     rm.tunnel(1, 19, 42, 17)
     rm.tunnel(77, 17, 118, 19)
-    rm.carve(58, 18, 61, 20)
+    rm.carve(100, 19, 103, 20)
     rm.door_to("L5").kind = "Z"
     rm.door_to("L1").kind = "Z"
     rm.notes = "Teste: fábrica (remix das Prensas). Provisória (D120)."
@@ -1121,7 +1122,7 @@ def l3(rm):
 def l4(rm):
     rm.embed("chapeus", 40, 3)
     rm.theme = ""
-    rm.shaft(58, 1, 15)
+    rm.shaft(89, 1, 17)
     rm.tunnel(79, 18, 118, 19)
     rm.door_to("L1").kind = "Z"
     rm.notes = "Teste: fungário (remix dos Chapéus). Provisória (D120)."
@@ -1131,7 +1132,7 @@ def l4(rm):
 def l5(rm):
     rm.embed("dutos", 50, 2)
     rm.theme = ""
-    rm.carve(58, 1, 61, 2)
+    rm.shaft(99, 1, 15)
     rm.tunnel(69, 16, 118, 19)
     rm.door_to("L6").kind = "Z"
     rm.notes = "Sala de controle (remix dos Dutos): desligar os amortecedores. Provisória (D120)."

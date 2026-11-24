@@ -124,7 +124,7 @@ func _draw_full(show: Dictionary) -> void:
 			var c := origin + (Vector2(r.position + er.position) + Vector2(er.size) / 2.0 - lo) * k
 			draw_rect(Rect2(c - Vector2(1, 1), Vector2(2, 2)), C_DOOR)
 		_draw_marks(id, rr, k, r)
-	draw_string(font, Vector2(10, 174), "M / Tab: voltar", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1, 1, 1, 0.5))
+	draw_string(font, Vector2(10, 174), "M / Tab: voltar    R: voltar à última toca", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1, 1, 1, 0.5))
 
 
 ## Os ícones da sala no mapa inteiro: toca (verde), chefe vencido (estrela), item visto e não pego.

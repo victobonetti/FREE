@@ -19,6 +19,7 @@ signal impact(strength: float)
 signal level_picked(index: int)   # build de teste: começar direto nesta fase (0 = a primeira)
 signal sandbox_picked             # build de teste: a sala -1, com todos os componentes (D99)
 signal world_picked               # build de teste: o mundo (salas ligadas, teste metroidvania, D100)
+signal continue_picked            # há um jogo salvo no mundo: Enter continua (D120)
 const World := preload("res://scripts/world.gd")
 ## O primeiro cartão do carrossel: -2 = mundo, -1 = sandbox.
 const MIN_SEL := -2
@@ -69,6 +70,8 @@ const GLYPHS := {
 }
 
 var phase := TITLE
+var world_mode := false   # o jogo é o mundo (D120): a abertura acaba na queda, que emenda no Poço
+var has_save := false     # há um jogo salvo: Enter continua, N começa de novo
 var t := 0          # quadros dentro da fase
 var frame := 0      # quadros desde o início
 var art             # uma Room fora da árvore, só para gerar os quadros do coelho
@@ -142,9 +145,20 @@ func _ready() -> void:
 		})
 
 
+## O mundo tem um jogo salvo? Então Enter continua, e N começa um novo.
+func set_save(on: bool) -> void:
+	has_save = on
+	if on:
+		press_label.text = "ENTER  CONTINUAR"
+		menu_label.text = "N  NOVO JOGO      E  EDITOR      L  MINHAS FASES"
+	else:
+		press_label.text = "PRESS ENTER"
+		menu_label.text = "E  EDITOR      L  MINHAS FASES"
+
+
 ## Celular: troca o "PRESS ENTER" pelo convite ao toque.
 func set_touch_mode() -> void:
-	press_label.text = "TAP TO START"
+	press_label.text = "TAP TO CONTINUE" if has_save else "TAP TO START"
 	menu_label.visible = false   # E e L não existem no celular
 
 
@@ -354,6 +368,9 @@ func step(pressed: bool) -> void:
 			if sel_label != null and beta_sel == -2:
 				world_picked.emit()
 				return
+			if has_save:
+				continue_picked.emit()
+				return
 			_go(SURPRISE)
 			started.emit()
 		return
@@ -373,8 +390,8 @@ func step(pressed: bool) -> void:
 		if t == DURATION[LANDING]:
 			_land()
 	if t >= DURATION[phase]:
-		if phase == DOOR:
-			finished.emit()
+		if phase == DOOR or (world_mode and phase == FALL):
+			finished.emit()   # no mundo, a queda continua no Poço
 		else:
 			if phase == FALL:
 				spin_at_landing = spin

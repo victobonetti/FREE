@@ -747,17 +747,29 @@ func _show_intro() -> void:
 	_play_music(TITLE_MUSIC)
 	intro = IntroScript.new()
 	add_child(intro)
-	if touch.active:
-		intro.set_touch_mode()
 	intro.started.connect(_stop_music)
 	intro.sfx.connect(_play_sfx)
 	intro.impact.connect(_on_impact)
-	intro.finished.connect(_load_start_room)
+	var has_world := not World.load_world().is_empty()
+	intro.world_mode = has_world
+	intro.set_save(has_world and WorldState.has_save())
+	if touch.active:
+		intro.set_touch_mode()
+	intro.finished.connect(_on_intro_finished)
+	intro.continue_picked.connect(func(): play_world(false))
 	intro.level_picked.connect(func(i):
 		_stop_music()
 		_load_room(i))
 	intro.sandbox_picked.connect(_play_sandbox)
 	intro.world_picked.connect(play_world)
+
+
+## Fim da abertura: o mundo (jogo novo: a queda emenda no Poço) ou, sem mundo, a campanha.
+func _on_intro_finished() -> void:
+	if intro != null and intro.world_mode:
+		play_world(true)
+	else:
+		_load_start_room()
 
 
 ## A sala em que a abertura termina: o coelho anda até a porta para começar o nível 1.
@@ -865,11 +877,19 @@ func _tick() -> void:
 		if world_map.full:
 			if Input.is_action_just_pressed("back"):
 				world_map.full = false
+			elif Input.is_action_just_pressed("restart"):
+				# rede de segurança: preso numa sala sem saída, volta à última toca
+				world_map.full = false
+				_world_back_to_toca()
 			return
 	if custom != "" and Input.is_action_just_pressed("back") and not transitioning:
 		_end_custom(false)
 		return
 	if intro != null and intro.phase == intro.TITLE:
+		if Input.is_action_just_pressed("new_game") and intro.has_save:
+			WorldState.erase_save()
+			intro.set_save(false)
+			return
 		if Input.is_action_just_pressed("open_editor"):
 			open_editor()
 			return
@@ -1026,6 +1046,15 @@ func play_world(new_game := false) -> void:
 		_world_enter(str(t["room"]), -1, Vector2.ZERO, int(t.get("toca", -1)))
 	else:
 		_world_enter(str(world["start"]), int(world.get("start_exit", -1)), Vector2(0, 60))
+
+
+## Volta à última toca (ou ao começo), com o progresso de agora.
+func _world_back_to_toca() -> void:
+	var t: Dictionary = wstate.toca
+	if not t.is_empty() and World.has_room(world, str(t.get("room", ""))):
+		call_deferred("_world_enter", str(t["room"]), -1, Vector2.ZERO, int(t.get("toca", -1)))
+	else:
+		call_deferred("_world_enter", str(world["start"]), int(world.get("start_exit", -1)), Vector2(0, 60))
 
 
 ## A definição da sala `id` com o que o progresso muda nela.

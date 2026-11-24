@@ -310,7 +310,8 @@ func validate() -> Array:
 					chutes += 1
 				_:
 					gate_sockets[GATE_SOCKETS.find(ch) + 1] = true
-	if rabbits == 0:
+	if rabbits == 0 and not _has_exit():
+		# sala do mundo (D100, D120): o coelho entra pelas saídas; sem saída, precisa do começo
 		out.append({"erro": true, "msg": "Falta o coelho.", "pos": no_pos})
 	elif rabbits > 1:
 		out.append({"erro": true, "msg": "Só pode haver um coelho (há %d)." % rabbits, "pos": no_pos})
@@ -532,3 +533,11 @@ func errors() -> Array:
 
 func is_playable() -> bool:
 	return errors().is_empty()
+
+
+## Tem saída do mundo (X ou Z) na borda? Então o coelho entra por ela e o começo (P) é opcional.
+func _has_exit() -> bool:
+	for r in rows:
+		if String(r).contains("X") or String(r).contains("Z"):
+			return true
+	return false

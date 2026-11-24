@@ -24,6 +24,16 @@ scripts/
   input_setup.gd         teclas e botões
   touch_controls.gd      joystick e botões de toque (D61)
   boss_squirrel.gd       boss 1, Jeffrey: ator da sala 17 (D64)
+  world.gd               o mundo (D100, D120): salas em tiles, saídas, rosas, ligações, problemas do mapa
+  world_state.gd         o progresso do mundo (habilidades, itens, rosas, toca), salvo em user://
+  world_check.gd         o modelo do coelho na grade: a regra do giro (D121) e a progressão
+  world_map.gd           o mapinho do alto e o mapa inteiro (M, Tab)
+tools/world/
+  plano_mapa.py          o plano (salas, ligações, mundos): a fonte da disposição
+  build_world.py         monta levels/world/ (disposição, saídas das ligações, barreiras)
+  salas.py, wkit.py      as receitas das 73 salas e o kit (escavar, embutir fases, rosas)
+  check_world.gd         confere o mundo: o mapa, o giro e a progressão (também: reach, trace)
+  check_levels.gd        a regra do giro nas fases da campanha
 tests/
   run_tests.gd           testes sem janela
   shot.gd                capturas de tela
@@ -32,6 +42,19 @@ docs/                    esta documentação
 ```
 
 Nenhum script usa `class_name`; tudo é carregado com `preload`. A árvore de nós é montada em código: `Main` cria a `Room` (um `Node2D`) e uma `CanvasLayer` com título, barra do giro, tela final e fade.
+
+## O mundo (D120, D121)
+
+- `levels/world/mundo.json` (versão 2): `start`, `start_exit` e as salas com `pos` (o canto, em tiles).
+  As salas em `levels/world/rooms/<id>.json`, no formato de fase de sempre, mais: `rose`, `entry_only`,
+  `entry_only_until`, `barriers`, `items`, `tocas`, `dark`, `win_exit`, `ending`, `boss_on_solve`, `puzzle`
+  (o validador vale a sala como resolvida) e `flip_exempt` (fora da regra do giro, com o motivo).
+- `main.world_def` monta a sala com o progresso: `_entry_exit`, `_toca`, `_abilities`, `_items`, `_opened`,
+  `_taken`, `_solved`, `_rose_open` (giro → saídas que encaixam) e `_dead_exits`. A sala avisa o mundo por
+  `world_event` ("item", "opened", "toca", "boss"); `exited` leva à vizinha por `World.link`.
+- Mudou uma sala ou a disposição? `python3 tools/world/build_world.py` e
+  `godot --headless --path . -s tools/world/check_world.gd` (0 problemas). O teste `test_world` confere o
+  mesmo e entra em cada sala por cada saída.
 
 ## Editor de fases
 

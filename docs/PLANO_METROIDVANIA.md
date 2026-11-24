@@ -1,9 +1,11 @@
 # FREE como metroidvania: análise e plano do mapa
 
-> **Estado: só planejamento (D118, D119).** Nada daqui está implementado. O mapa, as tabelas e a curva saem
-> de `tools/world/plano_mapa.py` (`python3 tools/world/plano_mapa.py` gera `docs/plano-mapa.png`,
-> `docs/plano-rosa.png`, as tabelas e a checagem de progressão). Mudou o plano? Mude os dados lá e
-> rode de novo.
+> **Estado: implementado (D120, D121).** O plano foi feito em código: o mundo v2, o progresso, as
+> sete habilidades, as peças novas e as 73 salas (`tools/world/build_world.py`, com as receitas em
+> `tools/world/salas.py`). As tabelas e a curva daqui continuam saindo de `tools/world/plano_mapa.py`
+> (`python3 tools/world/plano_mapa.py` gera `docs/plano-mapa.png`, `docs/plano-rosa.png`, as tabelas e a
+> checagem do plano); a checagem dos dados de verdade é `tools/world/check_world.gd` (o mapa, a regra
+> do giro do D121 e a progressão). As diferenças da implementação para este plano estão no D120.
 
 ![O plano do mapa](plano-mapa.png)
 

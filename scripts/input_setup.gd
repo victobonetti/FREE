@@ -11,7 +11,8 @@ static func setup() -> void:
 	_add("rotate_ccw", [_key(KEY_Q), _pad(JOY_BUTTON_LEFT_SHOULDER)])
 	_add("rotate_cw", [_key(KEY_E), _pad(JOY_BUTTON_RIGHT_SHOULDER)])
 	_add("restart", [_key(KEY_R), _pad(JOY_BUTTON_Y)])
-	_add("map", [_key(KEY_M), _key(KEY_TAB), _pad(JOY_BUTTON_BACK)])   # o mapa do mundo (D120)
+	_add("map", [_key(KEY_M), _key(KEY_TAB), _pad(JOY_BUTTON_BACK)])
+	_add("new_game", [_key(KEY_N)])   # o mapa do mundo (D120)
 	_add("start", [_key(KEY_ENTER), _key(KEY_KP_ENTER), _key(KEY_SPACE), _pad(JOY_BUTTON_START), _pad(JOY_BUTTON_A)])
 	# Menu da tela de início e saída das fases avulsas
 	_add("open_editor", [_key(KEY_E)])

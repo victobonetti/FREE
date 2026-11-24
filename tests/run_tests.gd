@@ -18,6 +18,13 @@ var frames := 0
 
 
 func _init() -> void:
+	# ONLY=test_world godot ... -s tests/run_tests.gd : roda só esse teste
+	var only := OS.get_environment("ONLY")
+	if only != "":
+		call(only)
+		print("FALHAS: %d" % failures)
+		quit(1 if failures > 0 else 0)
+		return
 	test_format()
 	test_campaign_proof()
 	test_jump_height()
@@ -3242,30 +3249,50 @@ func test_sandbox() -> void:
 	check(room.state == "play", "a sandbox começa e o coelho fica vivo parado")
 
 
-## Modo mundo (D100): o mapa fecha (toda saída tem a vizinha com a saída de volta), as salas validam,
-## entrar por cada saída não mata nem sai de novo sozinho, a saída trancada segura até resolver, e
-## sair emite o lado certo.
+## Modo mundo (D100, D120, D121): o mapa fecha, as salas validam, entrar por cada saída não mata;
+## nenhuma sala se atravessa só girando; a progressão chega a tudo; a rosa, a mão única, as barreiras,
+## os itens, a toca e o salvamento.
 func test_world() -> void:
 	print("mundo: salas ligadas pelas saídas")
 	var World = load("res://scripts/world.gd")
+	var Check = load("res://scripts/world_check.gd")
+	var WS = load("res://scripts/world_state.gd")
 	var w: Dictionary = World.load_world()
-	check(not w.is_empty(), "levels/world/mundo.json existe")
+	check(not w.is_empty() and int(w.get("version", 0)) == 2, "levels/world/mundo.json existe (versão 2)")
 	check(World.problems(w).is_empty(), "o mapa do mundo fecha (%s)" % str(World.problems(w)))
+	var all_ab := {"A1": true, "A2": true, "A3": true, "A4": true, "A5": true, "A6": true, "A7": true}
+	var bad_entry: Array = []
+	var skips: Array = []
 	for r in World.rooms(w):
 		var id := str(r["id"])
 		var data: RefCounted = World.load_room_data(id)
 		check(data != null and _msgs(data, true) == "", "%s valida (%s)" % [id, _msgs(data, true) if data != null else "?"])
-		for side in World.exit_sides(data.rows):
-			if side == 2:
-				continue   # as saídas do chão são quedas: ninguém entra subindo por elas
-			var d: Dictionary = World.load_room_def(id)
-			d["_entry"] = side
-			d["_entry_vel"] = Vector2(60, 0)
+		var def0: Dictionary = World.load_room_def(id)
+		if not def0.has("flip_exempt"):
+			for sk in Check.flip_skips(def0):
+				skips.append("%s %d->%d" % [id, sk["from"], sk["to"]])
+		if bool(def0.get("ending", false)):
+			continue
+		var n: int = (World.info(id)["exits"] as Array).size()
+		for k in n:
+			var d := _world_def(World, w, id, k, all_ab)
 			load_def(d)
-			var out := [-1]
-			room.exited.connect(func(sd, _v): out[0] = sd)
-			idle(120)
-			check(room.state != "dead" and out[0] == -1, "%s: entrar pela %s não mata nem sai (estado %s, saiu %d)" % [id, World.SIDE_NAMES[side], room.state, out[0]])
+			idle(90)
+			if room.state == "dead":
+				bad_entry.append("%s:%d" % [id, k])
+	check(skips.is_empty(), "nenhuma sala se atravessa só girando (D121) (%s)" % str(skips))
+	check(bad_entry.is_empty(), "entrar por cada saída não mata (%s)" % str(bad_entry))
+	var pr: Dictionary = Check.progression(w)
+	check((pr["missing"] as Array).is_empty(), "a progressão chega a todas as salas (faltam %s)" % str(pr["missing"]))
+	check((pr["abilities"] as Dictionary).size() == 7, "a progressão ganha as sete habilidades (%s)" % str(pr["abilities"].keys()))
+	var inv: Dictionary = pr["inventory"]
+	check(inv.has("chave1") and inv.has("chave2") and inv.has("chave3") and inv.has("noz") and inv.has("cracha") and inv.has("lanterna"),
+		"e as chaves, a noz-mestra, o crachá e a lanterna (%s)" % str(inv))
+	check(int(inv.get("coracao", 0)) == 5, "e os cinco corações (%d)" % int(inv.get("coracao", 0)))
+	# a regra do giro reconhece a Passagem antiga (o exemplo do D121)
+	var old_pass = JSON.parse_string(FileAccess.get_file_as_string("res://levels/campaign/passagem.json"))
+	var ls: Dictionary = Check.level_skip(old_pass)
+	check(float(ls["rot"]) < Check.SKIP_RATIO * float(ls["dist"]), "a Passagem antiga é recusada pela regra do giro (%s)" % str(ls))
 	# a trancada segura até a sala ser resolvida; aberta, sair à direita emite o lado 1
 	load_def({"rows": [
 		"##########",
@@ -3281,25 +3308,98 @@ func test_world() -> void:
 	room.exits_unlocked = true
 	walk_until(1.0, func(): return got[0] != -1, 400)
 	check(got[0] == 1 and room.state == "exit", "aberta, sair pela direita emite o lado 1 (%d)" % got[0])
-	# a saída livre do chão (o vão dos Degraus): cair nele emite o lado 2
-	var d3: Dictionary = World.load_room_def("degraus")
-	d3["_entry"] = 3
-	load_def(d3)
-	var got3 := [-1]
-	room.exited.connect(func(sd, _v): got3[0] = sd)
-	room.rabbit.pos = Vector2i(15 * 8 + 2, 9 * 8)   # logo acima do vão
-	idle(90)
-	check(got3[0] == 2, "cair no vão do chão sai por baixo (%d)" % got3[0])
-	# girada, a saída não deixa passar (o mapa liga os lados desenhados)
-	var d4: Dictionary = World.load_room_def("giro")
+	# mão única: a saída só de entrada não deixa sair
+	load_def({"rows": ["##########", "#........#", "#........#", "#.PP.....X", "#.PP.....X", "##########"],
+		"rotate": false, "entry_only": [0]})
+	var got2 := [-1]
+	room.exited.connect(func(sd, _v): got2[0] = sd)
+	walk_until(1.0, func(): return got2[0] != -1, 400)
+	check(got2[0] == -1, "a saída de mão única não deixa sair")
+	# girada, a saída comum não deixa passar; a rosa só abre no giro em que encaixa
+	var d4 := _world_def(World, w, "c1", 2, all_ab)
 	d4["_solved"] = true
 	load_def(d4)
-	check(room.exit_open(room.exits[1]) or room.exit_open(room.exits[0]), "resolvida, a sala abre as saídas")
 	room._rotate_logic(1)
 	var any_open := false
 	for ex in room.exits:
 		any_open = any_open or room.exit_open(ex)
-	check(not any_open, "com a sala girada, nenhuma saída deixa passar")
+	check(not any_open, "com a sala girada, nenhuma saída comum deixa passar")
+	var dr := _world_def(World, w, "rA", 0, all_ab)
+	load_def(dr)
+	check(room.rose and room.exit_open(room.exits[0]), "a rosa de pé abre para o Ninho")
+	room._rotate_logic(1)
+	check(room.exit_open(room.exits[0]) and World.link(w, "rA", 0, 1).get("room", "") == "c1", "girada 90°, a abertura da rosa dá na Comporta")
+	# barreira: o cristal só abre com a pata firme; o item dá a habilidade e avisa o mundo
+	load_def({"rows": ["############", "#..........#", "#..........#", "#.PP.......#", "#.PP.......#", "############"],
+		"rotate": false, "barriers": [{"rect": [5, 1, 1, 4], "need": "A6"}], "items": [{"rect": [8, 3, 2, 2], "give": "A6"}]})
+	var events: Array = []
+	room.world_event.connect(func(kind, data): events.append([kind, data]))
+	walk_until(1.0, func(): return cx() > 4 * 8 + 6, 120)
+	check(cx() < 5 * 8, "o cristal segura quem não tem a pata firme")
+	room.ab["A6"] = true
+	walk_until(1.0, func(): return cx() > 8 * 8, 200)
+	check(room.barriers[0]["open"] and cx() > 8 * 8, "com a pata firme, o cristal quebra")
+	var kinds: Array = events.map(func(e): return e[0])
+	check(kinds.has("opened") and kinds.has("item"), "o mundo fica sabendo (barreira aberta, item pego) (%s)" % str(kinds))
+	# a toca: dormir avisa o mundo; o progresso salva e volta igual
+	load_def({"rows": ["##########", "#........#", "#.PP.....#", "#.PP.....#", "##########"], "rotate": false,
+		"tocas": [{"rect": [4, 2, 3, 2]}]})
+	var tev: Array = []
+	room.world_event.connect(func(kind, _d): tev.append(kind))
+	walk_until(1.0, func(): return tev.has("toca"), 200)
+	check(tev.has("toca"), "dormir na toca avisa o mundo")
+	var st = WS.new()
+	st.give("A1")
+	st.give("chave1")
+	st.roses["rA"] = 2
+	st.toca = {"room": "c5", "toca": 0}
+	var back = WS.from_dict(JSON.parse_string(JSON.stringify(st.to_dict())))
+	check(back.has("A1") and back.has("chave1") and int(back.roses["rA"]) == 2 and str(back.toca["room"]) == "c5",
+		"o progresso salva e volta igual")
+	# a abertura no mundo: com jogo salvo, Enter continua; sem, a queda acaba no Poço (sem a porta)
+	var IntroScript = load("res://scripts/intro.gd")
+	var keep_sel: int = IntroScript.beta_sel
+	IntroScript.beta_sel = 0
+	var it = IntroScript.new()
+	it._ready()
+	it.world_mode = true
+	it.set_save(true)
+	var ev: Array = []
+	it.continue_picked.connect(func(): ev.append("continue"))
+	it.finished.connect(func(): ev.append("finished"))
+	for i in 30:
+		it.step(false)
+	it.step(true)
+	check(ev == ["continue"], "com jogo salvo, Enter continua o mundo (%s)" % str(ev))
+	it.set_save(false)
+	ev.clear()
+	it.step(true)
+	var frames := 0
+	while ev.is_empty() and frames < 2000:
+		it.step(false)
+		frames += 1
+	check(ev == ["finished"] and it.phase == it.FALL, "sem jogo salvo, a abertura acaba na queda (fase %d, %d quadros)" % [it.phase, frames])
+	it.free()
+	IntroScript.beta_sel = keep_sel
+
+
+## A sala do mundo como o jogo a monta (main.world_def), com as habilidades dadas.
+func _world_def(World, w: Dictionary, id: String, entry: int, ab: Dictionary) -> Dictionary:
+	var d: Dictionary = World.load_room_def(id)
+	d["_entry_exit"] = entry
+	d["_entry_vel"] = Vector2(40, 40)
+	d["_abilities"] = ab.duplicate()
+	d["_items"] = {}
+	d["_world"] = true
+	if World.info(id)["rose"]:
+		var open := {}
+		for g in 4:
+			open[g] = []
+			for k in (World.info(id)["exits"] as Array).size():
+				if not World.link(w, id, k, g).is_empty():
+					open[g].append(k)
+		d["_rose_open"] = open
+	return d
 
 
 ## Depois do giro, a mecha flutua; no fim, os propulsores falham e ela despenca: o impacto solta duas
