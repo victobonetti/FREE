@@ -3387,6 +3387,23 @@ func test_world() -> void:
 	check(failed.is_empty(), "as fases de portais saem pela porta com a prova da campanha (falham: %s)" % str(failed))
 	if not no_proof.is_empty():
 		print("  SEM PROVA: %s" % str(no_proof))
+	# as salas novas no caminho do jogo (D124): as rotas que o robô do mundo gravou na física de
+	# verdade (tools/world/walk.gd) saem pela saída certa
+	var Route = load("res://tools/world/route.gd")
+	var walk_bad: Array = []
+	for seg in Route.SEGMENTS:
+		var wfp: String = Route.fixture(seg)
+		if not FileAccess.file_exists(wfp):
+			walk_bad.append("%s (sem rota)" % Route.name_of(seg))
+			continue
+		var wentry: int = Route.exit_index(w, seg[0], seg[1])
+		var wdef: Dictionary = Route.world_def(w, seg[0], wentry, Route.abilities(seg[3]), seg[4] if seg.size() > 4 else {})
+		var wres: Dictionary = Replay.run(wdef, JSON.parse_string(FileAccess.get_file_as_string(wfp)))
+		var want = Route.target(w, seg[0], (seg[2] as Array)[-1])
+		var want_k: int = int(String(want).split("@")[0]) if typeof(want) == TYPE_STRING else int(want)
+		if int(wres["exit"]) != want_k:
+			walk_bad.append("%s (%s)" % [Route.name_of(seg), str(wres["end"])])
+	check(walk_bad.is_empty(), "as rotas do robô do mundo atravessam as salas novas (%d trechos; falham: %s)" % [Route.SEGMENTS.size(), str(walk_bad)])
 	# a regra do giro reconhece a Passagem antiga (o exemplo do D121)
 	var old_pass = JSON.parse_string(FileAccess.get_file_as_string("res://levels/campaign/passagem.json"))
 	var ls: Dictionary = Check.level_skip(old_pass)

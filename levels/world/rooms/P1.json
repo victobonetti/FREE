@@ -3,6 +3,15 @@
 		{
 			"need": "A6",
 			"rect": [
+				30,
+				19,
+				6,
+				2
+			]
+		},
+		{
+			"need": "A6",
+			"rect": [
 				18,
 				85,
 				4,
@@ -15,8 +24,8 @@
 		3
 	],
 	"entry_only_until": "L7",
-	"hint": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço",
-	"hint_touch": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço",
+	"hint": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço\nO poço está tampado: o caminho segue pela esquerda",
+	"hint_touch": "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço\nO poço está tampado: o caminho segue pela esquerda",
 	"limiter": false,
 	"name": "Poço: raízes",
 	"notes": "O Poço (D120): a queda do começo. Andares de túnel e poços alternados (o giro não cai de uma vez).",
@@ -41,7 +50,7 @@
 		"X......................................#",
 		"X......................................#",
 		"X......................................#",
-		"##############################↑↑↑↑↑↑####",
+		"##############################......####",
 		"##############################......####",
 		"##############################......####",
 		"##############################......####",

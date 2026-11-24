@@ -50,11 +50,11 @@ def only_door(rm, nb):
 @recipe("P1")
 def p1(rm):
     """A queda do Campo: andares de túnel na rocha, ligados por poços em lados alternados. Descer é
-    cair de andar em andar; subir pede o giro (A1). O buraco do primeiro andar tem uma barra de
-    passagem (de cima segura; de baixo passa): quem chega sem o giro não cai onde não sai mais. O
-    fundo é o cristal (A6)."""
+    cair de andar em andar; subir pede o giro (A1). O buraco do primeiro andar é tampado de cristal
+    (A6), como o fundo: de cima se vê que o poço está fechado (não é uma barra que parece passagem) e
+    que o caminho é pela esquerda; na volta do fim, com a pata firme, ele quebra por baixo."""
     rm.theme = "raizes"
-    rm.hint = "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço"
+    rm.hint = "Ande com A/D ou as setas  ·  Pule com W, seta para cima ou Espaço\nO poço está tampado: o caminho segue pela esquerda"
     rm.carve(17, 1, 22, 14)                    # a queda da entrada
     floors = [19, 30, 41, 52, 63, 74, 85]
     for k, f in enumerate(floors):
@@ -63,7 +63,7 @@ def p1(rm):
             nxt = floors[k + 1]
             a = 30 if k % 2 == 0 else 2         # o poço para o andar de baixo, em lados alternados
             rm.carve(a, f, a + 5, nxt - 5)
-    rm.put(30, 19, "↑" * 6)
+    rm.barrier(30, 19, 6, 2, "A6")
     rm.seal(rm.door_to("P2"), "A6")
     rm.toca(8, 19)
     rm.extra["entry_only_until"] = "L7"   # vencido o amortecedor-mor, a queda vira a subida para o Campo
@@ -100,6 +100,7 @@ def r3(rm):
     rm.carve(48, 9, 62, 13)          # a prateleira (chão 14)
     rm.block(52, 12, "B")
     rm.carve(33, 9, 47, 18)          # o vão (chão 19), com a parede de 5 à esquerda (cols 31..32)
+    rm.carve(48, 15, 58, 18)         # embaixo da prateleira: a caixa caída não fica presa contra ela
     rm.carve(20, 9, 32, 13)          # em cima da parede
     rm.tunnel(20, 14, 1, 19)
     for c in (24, 40, 55):
@@ -288,8 +289,8 @@ def hx(rm):
     rm.theme = "aquifero"
     rm.rotate = False
     rm.carve(1, 6, 34, 12)
-    rm.spikes(10, 12, 12)
-    rm.spikes(20, 22, 12)
+    rm.spikes(10, 11, 12)            # espinhos de 2: o pulo passa com folga (3 era no limite)
+    rm.spikes(20, 21, 12)
     rm.ledge(15, 17, 9)
     rm.item(30, 11, "coracao")
     for c in (6, 14, 25, 32):

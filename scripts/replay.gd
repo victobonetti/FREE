@@ -130,6 +130,7 @@ static func _expand(cmd: Dictionary) -> Dictionary:
 		"jump_held": bool(cmd.get("jump_held", false)),
 		"climb": float(cmd.get("climb", 0.0)),
 		"rotate": int(cmd.get("rotate", 0)),
+		"rotate2": bool(cmd.get("rotate2", false)),   # o giro de 180° (A5), no mundo
 	}
 
 

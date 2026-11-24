@@ -18,6 +18,8 @@ const A7 := "A1 A2 A3 A4 A5 A6 A7"
 const SEGMENTS := [
 	# as Raízes
 	["P1", "start", ["r1"], A0],
+	["r1", "P1", ["do:r1_box", "r2"], A0],
+	["r3", "r2", ["do:r3_box", "r4"], A0],
 	["r4", "r3", ["item:0", "c1"], A1],
 	["c5", "c1", ["item:0", "rA"], A12],
 	["c5", "c1", ["c7"], A12],

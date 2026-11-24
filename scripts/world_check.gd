@@ -566,6 +566,10 @@ static func room_skips(def: Dictionary) -> Array:
 		var ls := level_skip(def)
 		if ls.is_empty():
 			return []
+		# fase com limitador que, no modelo, nem se atravessa sem girar: o giro é a solução que a fase
+		# pede (a prova dela gira), e o limitador o desfaz em 2,5 s; não é um atalho por cima dela (D124)
+		if bool(def.get("limiter", false)) and int(ls["up"]) >= INF:
+			return []
 		if int(ls["dist"]) >= SKIP_MIN_DIST and float(ls["rot"]) < SKIP_RATIO * float(ls["dist"]) and float(ls["rot"]) < SKIP_VS_UP * float(ls["up"]):
 			return [{"from": "P", "to": "D", "rot": ls["rot"], "up": ls["up"], "dist": ls["dist"]}]
 		return []

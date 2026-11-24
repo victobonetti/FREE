@@ -164,8 +164,9 @@ class Room:
             if f != f1 and since >= run:
                 nf = f + max(-step, min(step, f1 - f))
                 lo, hi = min(f, nf), max(f, nf)
-                # o degrau: 2 colunas de folga em cima (o coelho tem 1,5 tile de largura)
-                self.carve_rock(min(c, c - d), lo - head, max(c, c - d), hi - 1)
+                # o degrau: 3 colunas de folga em cima (o coelho tem 1,5 tile de largura e pula de
+                # antes da beirada)
+                self.carve_rock(min(c, c - 2 * d), lo - head, max(c, c - 2 * d), hi - 1)
                 f = nf
                 since = 0
             self.carve_rock(c, f - head, c, f - 1)
