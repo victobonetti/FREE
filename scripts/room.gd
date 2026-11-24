@@ -522,6 +522,8 @@ func reset() -> void:
 	theme = str(def.get("theme", ""))
 	soil = theme if SUBSOIL.has(theme) else ("despensa" if theme == "transicao" else "")
 	_parse(rows, water_tiles)
+	if def.has("_state"):
+		_apply_state(def["_state"])   # o mundo: as caixas como o coelho deixou (D123)
 	_find_anchors()
 	anchor_fx = 0
 	awaken_flash = 0
@@ -5820,6 +5822,35 @@ func _open_barrier(b: Dictionary) -> void:
 		particles.append({"pos": c + Vector2(randf_range(-6, 6), randf_range(-10, 10)), "vel": Vector2(cos(a), sin(a)) * randf_range(40.0, 130.0),
 			"life": randi_range(14, 28), "col": col, "grav": 260.0})
 	world_event.emit("opened", {"index": b["index"]})
+
+
+## O que a sala guarda como o coelho deixou (o mundo, D123): onde ficaram as caixas, as baterias
+## pegas, a alavanca e a calha. Só de pé (a sala comum só se deixa de pé). {} se não há o que guardar.
+func snapshot() -> Dictionary:
+	if orientation != 0 or (boxes.is_empty() and batteries.is_empty() and lever == null):
+		return {}
+	var bx: Array = []
+	for b in boxes:
+		bx.append([b.pos.x, b.pos.y])
+	var bt: Array = []
+	for b in batteries:
+		bt.append(bool(b["taken"]))
+	return {"boxes": bx, "bat": bt, "lever": lever != null and bool(lever["pulled"])}
+
+
+func _apply_state(st: Dictionary) -> void:
+	if st.has("boxes"):
+		boxes.clear()
+		for pp in st["boxes"]:
+			boxes.append(Box.new(Vector2i(int(pp[0]), int(pp[1]))))
+	var bt: Array = st.get("bat", [])
+	for i in mini(bt.size(), batteries.size()):
+		batteries[i]["taken"] = bool(bt[i])
+	if lever != null and bool(st.get("lever", false)):
+		lever["pulled"] = true
+		lever["t"] = LEVER_PAN + LEVER_PULL + LEVER_WATCH   # já puxada: a calha não solta outra caixa
+		if chute != null:
+			chute["open"] = 60
 
 
 ## A batida de pata com a pata firme (A6) quebra os cristais perto.

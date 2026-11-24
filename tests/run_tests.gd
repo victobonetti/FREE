@@ -3294,6 +3294,31 @@ func test_world() -> void:
 	var old_pass = JSON.parse_string(FileAccess.get_file_as_string("res://levels/campaign/passagem.json"))
 	var ls: Dictionary = Check.level_skip(old_pass)
 	check(float(ls["rot"]) < Check.SKIP_RATIO * float(ls["dist"]), "a Passagem antiga é recusada pela regra do giro (%s)" % str(ls))
+	# Primeiros passos (D123): só andando não se sai (a saída fica no alto da parede de 5); a caixa
+	# empurrada até a parede é o degrau; ela fica onde o coelho a deixou, e na volta continua lá
+	var dp := _world_def(World, w, "r1", 0, {})
+	load_def(dp)
+	var gone := [-1]
+	room.exited.connect(func(sd, _v): gone[0] = sd)
+	walk_until(-1.0, func(): return gone[0] != -1, 600)
+	check(gone[0] == -1, "Primeiros passos: só andando não se sai (a caixa é o degrau)")
+	load_def(dp)
+	room.exited.connect(func(sd, _v): gone[0] = sd)
+	for i in 900:
+		var j: bool = (i >= 70 and i < 90) or (i >= 330 and i < 350) or (i >= 380 and i < 400)
+		tick({"move": -1.0, "jump_pressed": i in [70, 330, 380], "jump_held": j})
+		if gone[0] != -1:
+			break
+	check(gone[0] == 3, "empurrando a caixa até a parede e subindo nela, sai pelo alto (%d)" % gone[0])
+	var snap: Dictionary = room.snapshot()
+	check(snap.has("boxes") and int(snap["boxes"][0][0]) < 10 * 8, "a sala guarda a caixa onde ficou (%s)" % str(snap))
+	var dback := _world_def(World, w, "r1", 1, {})
+	dback["_state"] = snap
+	load_def(dback)
+	check(room.boxes[0].pos == Vector2i(int(snap["boxes"][0][0]), int(snap["boxes"][0][1])), "na volta, a caixa continua lá (%s)" % str(room.boxes[0].pos))
+	var st0 = WS.new()
+	st0.rooms["r1"] = snap
+	check(WS.from_dict(JSON.parse_string(JSON.stringify(st0.to_dict()))).rooms.has("r1"), "o salvamento guarda as caixas das salas")
 	# a trancada segura até a sala ser resolvida; aberta, sair à direita emite o lado 1
 	load_def({"rows": [
 		"##########",

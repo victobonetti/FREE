@@ -34,7 +34,8 @@ var taken := {}       # "sala:índice" -> true (item pego)
 var roses := {}       # id da rosa -> giro (0..3) em que ficou
 var visited := {}     # id da sala -> true
 var bosses := {}      # id da sala do chefe -> true (vencido)
-var toca := {}        # {"room": id, "exit": índice} onde o coelho dormiu por último ({}: o início)
+var toca := {}        # {"room": id, "toca": índice} onde o coelho dormiu por último ({}: o início)
+var rooms := {}       # id -> o que a sala guarda como o coelho deixou (room.snapshot(): caixas, baterias...)
 
 
 func has(key: String) -> bool:
@@ -54,7 +55,7 @@ func hearts_extra() -> int:
 
 func to_dict() -> Dictionary:
 	return {"version": 1, "abilities": abilities, "items": items, "solved": solved, "opened": opened, "taken": taken,
-		"roses": roses, "visited": visited, "bosses": bosses, "toca": toca}
+		"roses": roses, "visited": visited, "bosses": bosses, "toca": toca, "rooms": rooms}
 
 
 static func from_dict(d: Dictionary) -> RefCounted:
@@ -67,6 +68,7 @@ static func from_dict(d: Dictionary) -> RefCounted:
 	s.visited = d.get("visited", {})
 	s.bosses = d.get("bosses", {})
 	s.toca = d.get("toca", {})
+	s.rooms = d.get("rooms", {})
 	s.roses = {}
 	for k in d.get("roses", {}):
 		s.roses[k] = int(d["roses"][k])

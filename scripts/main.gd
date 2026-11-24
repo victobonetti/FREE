@@ -920,6 +920,10 @@ func _tick() -> void:
 		_load_room(index - 1)
 		return
 	if Input.is_action_just_pressed("restart"):
+		if custom == "world":
+			# recomeçar a sala de verdade: as caixas voltam ao lugar do começo (a saída aberta fica)
+			wstate.rooms.erase(world_room)
+			room.def.erase("_state")
 		room.reset()
 		if custom == "editor":
 			Replay.record(rec_runs, {"reset": true})
@@ -1069,6 +1073,8 @@ func world_def(id: String, entry_exit: int, vel: Vector2, toca := -1) -> Diction
 		def["door_open"] = true
 	def["_entry_exit"] = entry_exit
 	def["_toca"] = toca
+	if wstate.rooms.has(id):
+		def["_state"] = wstate.rooms[id]
 	def["_hearts_extra"] = wstate.hearts_extra()
 	def["_entry_vel"] = vel
 	def["_solved"] = wstate.solved.has(id)
@@ -1182,6 +1188,13 @@ func _on_room_exited(_side: int, vel: Vector2) -> void:
 		return
 	if room != null and room.exits_unlocked:
 		wstate.solved[world_room] = true
+	# as caixas ficam onde o coelho deixou (D123)
+	if room != null:
+		var st: Dictionary = room.snapshot()
+		if st.is_empty():
+			wstate.rooms.erase(world_room)
+		else:
+			wstate.rooms[world_room] = st
 	# a corrida do Gatsby: sair pela saída do fim é vencer
 	if room != null:
 		for v in room.def.get("win_exit", []):

@@ -50,7 +50,8 @@ Nenhum script usa `class_name`; tudo é carregado com `preload`. A árvore de n�
   `entry_only_until`, `barriers`, `items`, `tocas`, `dark`, `win_exit`, `ending`, `boss_on_solve`, `puzzle`
   (o validador vale a sala como resolvida) e `flip_exempt` (fora da regra do giro, com o motivo).
 - `main.world_def` monta a sala com o progresso: `_entry_exit`, `_toca`, `_abilities`, `_items`, `_opened`,
-  `_taken`, `_solved`, `_rose_open` (giro → saídas que encaixam) e `_dead_exits`. A sala avisa o mundo por
+  `_taken`, `_solved`, `_rose_open` (giro → saídas que encaixam), `_dead_exits` e `_state` (as caixas, as
+  baterias e a alavanca como o coelho deixou: `room.snapshot()` ao sair, D123; R na sala apaga e recomeça). A sala avisa o mundo por
   `world_event` ("item", "opened", "toca", "boss"); `exited` leva à vizinha por `World.link`.
 - Mudou uma sala ou a disposição? `python3 tools/world/build_world.py` e
   `godot --headless --path . -s tools/world/check_world.gd` (0 problemas). O teste `test_world` confere o

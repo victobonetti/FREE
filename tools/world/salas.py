@@ -74,19 +74,27 @@ def p1(rm):
 
 @recipe("r1")
 def r1(rm):
+    """Primeiros passos (refeita, D123): a saída para os Degraus fica no alto de uma parede de 5 (o
+    pulo não alcança). A caixa é o degrau: empurrada até a parede, dá para subir. Ela fica onde o
+    coelho a deixou (na volta, continua lá); R recomeça a sala com ela no lugar do começo."""
     rm.theme = "raizes"
-    rm.embed("passos", 10, 12, mirror=True)
-    rm.carve(1, 16, 10, 18)
-    rm.carve(29, 16, 38, 18)
-    rm.door_to("r2").kind = "Z"
-    rm.notes = "Primeiros passos (fase 1, espelhada): a caixa no buraco abre a saída da esquerda."
+    rm.rotate = False
+    rm.extra["puzzle"] = True
+    rm.carve(25, 15, 38, 18)                      # a entrada (chão 19)
+    rm.carve(7, 7, 24, 17)                        # a câmara (chão 18: um degrau para cima)
+    rm.carve(1, 10, 6, 12)                        # em cima da parede de 5 (cols 1..6, linhas 13..17)
+    rm.block(16, 16, "B")
+    for c in (10, 15, 21):
+        rm.set(c, 7, "#")                         # pontas de raiz no teto
+    rm.set(30, 15, "#")
+    rm.notes = "Primeiros passos (refeita, D123): a caixa é o degrau até a saída no alto."
 
 
 @recipe("r2")
 def r2(rm):
     rm.theme = "raizes"
     rm.embed("degraus", 25, 4, mirror=True)
-    rm.tunnel(78, 19, 53, 15)
+    rm.tunnel(78, 13, 53, 15)
     rm.tunnel(1, 19, 25, 15)
     rm.door_to("r3").kind = "Z"
     rm.notes = "Degraus (fase 2, espelhada), mais alta que os corredores."
