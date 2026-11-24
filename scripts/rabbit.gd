@@ -42,6 +42,7 @@ const SWIM_SPEED := 0.6       # multiplicador da velocidade horizontal na água
 const SWIM_JUMP := 100.0      # pulo a partir da superfície
 const SWIM_MIN := 0.3         # fração submersa a partir da qual conta como "na água"
 const SWIM_CD := 15           # quadros entre dois pulos na água
+const DIVE_SPEED := 60.0      # mergulho (A3): afundando, segurando para baixo (px/s)
 
 var pos := Vector2i.ZERO  # canto superior esquerdo da hitbox
 var rem := Vector2.ZERO
@@ -57,6 +58,8 @@ var ext := Vector2.ZERO
 var ext_dir := Vector2.ZERO
 var ext_cap := 0.0
 var air_rot := true  # um giro no ar por pulo
+var ab := {"A1": true, "A2": true}   # habilidades (D120; world_state.gd): fora do mundo, o giro e o giro no ar
+var pulling = null    # a caixa que está puxando (A4), ou null
 var launched := false   # arremessado por uma catapulta (broto, conector) e ainda no ar: o giro mantém o embalo
 var pushing := false
 var impact := 0.0
@@ -89,7 +92,7 @@ var rect: Rect2i:
 
 ## Pode girar a sala: no chão, com o giro do ar, pendurado na corda ou boiando.
 func can_rotate() -> bool:
-	return on_ground or air_rot or rope != null or wet >= SWIM_MIN
+	return on_ground or (air_rot and ab.has("A2")) or rope != null or wet >= SWIM_MIN
 
 
 ## O giro sem apoio gasta o giro do ar; pendurado ou na água, não.
@@ -167,10 +170,18 @@ func update(room, inp: Dictionary) -> void:
 	var top_speed := MAX_SPEED * lerpf(1.0, SWIM_SPEED, clampf(wet / FLOAT_FRAC, 0.0, 1.0))
 	var target := mx * top_speed
 	var rate := 0.0
+	var down: bool = float(inp.get("climb", 0.0)) > 0.5
 	pushing = false
+	pulling = null
 	if absf(mx) > 0.1:
-		facing = 1 if mx > 0.0 else -1
-		if on_ground and room.box_at(Rect2i(pos + Vector2i(facing, 0), Vector2i(SIZE, SIZE)), null) != null:
+		var s := 1 if mx > 0.0 else -1
+		# puxar (A4): segurando para baixo, encostado numa caixa, andando para longe dela
+		if ab.has("A4") and down and on_ground:
+			pulling = room.box_at(Rect2i(pos - Vector2i(s, 0), Vector2i(SIZE, SIZE)), null)
+		facing = s if pulling == null else -s
+		if pulling != null:
+			target = mx * PUSH_SPEED
+		elif on_ground and room.box_at(Rect2i(pos + Vector2i(facing, 0), Vector2i(SIZE, SIZE)), null) != null:
 			target = mx * PUSH_SPEED
 			pushing = true
 		rate = GROUND_ACCEL if on_ground else AIR_ACCEL
@@ -188,16 +199,19 @@ func update(room, inp: Dictionary) -> void:
 	var g := GRAVITY
 	if not on_ground and jump_held and absf(vel.y) < APEX_THRESHOLD:
 		g *= APEX_MULT
-	if wet > 0.0:
+	var diving: bool = wet > 0.0 and ab.has("A3") and down
+	if wet > 0.0 and not diving:
 		g -= GRAVITY / FLOAT_FRAC * wet  # empuxo: equilibra a gravidade com FLOAT_FRAC submerso
 	if vel.y > MAX_FALL:
 		vel.y = maxf(vel.y - FALL_DECEL * DT, MAX_FALL)
 	else:
 		vel.y = minf(vel.y + g * DT, MAX_FALL)
+	if diving:
+		vel.y = minf(vel.y, DIVE_SPEED)   # o mergulho (A3): afunda devagar, nadando
 	if wet > 0.0:
 		vel.y *= 1.0 - WATER_DRAG * wet
 		# boiando em repouso: para de vez, sem ficar oscilando 1 px
-		if not on_ground and absf(wet - FLOAT_FRAC) < 0.06 and absf(vel.y) < 10.0 and var_jump == 0:
+		if not diving and not on_ground and absf(wet - FLOAT_FRAC) < 0.06 and absf(vel.y) < 10.0 and var_jump == 0:
 			vel.y = 0.0
 			rem.y = 0.0
 
@@ -231,6 +245,16 @@ func update(room, inp: Dictionary) -> void:
 	# arremessado (acima das velocidades normais): confere porta e espinhos a cada pixel
 	fast = absf(vel.x) > MAX_SPEED + 1.0 or absf(vel.y) > MAX_FALL + 1.0
 	_move_x(room, vel.x * DT)
+	if pulling != null and pos.x != x0:
+		# a caixa vem atrás, pixel a pixel (se ela trava, o coelho volta junto)
+		var st := signi(pos.x - x0)
+		var n := absi(pos.x - x0)
+		for i in n:
+			if not room.push_box(pulling, Vector2i(st, 0)):
+				pos.x -= st * (n - i)
+				vel.x = 0.0
+				break
+		pushing = true
 	if room.state == "play":
 		_move_y(room, vel.y * DT)
 	# A animação segue o movimento real: andar contra a parede não troca de quadro.

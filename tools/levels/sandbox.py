@@ -9,7 +9,8 @@ fluido (a sandbox usa água).
 Da esquerda para a direita, no chão: o botão por tempo que chama o elevador; a comporta e a
 inversa (no alto, ligadas ao compartimento "a"); espinhos; barras sólidas e de passagem; a corda;
 o poço de água (com o ralo no alto); bateria, alavanca e calha; esteira, mola, ventilador e jato
-de vapor; a caixa da porta. Na parede da direita, um broto (ato 3). Nas paredes, as saídas do modo mundo: a livre (esquerda) e a trancada (direita). No alto: plataforma em ciclo, estampador, catapulta, chapas soltas e a
+de vapor; a caixa da porta. Na parede da direita, um broto (ato 3). No começo, as peças do mundo (D120): a toca, a cápsula
+da pata firme e o cristal que ela quebra. Nas paredes, as saídas do modo mundo: a livre (esquerda) e a trancada (direita). No alto: plataforma em ciclo, estampador, catapulta, chapas soltas e a
 placa de espinhos (num corredor fechado, começa depois de 6 s).
 """
 import sys, os
@@ -113,5 +114,12 @@ lv.add("wilts", {"rect": [79, F - 15, 3, 1], "regrow": 2.5})
 
 # --- bufa-esporos (ato 3), no teto do começo, longe do caminho
 lv.add("puffs", {"rect": [8, 1, 2, 2], "period": 3.0, "phase": 0.0})
+
+# --- peças do mundo (D120): a toca de salvar no chão do começo, a cápsula da pata firme (A6) e o
+# cristal vermelho que ela quebra (uma coluna solta no ar, à esquerda: com a A6, encostar ou bater a
+# pata perto quebra)
+lv.add("tocas", {"rect": [5, F - 2, 3, 2]})
+lv.add("items", {"rect": [10, F - 2, 2, 2], "give": "A6", "after_boss": 0})
+lv.add("barriers", {"rect": [8, 15, 2, 6], "need": "A6"})
 
 lv.save()

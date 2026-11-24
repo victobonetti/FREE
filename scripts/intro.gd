@@ -223,26 +223,25 @@ func _input(event: InputEvent) -> void:
 			_scroll = clampf(_drag_s0 - dx / CARD_GAP, float(MIN_SEL), float(Levels.count()))
 
 
-## A miniatura do mundo: uma casa por sala, a inicial em amarelo.
+## A miniatura do mundo: as salas em escala (1 px a cada 4 tiles), a inicial em amarelo.
 func _world_thumb() -> Texture2D:
 	var w := World.load_world()
-	var lo := Vector2i(9999, 9999)
-	var hi := Vector2i(-9999, -9999)
+	var lo := Vector2i(1 << 30, 1 << 30)
+	var hi := Vector2i(-(1 << 30), -(1 << 30))
 	for r in World.rooms(w):
-		var p := Vector2i(int(r["pos"][0]), int(r["pos"][1]))
-		lo = Vector2i(mini(lo.x, p.x), mini(lo.y, p.y))
-		hi = Vector2i(maxi(hi.x, p.x), maxi(hi.y, p.y))
+		var rr := World.rect_of(w, str(r["id"]))
+		lo = Vector2i(mini(lo.x, rr.position.x), mini(lo.y, rr.position.y))
+		hi = Vector2i(maxi(hi.x, rr.end.x), maxi(hi.y, rr.end.y))
 	if hi.x < lo.x:
 		lo = Vector2i.ZERO
-		hi = Vector2i.ZERO
-	const CW := 9
-	const CH := 6
-	var img := Image.create((hi.x - lo.x + 1) * (CW + 1) + 1, (hi.y - lo.y + 1) * (CH + 1) + 1, false, Image.FORMAT_RGBA8)
+		hi = Vector2i(4, 4)
+	const K := 4
+	var img := Image.create(maxi((hi.x - lo.x) / K + 2, 2), maxi((hi.y - lo.y) / K + 2, 2), false, Image.FORMAT_RGBA8)
 	img.fill(Color("0c0c12"))
 	for r in World.rooms(w):
-		var p := Vector2i(int(r["pos"][0]), int(r["pos"][1])) - lo
+		var rr := World.rect_of(w, str(r["id"]))
 		var col := Color("f3cf3b") if str(r["id"]) == str(w.get("start", "")) else Color("8a8a9e")
-		img.fill_rect(Rect2i(1 + p.x * (CW + 1), 1 + p.y * (CH + 1), CW, CH), col)
+		img.fill_rect(Rect2i(1 + (rr.position.x - lo.x) / K, 1 + (rr.position.y - lo.y) / K, maxi(rr.size.x / K - 1, 1), maxi(rr.size.y / K - 1, 1)), col)
 	return ImageTexture.create_from_image(img)
 
 

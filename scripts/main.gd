@@ -10,6 +10,7 @@ const InputSetup := preload("res://scripts/input_setup.gd")
 const IntroScript := preload("res://scripts/intro.gd")
 const World := preload("res://scripts/world.gd")
 const WorldMap := preload("res://scripts/world_map.gd")
+const WorldState := preload("res://scripts/world_state.gd")
 const LevelEditor := preload("res://scripts/editor/editor.gd")
 const LevelData := preload("res://scripts/level_data.gd")
 const LevelStore := preload("res://scripts/level_store.gd")
@@ -73,11 +74,10 @@ var alarm_t := 0
 var rec_runs: Array = []    # comandos gravados no teste do editor (replay)
 var rec_state := {}         # estado de partida dos atores, para o replay
 var custom := ""            # "", "editor" (teste a partir do editor), "list" (fase da lista), "sandbox" ou "world"
-# Modo mundo (teste metroidvania, D100)
+# Modo mundo (metroidvania, D100 e D120)
 var world: Dictionary = {}
 var world_room := ""
-var world_visited := {}
-var world_solved := {}
+var wstate: RefCounted       # o progresso (world_state.gd)
 var world_map: Node2D
 var list_label: Label       # tela "Minhas fases"
 var list_items: Array = []
@@ -858,6 +858,14 @@ func _tick() -> void:
 		return
 	if editor_layer != null and editor_layer.visible:
 		return
+	if custom == "world" and world_map != null:
+		# o mapa inteiro (M, Tab, Select): pausa o jogo enquanto está aberto
+		if Input.is_action_just_pressed("map"):
+			world_map.full = not world_map.full
+		if world_map.full:
+			if Input.is_action_just_pressed("back"):
+				world_map.full = false
+			return
 	if custom != "" and Input.is_action_just_pressed("back") and not transitioning:
 		_end_custom(false)
 		return
@@ -907,12 +915,15 @@ func _tick() -> void:
 		"jump_held": Input.is_action_pressed("jump"),
 		"climb": Input.get_action_strength("climb_down"),
 		"rotate": rot,
+		# a meia-volta (A5): os dois botões de giro juntos
+		"rotate2": Input.is_action_just_pressed("rotate_cw") and Input.is_action_pressed("rotate_ccw") \
+			or Input.is_action_just_pressed("rotate_ccw") and Input.is_action_pressed("rotate_cw"),
 	}
 	if custom == "editor":
 		Replay.record(rec_runs, inp)   # teste do editor: grava para o replay
 	room.step(inp)
-	if custom == "world" and room != null and room.exits_unlocked and not world_solved.has(world_room):
-		world_solved[world_room] = true
+	if custom == "world" and room != null and room.exits_unlocked and not wstate.solved.has(world_room):
+		wstate.solved[world_room] = true
 		room.def["_solved"] = true   # morrer depois de abrir não tranca de novo
 
 
@@ -995,55 +1006,142 @@ func _end_custom(won: bool) -> void:
 
 # ---------------------------------------------------------------- modo mundo (teste metroidvania, D100)
 
-## Começa o mundo pela sala inicial (levels/world/mundo.json).
-func play_world() -> void:
+## Começa o mundo: continua do último salvamento (a última toca) ou, num jogo novo, da sala inicial.
+func play_world(new_game := false) -> void:
 	_stop_music()
 	world = World.load_world()
 	if world.is_empty() or str(world.get("start", "")) == "":
 		return
-	world_visited.clear()
-	world_solved.clear()
+	wstate = null if new_game else WorldState.load_saved()
+	if wstate == null:
+		wstate = WorldState.new()
 	if world_map == null:
 		world_map = WorldMap.new()
 		ui_layer.add_child(world_map)
 	world_map.world = world
-	world_map.sides.clear()
+	world_map.state = wstate
 	world_map.visible = true
-	_world_enter(str(world["start"]), -1, Vector2.ZERO)
+	var t: Dictionary = wstate.toca
+	if not t.is_empty() and World.has_room(world, str(t.get("room", ""))):
+		_world_enter(str(t["room"]), -1, Vector2.ZERO, int(t.get("toca", -1)))
+	else:
+		_world_enter(str(world["start"]), int(world.get("start_exit", -1)), Vector2(0, 60))
 
 
-## Entra na sala `id` pela saída do lado `entry` (-1: no começo, no "P" da sala).
-func _world_enter(id: String, entry: int, vel: Vector2) -> void:
+## A definição da sala `id` com o que o progresso muda nela.
+func world_def(id: String, entry_exit: int, vel: Vector2, toca := -1) -> Dictionary:
 	var def := World.load_room_def(id)
+	if def.is_empty():
+		return def
+	if wstate.bosses.has(id):
+		# o chefe já foi vencido: a sala fica vazia e aberta
+		for k in ["actors", "spin_block", "gatsby", "boss_music", "elevator"]:
+			def.erase(k)
+		def["door_open"] = true
+	def["_entry_exit"] = entry_exit
+	def["_toca"] = toca
+	def["_hearts_extra"] = wstate.hearts_extra()
+	def["_entry_vel"] = vel
+	def["_solved"] = wstate.solved.has(id)
+	def["_abilities"] = wstate.abilities.duplicate()
+	def["_items"] = wstate.items.duplicate()
+	def["_opened"] = _keys_of(wstate.opened, id)
+	def["_taken"] = _keys_of(wstate.taken, id)
+	def["_world"] = true
+	# saída que agora não leva a nada (a rosa da vizinha virada para outro lado) fica fechada
+	var dead: Array = []
+	var exs0: Array = World.info(id)["exits"]
+	if not World.info(id)["rose"]:
+		for k in exs0.size():
+			if World.link(world, id, k, 0, wstate.roses).is_empty():
+				dead.append(k)
+	def["_dead_exits"] = dead
+	# a subida final (D120): vencido o amortecedor-mor, a queda do começo vira saída
+	if wstate.bosses.has(str(def.get("entry_only_until", ""))):
+		def.erase("entry_only")
+	if World.info(id)["rose"]:
+		var o := int(wstate.roses.get(id, 0))
+		def["start_rot"] = o
+		var open := {}
+		var exs: Array = World.info(id)["exits"]
+		for g in 4:
+			open[g] = []
+			for k in exs.size():
+				if not World.link(world, id, k, g, wstate.roses).is_empty():
+					open[g].append(k)
+		def["_rose_open"] = open
+	return def
+
+
+## Os índices guardados para a sala `id` num dicionário "sala:índice".
+func _keys_of(d: Dictionary, id: String) -> Array:
+	var out: Array = []
+	for k in d:
+		var parts := String(k).split(":")
+		if parts.size() == 2 and parts[0] == id:
+			out.append(int(parts[1]))
+	return out
+
+
+## Entra na sala `id` pela saída de índice `entry_exit` (-1: no começo, no "P" da sala).
+func _world_enter(id: String, entry_exit: int, vel: Vector2, toca := -1) -> void:
+	var def := world_def(id, entry_exit, vel, toca)
 	if def.is_empty():
 		_end_custom(false)
 		return
-	def["_entry"] = entry
-	def["_entry_vel"] = vel
-	def["_solved"] = world_solved.has(id)
 	custom = "world"
 	world_room = id
-	world_visited[id] = true
+	wstate.visited[id] = true
 	_spawn_room(def, -1, "")
+	if not room.world_event.is_connected(_on_world_event):
+		room.world_event.connect(_on_world_event)
 	world_map.current = id
-	world_map.visited = world_visited
 	world_map.screen_w = get_viewport().get_visible_rect().size.x
 
 
-## A sala avisou que o coelho saiu por uma saída. No mundo: vai para a vizinha desse lado. Fora
-## dele (sandbox, teste do editor), sair por uma saída vale como chegar à porta.
-func _on_room_exited(side: int, vel: Vector2) -> void:
+## A sala avisou de algo do mundo: um item pego, uma barreira aberta, o coelho dormiu numa toca.
+func _on_world_event(kind: String, data: Dictionary) -> void:
+	if custom != "world":
+		return
+	var key := "%s:%d" % [world_room, int(data.get("index", -1))]
+	match kind:
+		"item":
+			wstate.taken[key] = true
+			wstate.give(str(data["give"]))
+			room.def["_taken"] = _keys_of(wstate.taken, world_room)
+			room.def["_abilities"] = wstate.abilities.duplicate()
+			room.def["_items"] = wstate.items.duplicate()
+			room.refresh_world(wstate.abilities, wstate.items)
+			wstate.save()
+		"opened":
+			wstate.opened[key] = true
+			room.def["_opened"] = _keys_of(wstate.opened, world_room)
+		"toca":
+			wstate.toca = {"room": world_room, "toca": int(data.get("index", 0))}
+			wstate.save()
+		"boss":
+			wstate.bosses[world_room] = true
+			wstate.save()
+
+
+## A sala avisou que o coelho saiu por uma saída: vai para a sala do outro lado dela. Fora do mundo
+## (sandbox, teste do editor), sair por uma saída vale como chegar à porta.
+func _on_room_exited(_side: int, vel: Vector2) -> void:
 	if custom != "world":
 		_on_completed()
 		return
 	if room != null and room.exits_unlocked:
-		world_solved[world_room] = true
-	var nb := World.neighbor(world, world_room, side)
-	if nb == "":
-		# saída para fora do mapa: fim do teste
+		wstate.solved[world_room] = true
+	var o := 0
+	if room != null and room.rose:
+		o = room.exit_orient
+		wstate.roses[world_room] = o
+	var to := World.link(world, world_room, room.exit_index if room != null else -1, o, wstate.roses)
+	if to.is_empty():
+		# saída para fora do mapa: fim
 		call_deferred("_end_custom", true)
 		return
-	call_deferred("_world_enter", nb, (side + 2) % 4, vel)
+	call_deferred("_world_enter", str(to["room"]), int(to["exit"]), vel)
 
 
 ## Build de teste: a sandbox (sala -1, todos os componentes). Esc ou a porta voltam ao início.

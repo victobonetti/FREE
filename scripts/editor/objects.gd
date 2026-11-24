@@ -135,10 +135,42 @@ const TYPES := {
 		],
 		"rects": ["rect"], "dirs": ["dir"],
 	},
+	# o mundo (D120): barreiras, itens e tocas
+	"barriers": {
+		"label": "Barreira (abre com habilidade ou item)", "color": Color("ff4a5e"),
+		"fields": [
+			{"key": "rect", "label": "Área", "kind": "rect"},
+			{"key": "need", "label": "Abre com", "kind": "choice", "opts": [{"v": "A6", "t": "pata firme (cristal)"}, {"v": "A7", "t": "seringa (gosma)"},
+				{"v": "noz", "t": "noz-mestra (raiz)"}, {"v": "cracha", "t": "crachá (catraca)"}, {"v": "chefe", "t": "chefe vencido (pedra)"},
+				{"v": "lanterna", "t": "lanterna (véu escuro)"}, {"v": "chaves", "t": "as três chaves (porta)"},
+				{"v": "A4", "t": "puxar (caixa presa)"}, {"v": "sala", "t": "sala resolvida (trava)"}], "def": "A6"},
+		],
+		"rects": ["rect"], "dirs": [],
+	},
+	"items": {
+		"label": "Item (habilidade, chave, coração, pista)", "color": Color("6fc8ff"),
+		"fields": [
+			{"key": "rect", "label": "Lugar (2x2)", "kind": "rect"},
+			{"key": "give", "label": "Dá", "kind": "choice", "opts": [
+				{"v": "A1", "t": "A1 batida de pata"}, {"v": "A2", "t": "A2 giro no ar"}, {"v": "A3", "t": "A3 mergulho"},
+				{"v": "A4", "t": "A4 puxar caixas"}, {"v": "A5", "t": "A5 meia-volta"}, {"v": "A6", "t": "A6 pata firme"},
+				{"v": "A7", "t": "A7 seringa"}, {"v": "noz", "t": "noz-mestra"}, {"v": "cracha", "t": "crachá"},
+				{"v": "lanterna", "t": "lanterna"}, {"v": "chave1", "t": "chave 1"}, {"v": "chave2", "t": "chave 2"},
+				{"v": "chave3", "t": "chave 3"}, {"v": "coracao", "t": "coração"}, {"v": "pista", "t": "pista"}], "def": "pista"},
+			{"key": "after_boss", "label": "Só depois do chefe (0/1)", "kind": "int", "min": 0, "max": 1, "def": 0},
+		],
+		"rects": ["rect"], "dirs": [],
+	},
+	"tocas": {
+		"label": "Toca de salvar", "color": Color("7fe08a"),
+		"fields": [{"key": "rect", "label": "Área (no chão)", "kind": "rect"}],
+		"rects": ["rect"], "dirs": [],
+	},
 }
 
 ## A ordem em que os tipos aparecem na interface.
-const ORDER := ["crushers", "movers", "plates", "crumbles", "conveyors", "springs", "fans", "vents", "sprouts", "bouncers", "wilts", "puffs"]
+const ORDER := ["crushers", "movers", "plates", "crumbles", "conveyors", "springs", "fans", "vents", "sprouts", "bouncers", "wilts", "puffs",
+	"barriers", "items", "tocas"]
 
 
 static func label(kind: String) -> String:

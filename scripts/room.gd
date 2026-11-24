@@ -13,6 +13,7 @@ signal exited(side: int, vel: Vector2)   # modo mundo: o coelho saiu por uma sa�
 signal sfx(name: String)
 signal music_request(path: String)   # um ator pede outra faixa (o boss, ao entrar)
 signal impact(strength: float)  # pouso de caixa; 0 a 2,5 (mais altura e mais caixas = mais forte)
+signal world_event(kind: String, data: Dictionary)   # mundo (D120): "item", "opened", "toca"
 
 const TILE := 8
 const VIEW := Vector2(320, 180)  # tamanho da tela (resolução interna)
@@ -105,6 +106,7 @@ const DANGER_FAR := 150.0       # px: a esta distância da placa o perigo é 0
 const DANGER_NEAR := 30.0       # px: a esta distância o perigo é 1
 const CRUSH_BEAM := 6           # viga da frente, onde os dentes estão presos (px)
 
+const World := preload("res://scripts/world.gd")
 const Rabbit := preload("res://scripts/rabbit.gd")
 const Box := preload("res://scripts/box.gd")
 
@@ -277,7 +279,21 @@ var bubbles: Array = []        # bolhas subindo no líquido (só desenho): {"k":
 var _step_idx := 0
 var query_up := false          # o coelho está testando um passo para cima (a barra de passagem deixa passar)
 var query_rabbit := false      # a consulta de colisão é do coelho (só ele passa pelas saídas)
-var exits: Array = []          # {"side": lado como desenhado, "rect": Rect2i (as células da abertura), "locked", "flooded"}
+var exits: Array = []          # {"side": lado como desenhado, "rect": Rect2i (as células da abertura), "locked", "flooded", "index"}
+var exit_index := -1           # por qual saída (o índice, como em world.gd) o coelho saiu
+var exit_orient := 0           # e com a sala girada quantas vezes (a rosa sai girada)
+var rose := false              # a sala é uma rosa (D119): a abertura sai em qualquer giro em que encaixa
+var rose_open := {}            # rosa: giro (0..3) -> índices das saídas que encaixam numa vizinha nesse giro
+var entry_only: Array = []     # saídas de mão única (D120): só se entra por elas (a queda, o atalho)
+var dead_exits: Array = []     # saídas que agora não levam a nada (a rosa vizinha virada para outro lado)
+# O mundo (D120): habilidades, itens e as peças que dependem deles.
+var ab := {}                   # habilidades que o coelho tem (world_state.gd); fora do mundo, o giro e o giro no ar
+var witems := {}               # itens que o coelho tem
+var barriers: Array = []       # {"rect", "need", "open", "index", "t"}: cristal (A6), gosma (A7), raiz (noz), catraca (cracha)
+var pickups: Array = []        # {"rect", "give", "index", "taken", "after_boss"}
+var tocas: Array = []          # {"rect", "index", "t"}: a toca de salvar
+var dark := false              # sala escura (a lanterna ilumina mais)
+var _light_tex: Texture2D
 var exits_unlocked := false    # as saídas trancadas já abriram (ou a sala já foi resolvida antes: "_solved")
 var _vignette: Texture2D       # escurecimento nas bordas da tela (gerado uma vez)
 var cycle_t := 0         # quadros de simulação desde o início: os conectores em ciclo seguem este relógio
@@ -543,8 +559,24 @@ func reset() -> void:
 	for i in 300:
 		_update_ropes()
 	_update_sockets()
-	if int(def.get("_entry", -1)) >= 0:
+	rose = bool(def.get("rose", false))
+	rose_open = def.get("_rose_open", {})
+	entry_only = []
+	for v in def.get("entry_only", []):
+		entry_only.append(int(v))
+	dead_exits = []
+	for v in def.get("_dead_exits", []):
+		dead_exits.append(int(v))
+	if int(def.get("_entry_exit", -1)) >= 0:
+		_place_at_exit(int(def["_entry_exit"]), def.get("_entry_vel", Vector2.ZERO))
+	elif int(def.get("_entry", -1)) >= 0:
 		_place_at_entry(int(def["_entry"]), def.get("_entry_vel", Vector2.ZERO))
+	elif int(def.get("_toca", -1)) >= 0 and int(def["_toca"]) < tocas.size():
+		# acordando na toca onde dormiu
+		var tr: Rect2i = tocas[int(def["_toca"])]["rect"]
+		rabbit.pos = Vector2i(tr.get_center().x - Rabbit.SIZE / 2, tr.end.y - Rabbit.SIZE)
+		rabbit.vel = Vector2.ZERO
+		tocas[int(def["_toca"])]["t"] = 90
 	look = Vector2.ZERO
 	cam = _cam_target()
 	_init_spin_block()
@@ -862,6 +894,7 @@ func _init_dynamics() -> void:
 	for d in def.get("puffs", []):
 		puffs.append({"rect": _tile_rect(d["rect"]), "period": maxi(seconds_to_frames(float(d.get("period", 3.0))), 30),
 			"phase": seconds_to_frames(float(d.get("phase", 0.0))), "cd": 0, "k": 0.0})
+	_parse_world_pieces()
 	# cogumelo-mola (campo "bouncers", ato 3, D111): uma mola orgânica, com o mesmo formato
 	for d in def.get("bouncers", []):
 		springs.append({
@@ -1632,17 +1665,13 @@ func _parse(rows: Array, water_tiles: Array) -> void:
 			hi = Vector2i(maxi(hi.x, k.x), maxi(hi.y, k.y))
 		door = Rect2i(lo * TILE, (hi - lo + Vector2i.ONE) * TILE)
 		has_door = true
-	for side in 4:
-		var rect := Rect2i()
-		var locked := false
-		var any := false
-		for ec in exit_cells:
-			if ec[0] == side:
-				rect = ec[1] if not any else rect.merge(ec[1])
-				locked = locked or ec[2]
-				any = true
-		if any:
-			exits.append({"side": side, "rect": rect, "locked": locked, "flooded": false})
+	# uma saída por trecho contínuo de X/Z na borda, na ordem de world.gd (por lado, ao longo dele)
+	var k := 0
+	for ex in World.parse_exits(rows):
+		var er: Rect2i = ex["rect"]
+		exits.append({"side": int(ex["side"]), "rect": Rect2i(er.position * TILE, er.size * TILE), "locked": bool(ex["locked"]),
+			"flooded": false, "index": k})
+		k += 1
 	_parse_ropes(rows, rope_cells)
 	var ids := gate_cells.keys()
 	ids.sort()
@@ -1781,6 +1810,8 @@ func _rotate_logic(dir: int) -> void:
 			m["spikes"] = posmod(m["spikes"] + dir, 4)
 	for c in crumbles:
 		c["rect"] = _rot_rect(c["rect"], dir)
+	for o in barriers + pickups + tocas:
+		o["rect"] = _rot_rect(o["rect"], dir)
 	for p in plates:
 		p["rect"] = _rot_rect(p["rect"], dir)
 	for o in conveyors + springs + fans + vents:
@@ -1854,6 +1885,7 @@ func _begin_rotate(dir: int, forced := false) -> void:
 	_rotate_logic(dir)
 	if not forced:
 		_flip_fx(dir)
+		_crystal_check()
 	rotating = true
 	rot_frame = 0
 	rot_len = ROT_FRAMES
@@ -1861,6 +1893,30 @@ func _begin_rotate(dir: int, forced := false) -> void:
 	view_angle = rot_from
 	rot_lock_max = reload_frames
 	rot_lock = rot_lock_max
+
+
+## A meia-volta (A5): 180° de uma vez, sem passar pelo meio (a água e o ácido não derramam no caminho).
+func _begin_rotate_half() -> void:
+	if not rabbit.free_rotate():
+		rabbit.air_rot = false
+	if def.get("limiter", false):
+		if limit_net == 0:
+			limit_t = limiter_frames
+		limit_net += 2
+		if posmod(limit_net, 4) == 0:
+			limit_net = 0
+			limit_t = 0
+	_rotate_logic(1)
+	_rotate_logic(1)
+	_flip_fx(1)
+	rotating = true
+	rot_frame = 0
+	rot_len = ROT_FRAMES * 3 / 2
+	rot_from = -PI
+	view_angle = rot_from
+	rot_lock_max = reload_frames
+	rot_lock = rot_lock_max
+	_crystal_check()
 
 
 ## O limitador desfaz tudo de uma vez: a sala volta à orientação de antes do primeiro giro, num giro
@@ -2019,7 +2075,13 @@ func tile_solid_rect(r: Rect2i) -> bool:
 ## A saída deixa passar? Só com a sala de pé do jeito que foi desenhada (a saída no lado dela): o
 ## mapa liga as salas pelos lados desenhados, e girada ela levaria para o lugar errado.
 func exit_open(ex: Dictionary) -> bool:
-	if exit_cur_side(ex) != int(ex["side"]):
+	if entry_only.has(int(ex.get("index", -1))) or dead_exits.has(int(ex.get("index", -1))):
+		return false
+	if rose:
+		# a rosa: sai em qualquer giro em que a abertura encaixa numa vizinha
+		if not (rose_open.get(orientation, []) as Array).has(int(ex.get("index", -1))):
+			return false
+	elif exit_cur_side(ex) != int(ex["side"]):
 		return false
 	return not ex["locked"] or (exits_unlocked and not ex["flooded"])
 
@@ -2069,10 +2131,19 @@ func _in_exit_corridor(r: Rect2i) -> bool:
 	return false
 
 
-## Entrando pela saída `side` (como desenhada): o coelho aparece logo para dentro dela, já entrando.
+## Entrando pela saída `side` (como desenhada): a primeira saída desse lado.
 func _place_at_entry(side: int, vel_in: Vector2) -> void:
 	for ex in exits:
-		if ex["side"] != side:
+		if ex["side"] == side:
+			_place_at_exit(int(ex["index"]), vel_in)
+			return
+
+
+## Entrando pela saída de índice `idx`: o coelho aparece logo para dentro dela, já entrando (no lado
+## em que ela está agora: a rosa pode estar girada).
+func _place_at_exit(idx: int, vel_in: Vector2) -> void:
+	for ex in exits:
+		if int(ex["index"]) != idx:
 			continue
 		var er: Rect2i = ex["rect"]
 		var cx := er.position.x + er.size.x / 2 - 6
@@ -2109,11 +2180,17 @@ func _check_exit() -> bool:
 	var best: Dictionary = {}
 	var bd := INF
 	for ex in exits:
+		if not exit_open(ex):
+			continue
 		var d := Rect2(ex["rect"]).get_center().distance_to(rc)
 		if d < bd:
 			bd = d
 			best = ex
+	if best.is_empty():
+		return false
 	state = "exit"
+	exit_index = int(best["index"])
+	exit_orient = orientation
 	exited.emit(int(best["side"]), rabbit.vel)
 	return true
 
@@ -2181,6 +2258,9 @@ func solid_static(r: Rect2i) -> bool:
 			return true
 	for c in crumbles:
 		if not c.get("gone", false) and overlaps(r, c["rect"]):
+			return true
+	for b in barriers:
+		if not b["open"] and overlaps(r, b["rect"]):
 			return true
 	return false
 
@@ -2255,6 +2335,10 @@ func step(inp: Dictionary) -> void:
 	if input_lock:
 		inp = {}
 	rot_lock = maxi(rot_lock - 1, 0)
+	if limit_t > 0 and ab.has("A6"):
+		# a pata firme (A6): o amortecedor não segura mais o giro
+		limit_t = 0
+		limit_net = 0
 	if limit_t > 0:
 		limit_t -= 1
 		if limit_t == 0:
@@ -2265,6 +2349,8 @@ func step(inp: Dictionary) -> void:
 				_limiter_revert()
 				return
 	var req: int = inp.get("rotate", 0)
+	if bool(inp.get("rotate2", false)) and ab.has("A5"):
+		req = 2   # a meia-volta (A5): os dois botões juntos
 	if req != 0 and rot_lock <= ROT_BUFFER:
 		pending_rot = req
 	if rotating:
@@ -2294,8 +2380,11 @@ func step(inp: Dictionary) -> void:
 		if has_spin:
 			if rabbit.can_rotate():
 				_begin_spin(dir)
-		elif allow_rotate and rabbit.can_rotate():
-			_begin_rotate(dir)
+		elif allow_rotate and rabbit.can_rotate() and ab.has("A1"):
+			if dir == 2:
+				_begin_rotate_half()
+			else:
+				_begin_rotate(dir)
 			return
 	_update_spin()
 
@@ -2307,6 +2396,7 @@ func step(inp: Dictionary) -> void:
 	rabbit.update(self, inp)
 	if state != "play":
 		return
+	_update_world_pieces()
 	if _check_exit():
 		return
 	if rabbit.ev_jump:
@@ -2517,11 +2607,13 @@ func _update_sockets() -> void:
 		door_open = open
 		door_flash = 14
 	if not exits.is_empty():
-		if not exits_unlocked and (group_filled(0) or def.get("door_open", false)):
+		if not exits_unlocked and (group_filled(0) or def.get("door_open", false) or door_unlocked):
 			exits_unlocked = true
 			door_flash = 14
 			if state == "play":
 				sfx.emit("gate_open")
+			if door_unlocked:
+				world_event.emit("boss", {})   # o chefe da sala caiu (o mundo guarda)
 		for ex in exits:
 			# água encostada na saída trancada a mantém fechada ("com água, a porta se fecha")
 			ex["flooded"] = ex["locked"] and water_frac(_exit_inner(ex)) >= DOOR_FLOOD
@@ -3581,6 +3673,7 @@ func _draw() -> void:
 
 	_draw_walls()
 	_draw_exits()
+	_draw_world_pieces()
 	_draw_conveyors()
 	_draw_gates()
 	_draw_platforms()
@@ -3643,6 +3736,8 @@ func _draw() -> void:
 			draw_arc(p["pos"], p["ring"], 0.0, TAU, 20, Color(col, a * 0.8), 1.0)
 		else:
 			draw_rect(Rect2(p["pos"] - Vector2(1, 1), Vector2(2, 2)), Color(col, a))
+
+	draw_dark(base)
 
 	# entrada no portal: véu dourado que cresce sobre a sala inteira
 	if (state == "won" or state == "done") and has_door:
@@ -5609,3 +5704,330 @@ func _draw_door() -> void:
 	if win_t > 0.0:
 		var f := sin(clampf(win_t / 0.7, 0.0, 1.0) * PI)
 		draw_rect(r.grow(5.0 * f), Color(1.0, 0.96, 0.75, 0.55 * f))
+
+
+# ---------------------------------------------------------------- o mundo: barreiras, itens, tocas, escuro (D120)
+# Campos da sala (em tiles, como as outras peças):
+#   "barriers": [{"rect": [c, l, w, h], "need": "A6" | "A7" | "noz" | "cracha" | "chefe"}]   sólida até o
+#       coelho chegar com o que ela pede: o cristal vermelho (pata firme: também quebra com uma batida
+#       de pata perto), a gosma (seringa), a raiz com o buraco da noz (noz-mestra), a catraca (crachá);
+#       a pedra do chefe cai sozinha quando o chefe da sala é vencido.
+#   "items": [{"rect": [c, l, 2, 2], "give": "A1".."A7" | "noz" | "cracha" | "lanterna" | "chave1".. |
+#       "coracao" | "pista", "after_boss": true?}]   o coelho pega encostando (o do chefe só aparece
+#       depois de vencê-lo).
+#   "tocas": [{"rect": [c, l, w, h]}]   a toca de salvar: entrar dorme e salva.
+#   "dark": true   a sala é escura: só se vê em volta do coelho (com a lanterna, bem mais).
+# O que já foi aberto ou pego vem do progresso ("_opened", "_taken": índices).
+
+const BARRIER_NAMES := {"A6": "cristal", "A7": "gosma", "noz": "raiz", "cracha": "catraca", "chefe": "pedra",
+	"chaves": "porta das três luzes", "lanterna": "véu escuro", "A4": "caixa presa", "sala": "trava da sala"}
+const C_CRYSTAL_RED := Color("ff4a5e")
+const C_GOO_WALL := Color("bfc39a")
+const C_GOO_WALL_D := Color("8a8f6a")
+const C_ROOT_WALL := Color("6b4a33")
+const C_TURNSTILE := Color("8a929e")
+const LIGHT_R := 34.0          # o raio da luz no escuro, sem a lanterna
+const LANTERN_R := 96.0
+
+
+func _parse_world_pieces() -> void:
+	ab = Dictionary(def.get("_abilities", {"A1": true, "A2": true})).duplicate()
+	witems = Dictionary(def.get("_items", {})).duplicate()
+	rabbit.ab = ab
+	dark = bool(def.get("dark", false))
+	barriers.clear()
+	pickups.clear()
+	tocas.clear()
+	var opened: Array = def.get("_opened", [])
+	var taken: Array = def.get("_taken", [])
+	var bl: Array = def.get("barriers", [])
+	for i in bl.size():
+		var d: Dictionary = bl[i]
+		barriers.append({"rect": _tile_rect(d["rect"]), "need": str(d.get("need", "A6")), "open": opened.has(i), "index": i, "t": 0.0})
+	var il: Array = def.get("items", [])
+	for i in il.size():
+		var d: Dictionary = il[i]
+		pickups.append({"rect": _tile_rect(d["rect"]), "give": str(d.get("give", "pista")), "index": i, "taken": taken.has(i),
+			"after_boss": bool(d.get("after_boss", false))})
+	var tl: Array = def.get("tocas", [])
+	for i in tl.size():
+		tocas.append({"rect": _tile_rect(tl[i]["rect"]), "index": i, "t": 0})
+
+
+## O progresso mudou no meio da sala (pegou um item): as habilidades e os itens valem na hora.
+func refresh_world(abilities: Dictionary, items: Dictionary) -> void:
+	ab = abilities.duplicate()
+	witems = items.duplicate()
+	rabbit.ab = ab
+
+
+func has_need(need: String) -> bool:
+	if need == "chaves":
+		return int(witems.get("chave1", 0)) > 0 and int(witems.get("chave2", 0)) > 0 and int(witems.get("chave3", 0)) > 0
+	return ab.has(need) or int(witems.get(need, 0)) > 0
+
+
+func _update_world_pieces() -> void:
+	var rr := Rect2i(rabbit.rect).grow(2)
+	for b in barriers:
+		if b["open"]:
+			b["t"] = minf(float(b["t"]) + 0.05, 1.0)
+			continue
+		if b["need"] == "chefe" or b["need"] == "sala":
+			# a pedra do chefe e a trava da sala abrem sozinhas: o chefe vencido, a sala resolvida
+			if (b["need"] == "chefe" and door_unlocked) or (b["need"] == "sala" and exits_unlocked):
+				_open_barrier(b)
+		elif overlaps(rr, b["rect"]) and has_need(b["need"]):
+			_open_barrier(b)
+	for p in pickups:
+		if p["taken"] or (p["after_boss"] and not door_unlocked):
+			continue
+		if overlaps(rabbit.rect, p["rect"]):
+			p["taken"] = true
+			sfx.emit("battery")
+			var c := Vector2(p["rect"].get_center())
+			particles.append({"pos": c, "vel": Vector2.ZERO, "life": 14, "col": _pickup_color(p["give"]), "grav": 0.0, "ring": 5.0})
+			for i in 14:
+				var a := randf() * TAU
+				particles.append({"pos": c, "vel": Vector2(cos(a), sin(a)) * randf_range(30.0, 90.0), "life": randi_range(12, 24),
+					"col": _pickup_color(p["give"]), "grav": 0.0})
+			# vale na hora (fora do mundo também: a sandbox); no mundo, o main guarda no progresso
+			var g: String = p["give"]
+			if g.length() == 2 and g.begins_with("A"):
+				ab[g] = true
+				rabbit.ab = ab
+			else:
+				witems[g] = int(witems.get(g, 0)) + 1
+			world_event.emit("item", {"index": p["index"], "give": g})
+	for t in tocas:
+		t["t"] = maxi(int(t["t"]) - 1, 0)
+		if overlaps(rabbit.rect, t["rect"]) and rabbit.on_ground:
+			if int(t["t"]) == 0:
+				sfx.emit("sensor_on")
+				world_event.emit("toca", {"index": t["index"]})
+			t["t"] = 90   # dormindo: só salva de novo depois de sair e voltar
+
+
+func _open_barrier(b: Dictionary) -> void:
+	b["open"] = true
+	b["t"] = 0.0
+	sfx.emit("crunch" if b["need"] != "cracha" else "gate_open")
+	shake = maxf(shake, 3.0)
+	var c := Vector2(b["rect"].get_center())
+	var col := _barrier_color(b["need"])
+	for i in 18:
+		var a := randf() * TAU
+		particles.append({"pos": c + Vector2(randf_range(-6, 6), randf_range(-10, 10)), "vel": Vector2(cos(a), sin(a)) * randf_range(40.0, 130.0),
+			"life": randi_range(14, 28), "col": col, "grav": 260.0})
+	world_event.emit("opened", {"index": b["index"]})
+
+
+## A batida de pata com a pata firme (A6) quebra os cristais perto.
+func _crystal_check() -> void:
+	if not ab.has("A6"):
+		return
+	var c := Vector2(rabbit.pos) + Vector2(6, 6)
+	for b in barriers:
+		if not b["open"] and b["need"] == "A6" and Rect2(b["rect"]).grow(48.0).has_point(c):
+			_open_barrier(b)
+
+
+func _barrier_color(need: String) -> Color:
+	match need:
+		"A6":
+			return C_CRYSTAL_RED
+		"A7":
+			return C_GOO_WALL
+		"noz":
+			return C_ROOT_WALL
+		"chefe":
+			return Color("6a645c")
+		"chaves":
+			return Color("d9d4c8")
+		"A4":
+			return Color("a8743a")
+		"sala":
+			return C_DOOR_LOCKED
+		"lanterna":
+			return Color("1a1424")
+	return C_TURNSTILE
+
+
+func _pickup_color(give: String) -> Color:
+	if give.begins_with("A"):
+		return Color("6fc8ff")
+	match give:
+		"coracao":
+			return Color("e0657c")
+		"noz":
+			return Color("d9a441")
+		"cracha":
+			return Color("f3cf3b")
+		"lanterna":
+			return Color("ffe9a0")
+		"chave1":
+			return Color("7fe08a")
+		"chave2":
+			return Color("6fa8ff")
+		"chave3":
+			return Color("c58cff")
+	return Color("efeadf")   # pista
+
+
+func _draw_world_pieces() -> void:
+	for b in barriers:
+		var r := Rect2(b["rect"])
+		if b["open"]:
+			if float(b["t"]) < 1.0:
+				draw_rect(r, Color(_barrier_color(b["need"]), 0.5 * (1.0 - float(b["t"]))))
+			continue
+		match b["need"]:
+			"A6":
+				# o cristal vermelho do amortecedor, em placas
+				draw_rect(r, Color("5a1820"))
+				for y in range(int(r.position.y), int(r.end.y), 8):
+					var off := 2.0 if (y / 8) % 2 == 0 else 5.0
+					draw_rect(Rect2(r.position.x + off, y + 1, r.size.x - 7, 6), C_CRYSTAL_RED.darkened(0.15))
+					draw_rect(Rect2(r.position.x + off, y + 1, r.size.x - 7, 1), Color(1, 0.75, 0.8, 0.7))
+				var pulse := 0.5 + 0.5 * sin(frame * 0.1)
+				draw_rect(r.grow(1.0), Color(C_CRYSTAL_RED, 0.25 + 0.25 * pulse), false, 1.0)
+			"A7":
+				# a gosma do Senzi: um tampão mole que pinga
+				draw_rect(r, C_GOO_WALL)
+				draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), Color("d9dcb8"))
+				for k in int(r.size.x / 4.0):
+					var dl := 2.0 + fposmod(frame * 0.05 + k * 1.7, 4.0)
+					draw_rect(Rect2(r.position.x + 1 + k * 4, r.end.y, 1, dl), C_GOO_WALL_D)
+				draw_rect(Rect2(r.position.x + 2, r.position.y + 4, 2, 2), Color(1, 1, 1, 0.7))
+			"noz":
+				# a raiz trançada, com o buraco da noz no meio
+				draw_rect(r, C_ROOT_WALL)
+				for x in range(int(r.position.x), int(r.end.x), 4):
+					draw_rect(Rect2(x, r.position.y, 2, r.size.y), C_ROOT_WALL.lightened(0.15))
+				var c := r.get_center()
+				draw_circle(c, 4.0, Color("2a1d12"))
+				draw_circle(c, 2.0, Color("d9a441", 0.6 + 0.4 * sin(frame * 0.12)))
+			"A4":
+				# a caixa presa no vão: só sai puxando (A4)
+				draw_rect(r, Color("5a3d1f"))
+				for y in range(int(r.position.y), int(r.end.y), 8):
+					for x in range(int(r.position.x), int(r.end.x), 8):
+						var bx := Rect2(x + 1, y + 1, 6, 6)
+						draw_rect(bx, Color("a8743a"))
+						draw_rect(Rect2(bx.position, Vector2(6, 1)), Color("c99a5c"))
+						draw_rect(Rect2(x + 3, y + 3, 2, 2), Color("5a3d1f"))
+			"sala":
+				# a trava da sala: a grade azul das saídas trancadas; abre quando a sala é resolvida
+				draw_rect(r, C_DOOR_LOCKED_DARK)
+				for x in range(int(r.position.x) + 2, int(r.end.x), 3):
+					draw_rect(Rect2(x, r.position.y, 1, r.size.y), C_DOOR_LOCKED)
+			"chaves":
+				# a porta das três luzes: uma luz acende para cada chave que o coelho tem
+				draw_rect(r, Color("8a8478"))
+				draw_rect(r.grow(-1.0), Color("b9b3a6"))
+				var keys := ["chave1", "chave2", "chave3"]
+				var kc := [Color("7fe08a"), Color("6fa8ff"), Color("c58cff")]
+				for i in 3:
+					var lc := Vector2(r.position.x + r.size.x * (i + 1) / 4.0, r.get_center().y)
+					var on := int(witems.get(keys[i], 0)) > 0
+					draw_circle(lc, 2.5, Color("3a3630"))
+					if on:
+						draw_circle(lc, 2.0, kc[i])
+						draw_circle(lc, 4.0 + sin(frame * 0.1 + i) * 0.5, Color(kc[i], 0.25))
+			"lanterna":
+				# o véu escuro do fungário oeste: só a lanterna o espanta
+				draw_rect(r, Color("120e1a"))
+				for k in 3:
+					var ey := r.position.y + 4 + fposmod(k * 7.3, maxf(r.size.y - 6, 1.0))
+					var ex := r.position.x + 3 + fposmod(k * 5.1, maxf(r.size.x - 6, 1.0))
+					if int(frame / 50 + k) % 4 != 0:
+						draw_rect(Rect2(ex, ey, 1, 1), Color("e8e070", 0.8))
+						draw_rect(Rect2(ex + 3, ey, 1, 1), Color("e8e070", 0.8))
+			"chefe":
+				# a pedra que fecha a arena: cai quando o chefe é vencido
+				draw_rect(r, Color("4a463f"))
+				for y in range(int(r.position.y), int(r.end.y), 6):
+					var off := 0.0 if (y / 6) % 2 == 0 else 3.0
+					for x in range(int(r.position.x + off), int(r.end.x), 6):
+						draw_rect(Rect2(x, y, 5, 5), Color("6a645c"))
+			_:
+				# a catraca da fábrica, com a fenda do crachá
+				draw_rect(r, Color("3a3f48"))
+				for y in range(int(r.position.y) + 2, int(r.end.y), 5):
+					draw_rect(Rect2(r.position.x, y, r.size.x, 2), C_TURNSTILE)
+				var c := r.get_center()
+				draw_rect(Rect2(c.x - 3, c.y - 1, 6, 2), Color("f3cf3b", 0.6 + 0.4 * sin(frame * 0.12)))
+	for p in pickups:
+		if p["taken"] or (p["after_boss"] and not door_unlocked):
+			continue
+		var c := Rect2(p["rect"]).get_center() + Vector2(0, sin(frame * 0.08 + int(p["index"])) * 1.5)
+		var col := _pickup_color(p["give"])
+		draw_circle(c, 7.0 + sin(frame * 0.1) * 1.0, Color(col, 0.18))
+		var g: String = p["give"]
+		if g.begins_with("A"):
+			# a cápsula azul (tecnologia do laboratório)
+			draw_rect(Rect2(c.x - 3, c.y - 5, 6, 10), Color("1b3a52"))
+			draw_rect(Rect2(c.x - 2, c.y - 4, 4, 8), col)
+			draw_rect(Rect2(c.x - 2, c.y - 4, 1, 8), Color(1, 1, 1, 0.6))
+		elif g == "coracao":
+			draw_rect(Rect2(c.x - 3, c.y - 2, 2, 2), col)
+			draw_rect(Rect2(c.x + 1, c.y - 2, 2, 2), col)
+			draw_rect(Rect2(c.x - 4, c.y - 1, 8, 2), col)
+			draw_rect(Rect2(c.x - 3, c.y + 1, 6, 1), col)
+			draw_rect(Rect2(c.x - 2, c.y + 2, 4, 1), col)
+			draw_rect(Rect2(c.x - 1, c.y + 3, 2, 1), col)
+		elif g == "noz":
+			draw_circle(c + Vector2(0, 1), 3.5, col)
+			draw_rect(Rect2(c.x - 4, c.y - 3, 8, 2), Color("7a5528"))
+			draw_rect(Rect2(c.x, c.y - 5, 1, 2), Color("7a5528"))
+		elif g == "cracha":
+			draw_rect(Rect2(c.x - 4, c.y - 3, 8, 6), col)
+			draw_rect(Rect2(c.x - 3, c.y - 2, 3, 3), Color("3a3f48"))
+			draw_rect(Rect2(c.x + 1, c.y - 1, 2, 1), Color("3a3f48"))
+		elif g == "lanterna":
+			draw_rect(Rect2(c.x - 2, c.y - 4, 4, 1), Color("8a929e"))
+			draw_rect(Rect2(c.x - 3, c.y - 3, 6, 6), col)
+			draw_rect(Rect2(c.x - 2, c.y + 3, 4, 1), Color("8a929e"))
+		elif g.begins_with("chave"):
+			draw_circle(c + Vector2(-2, 0), 2.5, col)
+			draw_rect(Rect2(c.x, c.y - 0.5, 5, 1), col)
+			draw_rect(Rect2(c.x + 3, c.y, 1, 2), col)
+		else:
+			# a pista: uma plaquinha de metal com número de série
+			draw_rect(Rect2(c.x - 4, c.y - 3, 8, 6), Color("8a929e"))
+			draw_rect(Rect2(c.x - 3, c.y - 1, 6, 1), Color("3a3f48"))
+			draw_rect(Rect2(c.x - 3, c.y + 1, 4, 1), Color("3a3f48"))
+	for t in tocas:
+		# a toca: um ninho de palha no chão, e "z" subindo quando o coelho dorme nela
+		var r := Rect2(t["rect"])
+		draw_rect(Rect2(r.position.x, r.end.y - 3, r.size.x, 3), Color("a8884a"))
+		draw_rect(Rect2(r.position.x + 2, r.end.y - 4, r.size.x - 4, 1), Color("d9b86a"))
+		if int(t["t"]) > 0:
+			var k := 90 - int(t["t"])
+			draw_rect(Rect2(r.get_center().x + 4 + k * 0.1, r.position.y - k * 0.3, 3, 1), Color(1, 1, 1, 0.8 * float(t["t"]) / 90.0))
+
+
+## O escuro: tudo preto, menos um círculo de luz em volta do coelho (maior com a lanterna). Desenhado
+## por cima da sala, no referencial da tela.
+func draw_dark(base: Transform2D) -> void:
+	if not dark:
+		return
+	if _light_tex == null:
+		var img := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+		for y in 128:
+			for x in 128:
+				var d := Vector2(x - 63.5, y - 63.5).length() / 64.0
+				img.set_pixel(x, y, Color(0.02, 0.02, 0.04, clampf((d - 0.55) / 0.45, 0.0, 1.0) * 0.96))
+		_light_tex = ImageTexture.create_from_image(img)
+	var rad := LANTERN_R if int(witems.get("lanterna", 0)) > 0 else LIGHT_R
+	var c: Vector2 = base * (Vector2(rabbit.pos) + Vector2(6, 6))
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+	var r := Rect2(c - Vector2(rad, rad), Vector2(rad, rad) * 2.0)
+	draw_texture_rect(_light_tex, r, false)
+	var dk := Color(0.02, 0.02, 0.04, 0.96)
+	var big := 2000.0
+	draw_rect(Rect2(r.position.x - big, r.position.y - big, big * 2 + r.size.x, big), dk)
+	draw_rect(Rect2(r.position.x - big, r.end.y, big * 2 + r.size.x, big), dk)
+	draw_rect(Rect2(r.position.x - big, r.position.y, big, r.size.y), dk)
+	draw_rect(Rect2(r.end.x, r.position.y, big, r.size.y), dk)
+	draw_set_transform_matrix(base)
